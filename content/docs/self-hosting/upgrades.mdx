@@ -52,6 +52,14 @@ Start the new release. Wait for `/health/ready` to show `schema: ok`, then check
 
 ## Release notes
 
+### To v0.3.2
+
+- No migrations and no new runtime grants. Rolling back to v0.3.1 is a redeploy of its digest.
+- Routes on connections that can't serve their model are no longer accepted (`400 route_unsupported_capability`), but existing ones are kept. After upgrading, open Admin › Models and filter by **Not serving**; for each model, add a route on a connection that serves it and disable the unsupported route. See [Routes must be servable](/docs/administration/models-and-routes#routes-must-be-servable).
+- Prices published through the management API must state every meter (`400 price_meters_incomplete`). Scripts that publish prices must add the missing meters as priced, not applicable or `unknown`.
+- Budgeted requests on a price that can't bound them now get `503 price_unbounded` instead of `429 budget_exceeded`. Update alerts or dashboards that counted them as budget denials, and publish complete prices for the models concerned. See [Pricing](/docs/administration/pricing#prices-that-cant-bound-a-request).
+- Chat Completions requests that send `max_tokens` now succeed instead of returning `400`.
+
 ### To v0.3.1
 
 - No migrations and no new runtime grants. Rolling back to v0.3.0 is a redeploy of its digest.

@@ -145,7 +145,7 @@ Pass `encoding_format="float"`: the gateway returns float vectors only and refus
 Send `max_completion_tokens` (Chat Completions), `max_output_tokens` (Responses) or `max_tokens` (Messages, where it is required anyway). Before a request goes out, the gateway holds the most it could cost, and it needs your output maximum to work that out:
 
 - On a model with a price, a request without an output maximum, or with one above the model's configured output ceiling, is refused with `503 provider_configuration_error`.
-- Chat Completions refuses the older `max_tokens` field; use `max_completion_tokens`.
+- Chat Completions also accepts the older `max_tokens` field as the same thing. If you send both, they must be equal.
 
 A smaller maximum also means a smaller hold, so requests are less likely to hit a budget.
 

@@ -25,9 +25,11 @@ The reference is never shown again after saving, and API keys sent by callers ar
 | **Anthropic** | Fixed: `https://api.anthropic.com/v1` | Messages, a Chat Completions subset, native batches |
 | **OpenRouter** | Fixed: `https://openrouter.ai/api/v1` | Chat Completions, embeddings, image generation, speech to text, text to speech, rerank, System One |
 | **Amazon Bedrock** | AWS region, optional VPC endpoint | Chat Completions and Messages (text and tools, via Converse) |
-| **OpenAI-compatible**, **vLLM**, **SGLang**, **Ollama** | An approved local endpoint | Chat Completions and embeddings; rerank and System One on some profiles (see [below](#rerank-and-system-one)) |
+| **OpenAI-compatible**, **vLLM**, **SGLang**, **Ollama** | An approved local endpoint | Chat Completions and embeddings; rerank and System One on some profiles (see [below](#what-each-profile-serves)) |
 
 Each profile supports a tested subset of requests, not every option of the provider. See the [API reference](/docs/api) for what each endpoint accepts.
+
+From v0.3.2, a model's routes must be on connections that serve its type: the gateway refuses other routes with `400 route_unsupported_capability`. The full table by model type is in [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable).
 
 ## OpenAI, Anthropic and OpenRouter
 
@@ -55,18 +57,22 @@ Self-hosted servers (OpenAI-compatible, vLLM, SGLang, Ollama) can use plain HTTP
 - Ollama's embeddings use its native `/api/embed` on the same address, with truncation off.
 - Strict tool schemas aren't supported on local profiles; Ollama doesn't accept an explicit tool choice.
 
-### Rerank and System One
+### What each profile serves
 
-From v0.3.1, self-hosted servers can serve rerank and System One models too, depending on the profile:
+Every self-hosted profile serves Chat Completions and embeddings. From v0.3.1, some also serve rerank and System One:
 
-| Profile | Rerank (`/v1/rerank`) | System One (`/v1/systemone`) |
-|---|---|---|
-| **OpenAI-compatible** | Yes: Jina and Cohere style servers, at `{base}/rerank` | Yes: TypeSafe-compatible servers, at `{base}/systemone` |
-| **vLLM** | Yes: vLLM's `/rerank` | No |
-| **SGLang** | Yes: SGLang's `/rerank` | No |
-| **Ollama** | No: Ollama has no rerank API | Yes: Ollama v0.35.0 or newer |
+| Profile | Chat Completions | Embeddings | Rerank (`/v1/rerank`) | System One (`/v1/systemone`) |
+|---|---|---|---|---|
+| **OpenAI-compatible** | Yes | Yes, without `dimensions` | Yes: Jina and Cohere style servers, at `{base}/rerank` | Yes: TypeSafe-compatible servers, at `{base}/systemone` |
+| **vLLM** | Yes | Yes | Yes: vLLM's `/rerank` | No |
+| **SGLang** | Yes | Yes | Yes: SGLang's `/rerank` | No |
+| **Ollama** | Yes | Yes, native `/api/embed`, without `dimensions` | No: Ollama has no rerank API | Yes: Ollama v0.35.0 or newer |
 
-**Add model** offers the Rerank and System One types only on connections whose profile serves them. Requests a profile can't serve fail with `unsupported_capability`.
+No self-hosted profile serves Responses, Messages, images, audio, realtime or video.
+
+**Add model** offers only the types a connection's profile serves. From v0.3.2, the gateway also refuses a route that its connection can't serve with `400 route_unsupported_capability`, for example a System One model on a vLLM connection. Such routes created before v0.3.2 make their model **Not serving** or **Needs attention**; see [Readiness](/docs/administration/models-and-routes#readiness).
+
+#### Rerank and System One
 
 - On **SGLang**, the gateway asks for every document's score and applies `top_n` itself, so the input tokens of every pair are counted.
 - On **Ollama**, tokens restored from its prompt cache are recorded as cache reads.

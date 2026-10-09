@@ -25,12 +25,15 @@ POST /v1/chat/completions
 |---|---|
 | `model` | Required: a gateway model name. |
 | `messages` | Required. Roles `system`, `developer`, `user`, `assistant` and `tool`. `content` is a **string**: content-part arrays (images, audio, files) are refused. Assistant `tool_calls` and tool `tool_call_id` are supported. |
-| `max_completion_tokens` | The output maximum. Required in practice on a priced model, and no higher than its output ceiling. The legacy `max_tokens` is refused. |
+| `max_completion_tokens` | The output maximum. Required in practice on a priced model, and no higher than its output ceiling. |
+| `max_tokens` | From v0.3.2, accepted as an alias of `max_completion_tokens`. If you send both, they must be equal; different values, or 0, are refused with `400 invalid_request_error`. |
 | `temperature` | Supported (Anthropic: 0 to 1). |
 | `stream`, `stream_options.include_usage` | Supported. |
 | `tools`, `tool_choice` | Function tools only. |
 | `n` | Absent or 1. |
 | `user`, `metadata` | Accepted as [Logs labels](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only; never sent to the provider. `metadata` keeps OpenAI's bounds: up to 16 pairs, keys up to 64 and values up to 512 characters. |
+
+Whichever name you use, the one value bounds the request's hold and is sent to the provider as its maximum: `max_completion_tokens` to OpenAI and OpenRouter, `max_tokens` to self-hosted servers and Anthropic, `maxTokens` to Amazon Bedrock. [Batch](/docs/api/batches) lines follow the same rule. Responses takes `max_output_tokens` and refuses both names.
 
 Any other field (for example `response_format`, `reasoning_effort`, `logprobs`, `seed`, `top_p`, `stop`, `parallel_tool_calls`) is refused with `400 invalid_request_error`.
 
@@ -50,7 +53,7 @@ With `"stream": true` the response is server-sent events, delivered token by tok
 | Anthropic | Translated to Messages: leading `system`/`developer` text, `temperature` up to 1; strict tool schemas and non-object tool arguments are refused. |
 | Amazon Bedrock | Translated to Converse: leading system messages only, no `developer` messages or assistant prefill; tool choice `none` and strict schemas are refused; `temperature` 0 to 1. |
 | OpenRouter | Compatible subset, streaming or not. Reasoning text isn't returned (its tokens count as output). |
-| vLLM, SGLang, OpenAI-compatible | Compatible subset; `max_completion_tokens` is sent upstream as `max_tokens`; strict tool schemas refused. The generic profile refuses required or named tool choice. |
+| vLLM, SGLang, OpenAI-compatible | Compatible subset; the output maximum is sent upstream as `max_tokens`; strict tool schemas refused. The generic profile refuses required or named tool choice. |
 | Ollama | Compatible subset; explicit tool choice is refused. |
 
 ## Failover

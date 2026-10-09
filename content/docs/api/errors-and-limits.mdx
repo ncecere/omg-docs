@@ -29,20 +29,38 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 | 429 | `unresolved_usage` | Unknown, unbounded costs block budgeted requests. | No |
 | 501 | `unsupported_capability` | Chat Completions, Responses, Messages and embeddings: no route supports the requested features. | No |
 | 502 | `upstream_unavailable`, `invalid_upstream_response` | The provider failed or answered with something invalid. | Maybe |
-| 503 | `provider_configuration_error` | Configuration problem: a missing credential, an unpriced meter, or a request without an output maximum on a priced model. | No |
+| 503 | `provider_configuration_error` | Configuration problem: a missing credential, a budgeted request on a route with no price, or a request without an output maximum on a priced model. | No |
+| 503 | `price_unbounded` | From v0.3.2. A budget applies, but the route's price can't bound this request: a meter it could use has no price, is priced as unknown, or has no maximum. Only an administrator publishing a complete price fixes it. Reports no scope or amount. | No |
 | 503 | `model_temporarily_unavailable` | Every route of this model is cooling down after repeated failures. `Retry-After` gives the seconds until the first one reopens. On `/v1/messages` the type is `overloaded_error`. | Yes, after `Retry-After` |
 | 503 | `accounting_unavailable` | The gateway couldn't record the request. | Maybe |
 | 504 | `timeout_error` | The request deadline passed (120 seconds unless the operator changed it). | Maybe |
 
-Budget denials use the type `insufficient_quota`; `token_reservation_exceeds_limit` and `job_limit_exceeded` use `rate_limit_error`. On `/v1/messages` every 429 has Anthropic's `rate_limit_error` type, and the message says which case applies.
+`price_unbounded` uses the type `price_unbounded` (on `/v1/messages`, `api_error`). Budget denials use the type `insufficient_quota`; `token_reservation_exceeds_limit` and `job_limit_exceeded` use `rate_limit_error`. On `/v1/messages` every 429 has Anthropic's `rate_limit_error` type, and the message says which case applies.
 
 ### Don't retry what can't succeed
 
-`budget_exceeded`, `unresolved_usage` and `token_reservation_exceeds_limit` responses carry `x-should-retry: false`. The official OpenAI and Anthropic SDKs honour it and don't retry. Errors from the Files API, except 503s, carry it too.
+`budget_exceeded`, `unresolved_usage`, `token_reservation_exceeds_limit` and `price_unbounded` responses carry `x-should-retry: false`. The official OpenAI and Anthropic SDKs honour it and don't retry. Errors from the Files API, except 503s, carry it too.
 
 ### Which scope refused
 
 A limit denial names the scope kind: this API key, this workspace, or the installation. When several refuse at once, the narrowest is reported (key, then workspace, then installation), and budget denials come before rate limits. The installation's budget always reports `budget_exceeded`, even if another workspace's unknown usage is the cause.
+
+Before v0.3.2, a budgeted request on a price that couldn't bound it was reported as `429 budget_exceeded`. It is now `503 price_unbounded`, because the cause is the price's configuration, not anyone's spending. Without any budget, such a request still runs, and its cost may be recorded as unknown.
+
+## Management API errors
+
+The dashboard's [management API](/docs/api/management-api) uses a different shape. `error.code` is the HTTP status as a string, and `error.reason`, when present, is the stable machine code:
+
+```json
+{"error": {"code": "400", "reason": "price_meters_incomplete", "missing_meters": ["search_units", "requests"], "message": "…"}}
+```
+
+Two reasons concern model setup:
+
+| HTTP | `reason` | When |
+|---|---|---|
+| 400 | `route_unsupported_capability` | From v0.3.2. Creating a route, enabling one, or changing a model's protocols would leave an enabled route on a connection whose profile can't serve the model. The message names the profile, the model's type and what the profile serves. See [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable). |
+| 400 | `price_meters_incomplete` | From v0.3.2. A published price leaves out a meter the route can use. `missing_meters` lists them. See [Pricing](/docs/administration/pricing#every-meter-must-be-stated). |
 
 ## Size limits
 

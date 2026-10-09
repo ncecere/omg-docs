@@ -51,7 +51,7 @@ An override **replaces** the type default completely, including any field you le
 
 A budget's "used" amount is the settled cost of requests admitted in its window, plus holds for requests still in progress or whose cost is unknown. Before each request the gateway adds the request's own hold, the most it could cost, and refuses it if any budget would go over.
 
-- Requests that **can't be bounded** (no price, or a meter with no maximum) can't run under a budget at all.
+- Requests that **can't be bounded** can't run under a budget at all. A route with no price is refused with `503 provider_configuration_error`; a price with a meter that has no line, is unknown or has no maximum, with `503 price_unbounded` (from v0.3.2; before, `429 budget_exceeded`). Neither is a budget denial: publish a complete [price](/docs/administration/pricing#prices-that-cant-bound-a-request).
 - **Unknown, unbounded costs block budgets.** If requests in a budget's current window have unknown costs with no upper bound, new budgeted requests are refused with `unresolved_usage` until those are resolved.
 - Budget checks read maintained totals, so their cost doesn't grow with history.
 

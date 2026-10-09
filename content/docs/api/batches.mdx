@@ -27,7 +27,7 @@ Guide: [Batches](/docs/using/batches).
 {"custom_id": "q-001", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "example/chat", "messages": [{"role": "user", "content": "Hi"}], "max_completion_tokens": 16}}
 ```
 
-Up to 50,000 lines, each up to 4 MiB. Blank lines are skipped. Each body is checked like an interactive request to the endpoint, without streaming. Chat Completions lines may use `max_tokens` or `max_completion_tokens`, not both.
+Up to 50,000 lines, each up to 4 MiB. Blank lines are skipped. Each body is checked like an interactive request to the endpoint, without streaming. Chat Completions lines may use `max_tokens` or `max_completion_tokens`, or both with equal values, as interactive requests do.
 
 ## Validation report
 

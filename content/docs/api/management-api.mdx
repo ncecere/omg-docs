@@ -13,7 +13,7 @@ Everything the dashboard does goes through the management API under `/api/v1`. I
 
 - **Sessions**: sign-in creates a twelve-hour session in an `HttpOnly` cookie. Every request rechecks the person's live role and memberships.
 - **Changes** (anything but `GET` and `HEAD`) must send an `Origin` header that exactly matches the gateway's public URL and an `X-CSRF-Token` header equal to the `omg_csrf` cookie. No CORS is enabled.
-- **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`, where `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment` or `exceeds_parent_budget`.
+- **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`. `code` is always the HTTP status as a string; `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment`, `exceeds_parent_budget`, `route_unsupported_capability` or `price_meters_incomplete` (which adds `missing_meters`). Match on `reason`, not `code`. See [Errors and limits](/docs/api/errors-and-limits#management-api-errors).
 - **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset`. Financial lists add `has_more`.
 - **Money**: integer micro-dollar amounts as **strings**, such as `"1250000"` for $1.25. Unknown values are `null`, never 0.
 - **Dates**: UTC. Reports take `start_date` and `end_date` as `YYYY-MM-DD`, end excluded, 1 to 93 days.

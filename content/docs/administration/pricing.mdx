@@ -29,13 +29,38 @@ A price is a set of **lines**, each a rate for one **meter**, written the way pr
 | Search units | per search |
 | Requests | per request |
 
-Each line is one of:
+In the price editor, each meter is one of:
 
-- **Priced**: a rate in US dollars, stored as exact integer micro-dollars. `0` means free, and shows as "Free".
+- **Priced**: a rate in US dollars, stored as exact integer micro-dollars.
+- **Free · explicit $0**: a `0` rate, shown as "Free".
+- **Unknown · cannot assume free**: you don't know the rate. A request that could use an unknown meter has an unknown cost and can't run under a budget.
 - **Not applicable**: this meter can't happen on this route. If the provider reports usage on it anyway, the request is flagged, not valued at zero.
-- **Not priced** (no line): unknown. A request that could use an unpriced meter has an unknown cost and can't run under a budget.
 
 **Mark all free** sets every meter to free, for example for a self-hosted model you don't charge for.
+
+### Every meter must be stated
+
+From v0.3.2, a price must state every meter the route's type can use, as priced, free, not applicable or unknown. The dashboard always does. Through the management API, an unknown meter is the line `{"meter": "…", "unknown": true}`, and a price that leaves a meter out is refused with `400` and the reason `price_meters_incomplete`; `missing_meters` lists the meters to add. Nothing is stored.
+
+| Route type | Meters to state |
+|---|---|
+| Text, embeddings, rerank, System One, batch | The six token meters (input, output, cache read and the three cache writes), output images, input characters, audio input, audio output, search units, requests |
+| Images | The six token meters, output images, requests |
+| Speech to text | The six token meters, audio input, requests |
+| Text to speech | The six token meters, input characters, audio output, requests |
+| Realtime audio | The six token meters, audio input tokens, cached audio tokens, audio output tokens, requests |
+| Video | The six token meters, video output, requests |
+
+An unknown meter is stored as a missing line, so the price's history doesn't show it, and it values exactly like a missing line. Prices published before v0.3.2 are never rewritten. If one leaves a meter out, publish a new, complete version.
+
+### Prices that can't bound a request
+
+The gateway holds the most a request could cost before sending it (see [Token ceilings](#token-ceilings)). It can't when a meter the request could use has no line, is unknown, or has no maximum. Then:
+
+- **With no budget**, the request runs with an unbounded hold, and its cost may be recorded as unknown.
+- **When any budget applies**, it is refused before it is sent with `503 price_unbounded` and `x-should-retry: false`. Before v0.3.2 this was reported as `429 budget_exceeded`, which read like an exhausted budget. A route with no price at all gets `503 provider_configuration_error` instead.
+
+If callers report `price_unbounded`, publish a price that states every meter, with maximums for meters such as search units.
 
 ### Prompt-size tiers
 
@@ -57,7 +82,7 @@ Before sending a request, the gateway holds the input ceiling's worth of input p
 - Keep both ceilings within your tokens-per-minute limits, or requests are refused with `token_reservation_exceeds_limit`. The model shows **Needs attention** when that would happen.
 - Requests must send an output maximum no higher than the output ceiling; see [Calling the API](/docs/using/calling-the-api#always-set-an-output-maximum).
 - Embeddings and rerank hold no output. Text-to-speech and per-second speech-to-text prices can set the input ceiling to 0 when every input-token meter is not applicable.
-- For meters that aren't tokens, the hold needs a bound too. Some come from the request itself: one request, the number of images asked for, the characters to speak, the measured length of an uploaded audio file. Others, such as search units, need a maximum set in the price, or the cost is unbounded and budgeted requests are refused.
+- For meters that aren't tokens, the hold needs a bound too. Some come from the request itself: one request, the number of images asked for, the characters to speak, the measured length of an uploaded audio file. Others, such as search units, need a maximum set in the price, or the cost is unbounded and budgeted requests are refused with `price_unbounded` (see [above](#prices-that-cant-bound-a-request)).
 
 ## Batch prices
 
@@ -71,7 +96,7 @@ A price can also carry **Batch prices**: the rates a provider publishes for its 
 On an OpenRouter route, **Import current OpenRouter price** fills the form with a draft from OpenRouter's public model catalog, read by the gateway without any key. Nothing is published until you choose **Publish price**.
 
 - When recent requests on the route reported their cost, the import picks the OpenRouter provider endpoint whose prices match it; otherwise the cheapest available endpoint, flagged for review.
-- Lines that need a decision are marked **Needs review**, such as per-image and audio prices. Rerank prices aren't in the catalog and are left for you.
+- Lines that need a decision are marked **Needs review**, such as per-image and audio prices. Meters the catalog doesn't price, such as rerank prices, are set to **Unknown** for you to fill in or leave.
 - The draft's ceilings are conservative (at most 8,192 input and 1,024 output tokens), so imported routes fit default limits. **Use imported ceilings** replaces ceilings you already entered.
 
 ## Cost evidence and reconciliation

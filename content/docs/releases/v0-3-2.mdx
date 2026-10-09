@@ -1,0 +1,72 @@
+---
+title: v0.3.2
+description: Routes a connection can't serve and prices that can't bound a request are refused when you configure them, Chat Completions accepts max_tokens, and small dashboard fixes.
+---
+
+Released 2026-10-09. No migrations.
+
+Three gaps found while testing on self-hosted servers are closed. A route its connection can't serve is refused when you set it up, not on every request. A price that can't bound a request is refused when you publish it, and a budgeted request on an older price like that gets an error that names the real problem. Chat Completions accepts the `max_tokens` field that many OpenAI-compatible clients still send.
+
+## Routes must be servable
+
+Before, you could add a route on a connection whose profile can't carry the model's protocols, such as a System One model on a vLLM connection or a rerank model on Ollama. The model read **Ready**, and every request failed with `unsupported_capability`.
+
+- **One table decides.** Which protocols each connection profile serves is now one table in the gateway. The inference check, route validation, readiness and the **Add model** form all read it, so they can't disagree. See [Connections](/docs/administration/connections#what-each-profile-serves).
+- **Refused at setup.** Creating such a route (on its own or with **Add model**), enabling one, or changing a model's protocols to ones an enabled route can't serve returns `400` with the reason `route_unsupported_capability`. The message names the profile, the model's type and what the profile does serve, for example: `The vllm connection profile can't serve System One (systemone); it serves chat_completions, embeddings, rerank.` Disabling a route is always allowed.
+- **Text models need one protocol per route.** A Chat and Responses model can still have a vLLM route for Chat beside an OpenAI route for Responses.
+- **Existing routes are kept, and flagged.** A model whose enabled routes all can't serve it reads **Not serving: vllm connection can't serve System One decisions** in Admin › Models, on the model's page (a **Routes can serve this model** step) and in Compare. A model with only some such routes **needs attention**. Workspace catalogs, the access explanation and the overview's ready-model count only count routes that can serve.
+
+See [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable).
+
+## Prices must state every meter
+
+Before, a price published through the API could leave meters out. A missing meter is unknown, so the price couldn't bound a request, and budgeted keys were refused with `budget_exceeded`, which read like an exhausted budget.
+
+- **At publication.** A price must state every meter the route's type can use: as a rate, as not applicable, or as the new explicit **Unknown**. A missing meter returns `400` with the reason `price_meters_incomplete` and `missing_meters`, the list of meters to add. The dashboard's **Unknown** choice now publishes it, and the OpenRouter import's draft marks each meter the catalog doesn't price as unknown.
+- **At admission.** When any budget applies, a request on a price that can't bound it (a meter with no line, stated unknown, or with no maximum) is refused before it is sent, with `503 price_unbounded` and `x-should-retry: false`. It no longer reports `budget_exceeded`. Without budgets, nothing changes: the request runs with an unbounded hold.
+- **Old prices aren't rewritten.** Budgeted keys on an older incomplete price now get `price_unbounded`. Publish a new, complete version to fix it.
+
+See [Pricing](/docs/administration/pricing#every-meter-must-be-stated).
+
+## Chat Completions accepts `max_tokens`
+
+Chat requests with the older `max_tokens` field used to be refused. It is now an alias of `max_completion_tokens`.
+
+- Sending both is accepted only when they are equal. Different values, or 0, return `400`.
+- The one value bounds the hold and becomes the provider's maximum, in the field each provider expects.
+- Batch lines follow the same rule. Responses is unchanged: it takes `max_output_tokens`.
+
+See [Chat Completions](/docs/api/chat-completions#request-fields).
+
+## Fixes
+
+**Dashboard**
+
+- **Batch line outcomes** read "Interrupted · 2 lines" instead of repeating the state.
+- **Batch cost** hints are rounded ("$1.08 settled · $0.23 on hold"); hover for the exact amounts.
+- **Amounts below a cent** keep two significant digits with trailing zeros ("$0.0070", not "$0.007"). One micro-dollar still reads "$0.000001".
+- **Usage › Explore** titles use sentence case ("Spend by model and API key").
+- **Long emails** in Admin › Users are truncated; the full address is in the tooltip.
+
+**Dependencies and builds**
+
+- Reviewed minor and patch updates for Rust crates, npm packages, GitHub Actions and the image's base images, and three major updates with no code changes. Major updates now arrive one at a time.
+- CI and the release pipeline no longer pull images from Docker Hub. The image's build stages come from Google's Docker Hub mirror, with the same image digests; the runtime image is unchanged.
+
+## Breaking changes
+
+- **Route setup can return `400 route_unsupported_capability`.** Scripts that created such routes (they never served a request) must use a connection whose profile serves the model.
+- **Prices that leave out a meter return `400 price_meters_incomplete`.** Add the missing meters as priced, not applicable or unknown. Older pricing versions are unaffected.
+- **Budgeted requests on prices that can't bound them return `503 price_unbounded`** instead of `429 budget_exceeded`. Alerts and dashboards that counted these as budget denials won't see them as `budget_exceeded` any more.
+- **Chat accepts `max_tokens`.** Requests that sent it and expected a `400` now succeed.
+
+## API additions
+
+- Model readiness gains `serving_routes`, `unsupported_routes` and `unsupported_profiles`; Compare rows gain `serving_routes`.
+- Price lines can be published as `{"meter": "…", "unknown": true}`. They are stored as a missing line and never returned.
+- Management error reasons `route_unsupported_capability` and `price_meters_incomplete` (with `missing_meters`).
+- The inference error `503 price_unbounded`.
+
+## Upgrading
+
+No migrations and no new runtime grants. After upgrading, open Admin › Models and filter by **Not serving** to find routes their connection can't serve. For a model whose budgeted requests report `price_unbounded`, publish a complete price. See [Upgrades](/docs/self-hosting/upgrades#to-v032).

@@ -44,7 +44,7 @@ Workspace admins and personal owners also see how much the workspace kept in the
 
 - **Configured estimates.** A Platform Admin sets each route's prices. The gateway multiplies what the provider reports by those prices. It is not the provider's invoice, and a provider's own discounts, credits or rounding aren't included.
 - **Exact amounts.** Money is counted in whole micro-dollars (millionths of a US dollar), each part rounded up, with no floating point. A request's cost is settled once, with the price version it was admitted under.
-- **Rounded on screen, exact underneath.** Tiles, cards, tables and charts round amounts of a cent or more to cents ("$8.27") and show smaller ones to two significant digits ("$0.0081", never "$0.00"). Hover for the exact amount. Prices, limits, forms, the accounting breakdown and CSV exports are always exact.
+- **Rounded on screen, exact underneath.** Tiles, cards, tables and charts round amounts of a cent or more to cents ("$8.27") and show smaller ones to two significant digits ("$0.0081" or "$0.0070", never "$0.00"; one micro-dollar reads "$0.000001"). Hover for the exact amount. Prices, limits, forms, the accounting breakdown and CSV exports are always exact.
 - **Holds.** Before sending a request, the gateway holds the most it could cost. When usage comes back, the hold becomes the actual estimate. If usage never comes back (a dropped connection, a provider error), the hold stays, marked unknown, until an administrator resolves it with evidence. Holds count against budgets.
 - **Unknown is never free.** A missing price or missing usage stays unknown. Totals that include unknown costs are lower bounds.
 - **Failovers cost more than once.** If a request fell back to another route, each attempt is its own charge.

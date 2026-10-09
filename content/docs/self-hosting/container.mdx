@@ -26,7 +26,7 @@ From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-mode
 Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with cosign v3 or newer (cosign v2 doesn't read the signature format and reports "no signatures found"), then pin the image by its digest:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.1 \
+cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.2 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/ncecere/open-model-gateway/'
 ```
@@ -34,7 +34,7 @@ cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.1 \
 The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag:
 
 ```sh
-docker pull ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:fccc42d35fbc14068761e164bc33ab9a3d9c8104672cc732054681a03320d5c8
+docker pull ghcr.io/ncecere/open-model-gateway:v0.3.2@sha256:300ae385d3f9d66ba8c80a173843ae88ef77054d4217e1e1081088369068fea5
 ```
 
 Before publishing, release images are scanned for known vulnerabilities (fixable high and critical findings block the release) and get an SBOM and build provenance. See [Security](/docs/self-hosting/security#how-releases-are-checked).
@@ -44,8 +44,8 @@ Before publishing, release images are scanned for known vulnerabilities (fixable
 ```sh
 git clone https://github.com/ncecere/open-model-gateway.git
 cd open-model-gateway
-git checkout v0.3.1        # the release you want
-docker build -t open-model-gateway:v0.3.1 .
+git checkout v0.3.2        # the release you want
+docker build -t open-model-gateway:v0.3.2 .
 ```
 
 The repository's manual publishing workflow also pushes a tested image of `main` to `ghcr.io/ncecere/open-model-gateway`, tagged with the full commit SHA, for staging.
@@ -75,11 +75,11 @@ It runs exactly the command you give it and **never migrates the database or cre
 ```sh
 # One-off: create or upgrade the schema, as the migrator role.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:… migrate
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.2@sha256:… migrate
 
 # One-off: name the first Platform Admin.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:… \
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.2@sha256:… \
   provision-user --email morgan.lee@example.edu --platform-admin
 ```
 
@@ -151,7 +151,7 @@ The shape of the gateway service, if you write your own Compose file:
 ```yaml
 services:
   gateway:
-    image: ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:fccc42d35fbc14068761e164bc33ab9a3d9c8104672cc732054681a03320d5c8
+    image: ghcr.io/ncecere/open-model-gateway:v0.3.2@sha256:300ae385d3f9d66ba8c80a173843ae88ef77054d4217e1e1081088369068fea5
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
     cap_drop: [ALL]

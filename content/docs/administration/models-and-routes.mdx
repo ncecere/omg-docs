@@ -41,6 +41,36 @@ A model serves one kind of work. Text models can serve any of Chat Completions, 
 
 Declaring a protocol doesn't make a provider support it: a request also needs a route whose connection can serve it. If none can, the request fails with `unsupported_capability`.
 
+### Routes must be servable
+
+From v0.3.2, every route must be on a connection whose profile serves the model's type. **Add model** offers only the types the chosen connection serves, and the gateway refuses the rest with `400 route_unsupported_capability` when you:
+
+- create a route, through **Add model** or **Add route**;
+- enable a disabled route;
+- change a model's protocols to ones that an enabled route can't serve.
+
+The message names the profile, the model's type and what the profile does serve, for example `The vllm connection profile can't serve System One (systemone); it serves chat_completions, embeddings, rerank.` Disabling a route is always allowed.
+
+A text model only needs each route to serve **one** of its protocols. A Chat Completions and Responses model can have a vLLM route for Chat Completions beside an OpenAI route for Responses.
+
+| Type (protocol) | Connection profiles that serve it |
+|---|---|
+| Text: Chat Completions | OpenAI, Anthropic, Amazon Bedrock, OpenRouter, OpenAI-compatible, vLLM, SGLang, Ollama |
+| Text: Responses | OpenAI |
+| Text: Messages | Anthropic, Amazon Bedrock |
+| Embeddings | OpenAI, OpenRouter, OpenAI-compatible, vLLM, SGLang, Ollama |
+| Images | OpenAI, OpenRouter |
+| Speech to text, Text to speech | OpenAI, OpenRouter |
+| Rerank | OpenRouter, OpenAI-compatible, vLLM, SGLang |
+| System One | OpenRouter, OpenAI-compatible, Ollama |
+| Realtime audio | OpenAI |
+| Batch | OpenAI |
+| Video | None at the moment |
+
+This is the same table the gateway checks requests against. A profile serves a tested subset of each protocol, not every option: see [Connections](/docs/administration/connections) and the [API reference](/docs/api).
+
+Routes created before v0.3.2 are kept as they are. Readiness (below) shows them.
+
 ## A model's page
 
 | Section | What's there |
@@ -58,10 +88,17 @@ Declaring a protocol doesn't make a provider support it: a request also needs a 
 
 ## Readiness
 
-A model is **Ready** when it is enabled, has an enabled route on an enabled connection, and is offered in a catalog or assigned directly. That is a configuration check, not a test of the provider. Ready models can show **Needs attention** when:
+A model is **Ready** when it is enabled, has an enabled route on an enabled connection that can serve it, and is offered in a catalog or assigned directly. That is a configuration check, not a test of the provider. An enabled model that isn't offered anywhere yet **Needs setup**.
+
+An enabled model is **Not serving** when no enabled route can serve it, and requests to it fail. The reason says why: no enabled route at all, or routes on connections that can't serve its type, such as **Not serving: vllm connection can't serve System One decisions**. On the model's page, the setup checklist shows a **Routes can serve this model** step. Add a route on a connection that serves the model, then disable the unsupported route. Filter Admin › Models by **Not serving** to find these models.
+
+Ready models can show **Needs attention** when:
 
 - a route's input plus output token ceiling is larger than a tokens-per-minute limit of the installation or a workspace type that gets the model: those requests would be refused with `token_reservation_exceeds_limit`;
-- an OpenRouter route uses a `:free` variant while data collection is denied, so it can't be served.
+- an OpenRouter route uses a `:free` variant while data collection is denied, so it can't be served;
+- some of its enabled routes are on connections that can't serve it (routes accepted before v0.3.2). Those routes fail every request; disable them.
+
+Workspace catalogs, a key's model access and the overview's count of ready models only count routes that can serve.
 
 ## Routing and failover
 
