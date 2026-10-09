@@ -1,6 +1,6 @@
 ---
 title: Rerank
-description: POST /v1/rerank scores documents against a query, on OpenRouter routes.
+description: POST /v1/rerank scores documents against a query, on OpenRouter and self-hosted (OpenAI-compatible, vLLM, SGLang) routes.
 ---
 
 ```http
@@ -11,7 +11,7 @@ POST /v1/rerank
 {"model": "example/rerank", "query": "laboratory safety rules", "documents": ["Wear goggles in the lab.", "The café opens at 8.", "No food near fume hoods."], "top_n": 2}
 ```
 
-A Cohere v2 and Jina style subset. Served on **OpenRouter** routes.
+A Cohere v2 and Jina style subset. Served on **OpenRouter** routes and, from v0.3.1, on self-hosted **OpenAI-compatible** (Jina or Cohere style servers), **vLLM** and **SGLang** routes. Ollama has no rerank API. See [Connections](/docs/administration/connections#rerank-and-system-one).
 
 | Field | Supported |
 |---|---|
@@ -28,6 +28,8 @@ Other fields, including `return_documents` and object documents, are refused.
 
 Results keep the provider's order, with unique indices into your `documents`. Documents are never echoed back. `usage` includes only counts the provider reported (`total_tokens`, `search_units`).
 
+On SGLang the gateway asks for every document's score, then sorts by score and applies `top_n` itself, so every document's input tokens are counted. If the server doesn't report tokens for every document, the input count stays unknown.
+
 ## Cost
 
-Rerank is input-only: tokens count as input, and each call is one request. If the provider bills per search, price `search_units` with a per-request maximum, or the cost is unbounded under a budget. OpenRouter's catalog has no rerank prices, so enter them by hand.
+Rerank is input-only: tokens count as input, and each call is one request. If the provider bills per search, price `search_units` with a per-request maximum, or the cost is unbounded under a budget. OpenRouter's catalog has no rerank prices, so enter them by hand. Self-hosted servers report no cost; their prices are yours to set.

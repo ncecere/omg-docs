@@ -1,9 +1,9 @@
 ---
 title: System One
-description: POST /v1/systemone serves typed yes/no, choice and score decisions with the TypeSafe System One contract, on OpenRouter routes.
+description: POST /v1/systemone serves typed yes/no, choice and score decisions with the TypeSafe System One contract, on OpenRouter and self-hosted (OpenAI-compatible, Ollama) routes.
 ---
 
-`POST /v1/systemone` implements the TypeSafe System One contract, so the TypeSafe SDK works unchanged with the gateway's address as its base URL and an inference key. It is served on **OpenRouter** routes.
+`POST /v1/systemone` implements the TypeSafe System One contract, so the TypeSafe SDK works unchanged with the gateway's address as its base URL and an inference key. It is served on **OpenRouter** routes and, from v0.3.1, on self-hosted **OpenAI-compatible** routes (TypeSafe-compatible servers) and **Ollama** routes (Ollama v0.35.0 or newer). vLLM and SGLang serve no System One route. See [Connections](/docs/administration/connections#rerank-and-system-one).
 
 ```json
 {
@@ -23,3 +23,5 @@ description: POST /v1/systemone serves typed yes/no, choice and score decisions 
 The response is `{"id", "model", "answers", "usage": {"input_tokens", "output_tokens"}}`. Every answer is checked against its question: the right type, a valid option, probabilities between 0 and 1 that add up. Gateway costs are never added to the body.
 
 The hold covers input tokens at the route's input ceiling and output tokens up to its output ceiling, because providers may report output tokens for decisions.
+
+On Ollama, input tokens restored from its prompt cache are recorded as cache reads. Server-specific extras (such as `images`, `think` or `keep_alive`) are never sent upstream.

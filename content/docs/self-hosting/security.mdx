@@ -41,6 +41,20 @@ description: What Open Model Gateway does to protect credentials, data and money
 
 - The running gateway uses a restricted role with a reviewed allowlist of table and column privileges. Prices, the ledger and the audit log are insert-only for it.
 
+**The image**
+
+- From v0.3.1 the image is distroless: the binary, the dashboard, C runtime libraries and CA certificates, with no shell, package manager or `curl`. It runs as a non-root user (`10001`) with a read-only root filesystem.
+- Secrets read from files are checked at startup; invalid ones stop the gateway without printing the value.
+
+## How releases are checked
+
+- **Dependencies.** Every change runs `cargo-deny` over the Rust dependencies (known advisories, unmaintained or yanked crates, licences, and crates.io as the only source) and an audit of the production npm dependencies, where high and critical advisories fail the build. The few advisories that are deliberately ignored are listed in the repository's `deny.toml` with the reason.
+- **Code scanning.** CodeQL analyses the TypeScript and Rust code on every change and weekly.
+- **Updates.** Dependabot opens weekly grouped updates for Rust crates, npm packages, GitHub Actions and the image's base images; security updates arrive on their own.
+- **Images.** Release images are scanned for known vulnerabilities before publishing (fixable high and critical findings block the release), carry an SBOM and build provenance, and are [signed with cosign](/docs/self-hosting/container#release-images). Workflow actions are pinned by commit.
+
+These checks find known issues in what the project depends on. They are not a security review of the gateway itself.
+
 ## What is yours to do
 
 - **HTTPS and the edge.** Terminate TLS in front of the gateway. Rate-limit sign-in and `/scim`. Keep query strings, cookies and `Authorization` headers out of access logs.

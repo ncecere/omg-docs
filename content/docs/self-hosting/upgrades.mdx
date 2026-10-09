@@ -52,6 +52,14 @@ Start the new release. Wait for `/health/ready` to show `schema: ok`, then check
 
 ## Release notes
 
+### To v0.3.1
+
+- No migrations and no new runtime grants. Rolling back to v0.3.0 is a redeploy of its digest.
+- The image is distroless and has **no shell**. Replace health checks that run `sh`, `curl` or `wget` in the container with `["CMD", "/usr/local/bin/open-model-gateway", "healthcheck"]`, or Kubernetes `httpGet` probes. See [Health checks](/docs/self-hosting/container#health-checks).
+- Remove any `--entrypoint container-entrypoint` override. Commands after the image name (`migrate`, `provision-user …`) work as before.
+- An empty `DATABASE_URL`, `GATEWAY_OIDC_CLIENT_SECRET`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` now stops startup, in a container or not. Unset unused ones instead of leaving them empty. See [Secrets from files](/docs/self-hosting/configuration#secrets-from-files).
+- Clients that treated `404 model_not_found` as "routes are down" now get `503 model_temporarily_unavailable` with `Retry-After` in that case.
+
 ### To v0.3.0
 
 - Migrations `0018` to `0022`. Reapply runtime grants.

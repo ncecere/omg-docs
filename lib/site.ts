@@ -20,10 +20,10 @@ export const gitConfig = {
 export const productRepo = 'https://github.com/ncecere/open-model-gateway';
 
 /** The Open Model Gateway release these docs describe. */
-export const productVersion = 'v0.3.0';
+export const productVersion = 'v0.3.1';
 
 /** Whether that release is still unreleased (the docs then describe current `main`). */
-export const productUnreleased = true;
+export const productUnreleased = false;
 
 export const appName = 'Open Model Gateway docs';
 export const docsRoute = '/docs';

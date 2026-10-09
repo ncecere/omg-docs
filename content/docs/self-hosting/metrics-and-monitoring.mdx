@@ -20,6 +20,8 @@ Both are on the public port, need no authentication and never return error detai
 - `schema`: the database's migrations match this binary exactly (`unknown` if the database is unreachable). A release whose migrations haven't been applied stays unready.
 - `web`: `disabled` without `GATEWAY_WEB_DIR`; otherwise the dashboard's files are still there.
 
+Inside the container, which has no shell or `curl`, the image's health check runs `open-model-gateway healthcheck`, which asks `/health/ready` over loopback and exits 0 or 1. Kubernetes can probe the two endpoints directly with `httpGet`. See [Container health checks](/docs/self-hosting/container#health-checks).
+
 Probe `/health/ready` from outside as well, since metrics can't tell you the public address is reachable.
 
 ## Metrics

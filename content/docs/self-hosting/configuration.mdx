@@ -7,11 +7,22 @@ The gateway reads its configuration from environment variables at startup. Inval
 
 On startup the gateway also loads a `.env` file from its working directory if there is one, or the file named by `GATEWAY_ENV_FILE`.
 
+## Secrets from files
+
+Four secrets can be read from a file instead: set `DATABASE_URL_FILE`, `GATEWAY_OIDC_CLIENT_SECRET_FILE`, `OPENAI_API_KEY_FILE` or `ANTHROPIC_API_KEY_FILE` to the file's path, such as a Compose or Kubernetes secret mount. The binary reads them itself at startup, in a container or not, before the `.env` file. One trailing newline is removed.
+
+From v0.3.1, startup stops if, for any of those four:
+
+- both the variable and its `_FILE` are set (even to an empty value);
+- the value is empty, longer than 4,096 bytes, or contains a line break or NUL.
+
+The error names the variable and the reason, such as `secret configuration: OPENAI_API_KEY: secret must not be empty`, never the value. An empty variable left exported in your shell is enough to trigger it: unset it rather than setting it to `""`. Values loaded from a `.env` file aren't checked this way. Other `_FILE` variables are not read.
+
 ## Core
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | (required) | PostgreSQL connection URL. Use the runtime role for `serve` and the migrator role for `migrate`. The container also accepts `DATABASE_URL_FILE`. |
+| `DATABASE_URL` | (required) | PostgreSQL connection URL. Use the runtime role for `serve` and the migrator role for `migrate`. Or set `DATABASE_URL_FILE` ([secrets from files](#secrets-from-files)). |
 | `GATEWAY_LISTEN` | `127.0.0.1:8080` (container: `0.0.0.0:8080`) | Address and port to listen on. |
 | `GATEWAY_ENV` | `production` | `production` or `development`. Development allows plain-HTTP sign-in on loopback addresses only. |
 | `GATEWAY_PUBLIC_URL` | unset | The browser-visible origin, such as `https://ai.example.edu`. Needed for sign-in; also used in invitation and alert emails. |
@@ -29,7 +40,7 @@ On startup the gateway also loads a `.env` file from its working directory if th
 |---|---|---|
 | `GATEWAY_OIDC_ISSUER` | unset | Your identity provider's exact issuer URL. |
 | `GATEWAY_OIDC_CLIENT_ID` | unset | The registered client id. Without issuer and client id, sign-in is off. Setting only some sign-in variables stops startup. |
-| `GATEWAY_OIDC_CLIENT_SECRET` | unset | For confidential clients. The container also accepts `GATEWAY_OIDC_CLIENT_SECRET_FILE`. |
+| `GATEWAY_OIDC_CLIENT_SECRET` | unset | For confidential clients. Or set `GATEWAY_OIDC_CLIENT_SECRET_FILE`. |
 | `GATEWAY_OIDC_GROUPS_CLAIM` | `groups` | The ID-token claim that lists groups. A dotted path reaches into nested claims. |
 | `GATEWAY_SCIM_TOKEN_ENV` | unset (SCIM off) | The **name** of the variable holding the SCIM bearer token (32 to 1,024 printable characters). Needs OIDC. |
 
@@ -44,7 +55,7 @@ See [Identity setup](/docs/self-hosting/identity).
 | `GATEWAY_AWS_PROFILE_ALLOWLIST` | empty | Comma-separated AWS profile names that Bedrock connections and the file store may use. |
 | `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST` | empty | Comma-separated HTTPS origins of Bedrock VPC endpoints that connections may use. |
 
-The provider keys themselves are ordinary variables with names of your choice, such as `OPENAI_API_KEY`, listed in the allowlist. The container also reads `OPENAI_API_KEY_FILE` and `ANTHROPIC_API_KEY_FILE`. See [Provider credentials](/docs/self-hosting/provider-credentials).
+The provider keys themselves are ordinary variables with names of your choice, such as `OPENAI_API_KEY`, listed in the allowlist. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` can also come from files with `_FILE` ([secrets from files](#secrets-from-files)). See [Provider credentials](/docs/self-hosting/provider-credentials).
 
 ## OpenRouter
 

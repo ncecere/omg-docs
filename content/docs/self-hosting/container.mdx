@@ -1,6 +1,6 @@
 ---
 title: Container and Compose
-description: Build the image, what the container does and doesn't do, and a Compose layout with PostgreSQL and an HTTPS proxy.
+description: The release images, what the distroless container does and doesn't do, health checks, and a Compose layout with PostgreSQL and an HTTPS proxy.
 ---
 
 ## The image
@@ -9,7 +9,9 @@ The repository's `Dockerfile` builds everything into one small image:
 
 1. Node builds the dashboard.
 2. Rust builds the `open-model-gateway` binary (with `--locked`); migrations are compiled into it.
-3. A Debian (bookworm-slim) runtime holds the binary and the built dashboard: no Node, no Cargo.
+3. A distroless runtime (`gcr.io/distroless/cc-debian12`, pinned by digest) holds the binary, the built dashboard in `/app/web`, the C runtime libraries and CA certificates. Nothing else: no shell, package manager, `curl`, Node or Cargo.
+
+From v0.3.1 the image is about 25 MB compressed (it was 52 MB on the Debian slim base of earlier releases).
 
 ### Release images
 
@@ -24,20 +26,26 @@ From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-mode
 Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with cosign v3 or newer (cosign v2 doesn't read the signature format and reports "no signatures found"), then pin the image by its digest:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.0 \
+cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/ncecere/open-model-gateway/'
 ```
 
-The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag.
+The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag:
+
+```sh
+docker pull ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:fccc42d35fbc14068761e164bc33ab9a3d9c8104672cc732054681a03320d5c8
+```
+
+Before publishing, release images are scanned for known vulnerabilities (fixable high and critical findings block the release) and get an SBOM and build provenance. See [Security](/docs/self-hosting/security#how-releases-are-checked).
 
 ### Build it yourself
 
 ```sh
 git clone https://github.com/ncecere/open-model-gateway.git
 cd open-model-gateway
-git checkout v0.3.0        # the release you want
-docker build -t open-model-gateway:v0.3.0 .
+git checkout v0.3.1        # the release you want
+docker build -t open-model-gateway:v0.3.1 .
 ```
 
 The repository's manual publishing workflow also pushes a tested image of `main` to `ghcr.io/ncecere/open-model-gateway`, tagged with the full commit SHA, for staging.
@@ -47,31 +55,79 @@ The repository's manual publishing workflow also pushes a tested image of `main`
 | User | `10001:10001`, non-root |
 | Port | `8080` (`GATEWAY_LISTEN=0.0.0.0:8080`) |
 | Defaults | `GATEWAY_ENV=production`, `GATEWAY_WEB_DIR=/app/web` |
-| Health check | `GET /health/ready` every 30 seconds |
-| Command | `serve` by default; any other subcommand can be passed |
+| Entrypoint | `/usr/local/bin/open-model-gateway`, the gateway binary itself |
+| Command | `serve` by default; any other subcommand can be passed after the image name |
+| Health check | `open-model-gateway healthcheck --timeout 3s` every 30 seconds (exec form) |
+| Writable paths | None needed: runs with a read-only root filesystem |
 
-## The entrypoint
+## Startup and secrets
 
-The entrypoint only prepares secrets and runs the binary. It **never migrates the database or creates users**: those are explicit, one-off commands.
+The image has no shell and no entrypoint script: the binary is PID 1 and handles `SIGTERM` itself. Before it reads any configuration, it:
 
-For four variables it also reads a `_FILE` companion, so secrets can come from mounted files: `DATABASE_URL_FILE`, `GATEWAY_OIDC_CLIENT_SECRET_FILE`, `OPENAI_API_KEY_FILE` and `ANTHROPIC_API_KEY_FILE`. Set the variable or its `_FILE`, not both. The file must be one line, at most 4,096 bytes. Other secrets (for example a provider key with another name) must be passed as environment variables.
+- sets a strict umask (`077`);
+- reads four secrets from files if you set their `_FILE` companion: `DATABASE_URL_FILE`, `GATEWAY_OIDC_CLIENT_SECRET_FILE`, `OPENAI_API_KEY_FILE` and `ANTHROPIC_API_KEY_FILE`. The file must be a readable regular file (symlinks, as in Kubernetes secret mounts, are fine); one trailing newline is removed;
+- refuses to start if a variable and its `_FILE` are both set, or if one of those four values is empty, longer than 4,096 bytes, or contains a line break or NUL. The error names the variable and the reason, never the value or the file's path.
+
+Other `_FILE` variables aren't read, so pass other secrets (for example a provider key with another name) as environment variables. The binary does this for every command except `healthcheck`, in a container or not.
+
+It runs exactly the command you give it and **never migrates the database or creates users** by itself; those are explicit, one-off commands:
 
 ```sh
 # One-off: create or upgrade the schema, as the migrator role.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro open-model-gateway:v0.3.0 migrate
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:… migrate
 
 # One-off: name the first Platform Admin.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro open-model-gateway:v0.3.0 \
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:… \
   provision-user --email morgan.lee@example.edu --platform-admin
 ```
+
+<Callout title="Upgrading from v0.3.0 or earlier">
+  Images before v0.3.1 started through a shell script, `container-entrypoint`. Remove any `--entrypoint container-entrypoint` override: arguments after the image name go straight to the binary. Replace health checks that use `sh`, `curl` or `wget` with the exec form below.
+</Callout>
+
+## Health checks
+
+`open-model-gateway healthcheck` asks the gateway's `/health/ready` over loopback and exits 0 for a `2xx` answer, 1 for anything else (an error status, a redirect, a refused connection or a timeout). By default it uses the port in `GATEWAY_LISTEN`. It reads no configuration or secrets, ignores proxy variables, never follows redirects and refuses non-loopback addresses unless you add `--allow-non-loopback`.
+
+```sh
+open-model-gateway healthcheck [--url http://127.0.0.1:8080/health/ready] [--timeout 3s] [--allow-non-loopback]
+```
+
+The image's own `HEALTHCHECK` already runs it. To set your own in Compose, use the exec form (there is no shell for `CMD-SHELL`):
+
+```yaml
+healthcheck:
+  test: ["CMD", "/usr/local/bin/open-model-gateway", "healthcheck"]
+  interval: 30s
+  timeout: 5s
+  start_period: 20s
+```
+
+In Kubernetes, use HTTP probes: `/health/live` for liveness and `/health/ready` for readiness, on port 8080.
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health/live, port: 8080 }
+readinessProbe:
+  httpGet: { path: /health/ready, port: 8080 }
+  periodSeconds: 10
+```
+
+If a probe has to be an exec probe, use `command: ["/usr/local/bin/open-model-gateway", "healthcheck"]`, never `sh -c` or `curl`. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring#health-checks) for what readiness checks.
+
+### Debugging without a shell
+
+- `docker exec CONTAINER /usr/local/bin/open-model-gateway healthcheck` (or any other subcommand, such as `budget verify`);
+- `docker logs` for the JSON logs, and `docker inspect` for the user, mounts and health-check history;
+- a debug container that shares the gateway's namespaces (`docker debug`, or `kubectl debug --target`) when you need tools.
 
 ## Run it hardened
 
 The container is built to run with:
 
-- a read-only root filesystem and a small `/tmp` tmpfs;
+- a read-only root filesystem (it needs no writable path; the staging setup still mounts a small `/tmp` tmpfs);
 - all Linux capabilities dropped and `no-new-privileges`;
 - a stop grace period longer than the request deadline (the staging setup uses 150 seconds for a 120-second deadline), so requests in flight can finish and settle.
 
@@ -95,8 +151,7 @@ The shape of the gateway service, if you write your own Compose file:
 ```yaml
 services:
   gateway:
-    image: open-model-gateway:v0.3.0
-    init: true
+    image: ghcr.io/ncecere/open-model-gateway:v0.3.1@sha256:fccc42d35fbc14068761e164bc33ab9a3d9c8104672cc732054681a03320d5c8
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
     cap_drop: [ALL]
@@ -111,7 +166,11 @@ services:
       OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
     secrets: [runtime_database_url, openai_api_key, anthropic_api_key]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/open-model-gateway", "healthcheck"]
 ```
+
+`init: true` is optional: the binary handles signals as PID 1.
 
 ## The reverse proxy
 

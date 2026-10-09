@@ -15,7 +15,7 @@ Served on **OpenAI** routes. The guide is [Realtime audio](/docs/using/realtime)
 
 - Authenticate with `Authorization: Bearer` **or** the subprotocol `openai-insecure-api-key.<key>`, not both. The server answers with the `realtime` subprotocol only.
 - The query has `model` once, and nothing else.
-- Before the upgrade, failures are ordinary JSON errors: `401`, `404 model_not_found`, `400 unsupported_capability`, `429` for budgets and limits, `503` for configuration problems.
+- Before the upgrade, failures are ordinary JSON errors: `401`, `404 model_not_found`, `503 model_temporarily_unavailable` (with `Retry-After`) while every route is cooling down, `400 unsupported_capability`, `429` for budgets and limits, `503` for configuration problems.
 - `X-Session-Id` and `X-Title` headers label the session in Logs.
 
 Refused with `400 unsupported_capability`: the beta interface (`OpenAI-Beta: realtime=v1`), other subprotocols, `POST /v1/realtime/client_secrets` and `POST /v1/realtime/calls`.

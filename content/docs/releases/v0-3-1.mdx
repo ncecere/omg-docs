@@ -1,0 +1,63 @@
+---
+title: v0.3.1
+description: A distroless image with the binary as its entrypoint and a built-in health check, rerank and System One on self-hosted servers, supply-chain scanning, and fixes to local reasoning models, cooling-down routes and the dashboard.
+---
+
+Released 2026-10-09. No migrations.
+
+## A smaller image without a shell
+
+- **Distroless runtime.** The image is now built on a minimal distroless base instead of Debian slim. There is no shell, package manager or `curl` in it. It still runs as `10001:10001`, serves the dashboard from `/app/web` and works with a read-only root filesystem. It is less than half the size (about 25 MB compressed instead of 52 MB on arm64), and its operating-system packages carry far fewer known vulnerabilities (no critical ones; one high, with no fix yet).
+- **The binary is the entrypoint.** `ENTRYPOINT ["/usr/local/bin/open-model-gateway"]`, `CMD ["serve"]`. The separate entrypoint script is gone; the binary does its work at startup instead: a strict umask, `_FILE` secrets for `DATABASE_URL`, `GATEWAY_OIDC_CLIENT_SECRET`, `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, and refusing invalid secret values. It still never migrates or creates users by itself. See [Container and Compose](/docs/self-hosting/container#startup-and-secrets).
+- **`open-model-gateway healthcheck`.** A built-in probe for `/health/ready` over loopback, exiting 0 when the gateway is ready and 1 otherwise. The image's `HEALTHCHECK` uses it. See [Health checks](/docs/self-hosting/container#health-checks).
+
+## Rerank and System One on self-hosted servers
+
+- **Rerank** (`/v1/rerank`) now works on the **OpenAI-compatible** (Jina and Cohere style servers), **vLLM** and **SGLang** profiles.
+- **System One** (`/v1/systemone`) now works on the **OpenAI-compatible** profile (TypeSafe-compatible servers) and **Ollama** (v0.35.0 or newer; tokens Ollama restores from its cache are recorded as cache reads).
+- Ollama has no rerank API, and vLLM and SGLang serve no System One route, so those combinations still answer `unsupported_capability`. **Add model** offers each type only on connections whose profile serves it.
+
+See [Connections](/docs/administration/connections#self-hosted-servers), [Rerank](/docs/api/rerank) and [System One](/docs/api/system-one).
+
+## Supply-chain scanning
+
+Every change is now checked for known vulnerabilities and licence problems in Rust and JavaScript dependencies, scanned with CodeQL, and kept current by weekly grouped dependency updates (Rust crates, npm packages, GitHub Actions and the image's base images). The Amazon Bedrock client no longer pulls in an older HTTP stack that carried three advisories. See [Security](/docs/self-hosting/security#how-releases-are-checked).
+
+## Fixes
+
+**Self-hosted models**
+
+- **Reasoning models.** Chat responses from SGLang, and from vLLM or Ollama with a reasoning parser, failed as `invalid_upstream_response` because of their extra reasoning fields. They now work. The reasoning trace isn't returned to clients, and its tokens stay in the output count.
+- **Servers that report only total input.** When a server reports one inclusive input count and no cache split (SGLang and vLLM by default), priced requests used to keep their hold as unknown cost. They now settle, as long as the price marks the cache meters as not applicable. Requests settled as unknown before the upgrade keep their holds.
+
+**Routing**
+
+- **Cooling-down routes are retryable.** When every route of an available model is cooling down after failures, the gateway now answers `503 model_temporarily_unavailable` with `Retry-After`, instead of `404 model_not_found`. Gateway-run batch lines wait for the cooldown instead of failing. See [Errors and limits](/docs/api/errors-and-limits).
+
+**Dashboard**
+
+- **Money reads simply.** Tiles, cards, tables and chart labels round to cents from $0.01 up ("$8.27") and keep two significant digits below a cent ("$0.0081", never "$0.00"); hover for the exact amount. Prices, limits, form inputs, the accounting breakdown and CSV exports stay exact.
+- **Stat tiles line up**: their charts sit at the same height in every row.
+- **Unpriced image and audio models** say **Unpriced** in Admin › Models and the workspace catalog, instead of "Priced per image".
+- **Audit log**: alert-rule, file, batch, batch-scheduling, settings and SCIM events have short labels; the code is in the tooltip.
+- **Users**: someone who was denied at sign-in and never had a platform role shows **No access**, not **Suspended**.
+- **Usage › By workspace** names personal workspaces **Personal · *owner*** instead of many identical "Personal" rows (totals only, as before).
+- **Logs** fit a 1440-pixel screen: input and output tokens stack, long names truncate, **Attempts** is an optional column (fallbacks show under **Status**), and Admin › Logs hides **Finish** by default.
+- **Sizes** use binary units everywhere; Settings › Storage now agrees with Files and storage limits (a 118 MB file showed as 124 MB there). Hover for exact bytes.
+- **Batches**: a batch waiting on its route's limit says **At its batch limit**, and a batch with a failed line of unknown cost shows **At least $X** instead of **Unknown**.
+- **Limits**: a saved workspace budget can only be lowered, and the row now says so instead of showing a disabled remove button.
+
+## Breaking changes
+
+- **No shell in the image.** Health checks or scripts that ran `sh`, `curl` or other tools inside the gateway container fail. Use `["CMD", "/usr/local/bin/open-model-gateway", "healthcheck"]` or Kubernetes HTTP probes, and debug with `docker logs`, `docker inspect` or a debug container.
+- **`--entrypoint container-entrypoint` no longer works.** Drop the override. Arguments after the image name still go to the binary (`migrate`, `provision-user …`, `--version`).
+- **Empty secrets stop startup, outside containers too.** For example, `OPENAI_API_KEY=""` exported in your shell now stops a local run with `secret configuration: OPENAI_API_KEY: secret must not be empty`. Values from a `.env` file are not affected.
+
+## API additions
+
+- Batch objects in the dashboard's management API gain `cost_unknown_attempts`; the workspace catalog gains `priced_routes`.
+- `503 model_temporarily_unavailable` with `Retry-After` for models whose routes are all cooling down.
+
+## Upgrading
+
+No migrations and no new runtime grants. Pull the new image by digest, replace shell- or `curl`-based health checks and any `--entrypoint` override, then deploy as usual. See [Upgrades](/docs/self-hosting/upgrades#to-v031).

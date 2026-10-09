@@ -21,10 +21,12 @@ Pill tabs switch between four views:
 
 | View | One row per |
 |---|---|
-| **Requests** | A request as you sent it. If the model's failover policy tried more than one route, the row shows the last attempt and the number of attempts. |
+| **Requests** | A request as you sent it. If the model's failover policy tried more than one route, the row shows the last attempt and notes the fallback under **Status**; the optional **Attempts** column counts them. |
 | **Generations** | Each upstream attempt. |
 | **Sessions** | A group of requests with the same session id (see [labelling sessions](/docs/using/calling-the-api#label-sessions-and-apps-for-logs)). |
 | **Batches** | A [batch](/docs/using/batches), with its progress and cost so far. |
+
+**Columns** shows or hides optional columns, such as **Attempts**, time to first token and speed. Input and output tokens share one column, one above the other.
 
 Above the table, summary tiles describe the requests that match your filters: the number of requests, the error rate, median and 95th-percentile latency, average time to first token and tokens per second.
 

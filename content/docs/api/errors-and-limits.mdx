@@ -19,7 +19,7 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 | 400 | `upstream_rejected` | The provider refused the request (validation, moderation, unknown model). | No |
 | 400 | `unsupported_capability` | Images, audio, rerank, System One, realtime, files, batches and videos: no route can serve this request. | No |
 | 401 | | Missing, repeated or invalid key, or a disabled, revoked or expired one. | No |
-| 404 | `model_not_found` | No such model, or not available to this key. | No |
+| 404 | `model_not_found` | No such model, or not available to this key. (A model whose routes are only cooling down answers `503 model_temporarily_unavailable` instead, from v0.3.1.) | No |
 | 404 | `not_found` | A file, batch or video id that doesn't exist or belongs to another workspace. | No |
 | 413 | `payload_too_large`, `file_too_large`, `storage_quota_exceeded` | The body, file or workspace storage is over its limit. | No |
 | 429 | `rate_limit_error` | A per-minute or at-once limit, or the provider's rate limit. | Yes, later |
@@ -30,6 +30,7 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 | 501 | `unsupported_capability` | Chat Completions, Responses, Messages and embeddings: no route supports the requested features. | No |
 | 502 | `upstream_unavailable`, `invalid_upstream_response` | The provider failed or answered with something invalid. | Maybe |
 | 503 | `provider_configuration_error` | Configuration problem: a missing credential, an unpriced meter, or a request without an output maximum on a priced model. | No |
+| 503 | `model_temporarily_unavailable` | Every route of this model is cooling down after repeated failures. `Retry-After` gives the seconds until the first one reopens. On `/v1/messages` the type is `overloaded_error`. | Yes, after `Retry-After` |
 | 503 | `accounting_unavailable` | The gateway couldn't record the request. | Maybe |
 | 504 | `timeout_error` | The request deadline passed (120 seconds unless the operator changed it). | Maybe |
 

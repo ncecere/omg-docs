@@ -24,8 +24,8 @@ Open Model Gateway has two HTTP APIs:
 | `POST /v1/images/generations` | [Image generation](/docs/api/images), base64 only | OpenAI (`gpt-image-*`), OpenRouter |
 | `POST /v1/audio/transcriptions` | [Speech to text](/docs/api/audio#transcriptions) | OpenAI, OpenRouter |
 | `POST /v1/audio/speech` | [Text to speech](/docs/api/audio#speech) | OpenAI, OpenRouter |
-| `POST /v1/rerank` | [Rerank](/docs/api/rerank) | OpenRouter |
-| `POST /v1/systemone` | [System One decisions](/docs/api/system-one) | OpenRouter |
+| `POST /v1/rerank` | [Rerank](/docs/api/rerank) | OpenRouter, self-hosted (OpenAI-compatible, vLLM, SGLang) |
+| `POST /v1/systemone` | [System One decisions](/docs/api/system-one) | OpenRouter, self-hosted (OpenAI-compatible, Ollama) |
 | `GET /v1/realtime` | [Realtime](/docs/api/realtime) WebSocket | OpenAI |
 | `/v1/files` | [Files](/docs/api/files): upload, list, retrieve, content, delete | Gateway-owned |
 | `/v1/batches` | [Batches](/docs/api/batches): create, list, retrieve, cancel | Any model |

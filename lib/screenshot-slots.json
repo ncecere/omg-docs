@@ -57,7 +57,7 @@
     "files": [
       "logs-requests"
     ],
-    "alt": "Logs, Requests view: summary tiles for requests, error rate, latency, time to first token and speed above a table of requests with model, key, status, tokens and cost."
+    "alt": "Logs, Requests view: summary tiles for requests, error rate, latency, time to first token and speed above a table of requests with model, key, input and output tokens, cost, latency, finish reason and status."
   },
   "request-detail": {
     "files": [
@@ -93,7 +93,7 @@
     "files": [
       "batch-detail"
     ],
-    "alt": "A batch's page: status and Cancel, progress, completed and failed lines, cost so far, its files, and how many lines ended in each state."
+    "alt": "A batch's page: status and Cancel, the reason it is waiting (At its batch limit), its files, how many lines ended in each state, and tiles for progress, completed and failed lines and the cost so far as a lower bound plus the amount on hold."
   },
   "notifications": {
     "files": [
@@ -117,13 +117,13 @@
     "files": [
       "workspace-limits"
     ],
-    "alt": "A Team's Limits tab: the platform's limits and the Team's own tighter limits, with how much of each budget window is used."
+    "alt": "A Team's Limits tab: each limit inherited from the platform next to the Team's own tighter values, including a 512 MB storage limit and a daily budget that can only be lowered, and the effective limit."
   },
   "admin-users": {
     "files": [
       "admin-users"
     ],
-    "alt": "Admin Users: people with their platform role, status, last sign-in and number of shared workspaces."
+    "alt": "Admin Users: people with their platform role, status, last sign-in and number of shared workspaces; someone who signed in without a role shows No access."
   },
   "admin-user-detail": {
     "files": [
@@ -159,13 +159,13 @@
     "files": [
       "admin-models"
     ],
-    "alt": "Admin Models: models of several types with their price, readiness and connection, one needing attention and one not serving."
+    "alt": "Admin Models: models of several types with their price, readiness and connection, one needing attention, one not serving and an image model marked Unpriced."
   },
   "admin-add-model": {
     "files": [
       "admin-add-model"
     ],
-    "alt": "The Add model form: type, API model name, connection and upstream model id, an optional first price, and catalogs."
+    "alt": "The Add model form on a self-hosted vLLM connection: connection, upstream model id, type and protocols, display and API model names, catalogs, and an optional first price with its token ceilings and meters."
   },
   "admin-model-detail": {
     "files": [
@@ -201,7 +201,7 @@
     "files": [
       "admin-usage"
     ],
-    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, the amount on hold, requests and attempts with unknown cost; personal workspaces appear as totals only."
+    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, the amount on hold, requests and attempts with unknown cost, then one totals-only row per personal workspace, named Personal and its owner."
   },
   "admin-logs": {
     "files": [
@@ -213,7 +213,7 @@
     "files": [
       "admin-alerts"
     ],
-    "alt": "Installation alert rules: a budget threshold, a spend spike, a failing connection and a batch failed rule, one firing."
+    "alt": "Installation alert rules: a budget threshold, a spend spike, a failing connection and a batch failed rule, two of them firing."
   },
   "admin-alert-rule": {
     "files": [
@@ -231,7 +231,7 @@
     "files": [
       "admin-audit"
     ],
-    "alt": "The Audit log: recent administrative actions with time, actor, action and target."
+    "alt": "The Audit log: recent actions with time, actor, action and target, such as an uploaded file, a removed membership, SCIM user changes, an invitation and new alert rules."
   },
   "admin-settings-general": {
     "files": [
