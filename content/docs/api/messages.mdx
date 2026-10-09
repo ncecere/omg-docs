@@ -1,0 +1,48 @@
+---
+title: Messages
+description: POST /v1/messages, the text and tool subset of Anthropic's Messages API, for Anthropic and Amazon Bedrock routes.
+---
+
+```http
+POST /v1/messages
+anthropic-version: 2023-06-01
+x-api-key: omg_...
+```
+
+```json
+{
+  "model": "example/assistant",
+  "max_tokens": 200,
+  "system": "You answer in one sentence.",
+  "messages": [{"role": "user", "content": "What is a cache write?"}]
+}
+```
+
+Messages is served by models whose route is on an **Anthropic** or **Amazon Bedrock** connection. Point the Anthropic SDK at the gateway's address (without `/v1`); it sends the right version header.
+
+## Headers
+
+- `anthropic-version` must be exactly `2023-06-01`. Beta headers (`anthropic-beta`) are refused.
+- Authenticate with `x-api-key` **or** `Authorization: Bearer`, not both.
+
+## Request fields
+
+| Field | Supported |
+|---|---|
+| `model`, `messages` | Required. Text content and text blocks; assistant `tool_use` with object input; user `tool_result` with text. |
+| `max_tokens` | Required, positive. |
+| `system` | Supported. |
+| `temperature` | 0 to 1. |
+| `stream` | Supported (see below). |
+| `tools`, `tool_choice` | Supported: `auto`, `none`, `any` or a named tool, within each provider's limits. |
+| `metadata.user_id` | A [Logs label](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only. Other `metadata` fields are refused. |
+
+Refused: extended thinking, images and audio, cache-control settings, tool results marked as errors, and unknown fields. The gateway accounts for prompt caching when the provider reports it, but you can't ask for caching through it.
+
+## Streaming
+
+`"stream": true` works with the SDK's stream helpers. The gateway collects the upstream response (up to 4 MiB) before sending events, so `message_start` arrives after the model has finished, not token by token. Its `usage` has the observed input and cache counts and `output_tokens: 0`; the final `message_delta` carries the output count. Counts that weren't reported are left out. An error before completion sends only an `error` event.
+
+## Amazon Bedrock
+
+On Bedrock routes the request goes through Converse: system messages only at the start, no assistant prefill, function tools with object schemas (no strict mode), and `tool_choice: none` is refused. Tool results are passed as text exactly as sent.

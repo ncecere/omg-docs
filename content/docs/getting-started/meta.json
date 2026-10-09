@@ -1,0 +1,6 @@
+{
+  "title": "Getting started",
+  "description": "What Open Model Gateway is and how to try it",
+  "root": true,
+  "pages": ["index", "concepts", "quick-tour", "try-it-locally"]
+}

@@ -1,0 +1,134 @@
+---
+title: Container and Compose
+description: Build the image, what the container does and doesn't do, and a Compose layout with PostgreSQL and an HTTPS proxy.
+---
+
+## The image
+
+The repository's `Dockerfile` builds everything into one small image:
+
+1. Node builds the dashboard.
+2. Rust builds the `open-model-gateway` binary (with `--locked`); migrations are compiled into it.
+3. A Debian (bookworm-slim) runtime holds the binary and the built dashboard: no Node, no Cargo.
+
+### Release images
+
+{/* verify after release-prep */}
+From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-model-gateway`, under three tags:
+
+{/* verify after release-prep */}
+| Tag | Points to |
+|---|---|
+| `vX.Y.Z`, such as `v0.3.0` | That release. |
+| `vX.Y`, such as `v0.3` | The newest patch release of that minor version. |
+| `latest-release` | The newest release. |
+
+{/* verify after release-prep */}
+Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature before you deploy, then pin the image by its digest:
+
+{/* verify after release-prep */}
+```sh
+cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/ncecere/open-model-gateway/'
+```
+
+The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag.
+
+### Build it yourself
+
+```sh
+git clone https://github.com/ncecere/open-model-gateway.git
+cd open-model-gateway
+git checkout v0.3.0        # the release you want, once it is tagged
+docker build -t open-model-gateway:v0.3.0 .
+```
+
+The repository's manual publishing workflow also pushes a tested image of `main` to `ghcr.io/ncecere/open-model-gateway`, tagged with the full commit SHA, for staging.
+
+| Property | Value |
+|---|---|
+| User | `10001:10001`, non-root |
+| Port | `8080` (`GATEWAY_LISTEN=0.0.0.0:8080`) |
+| Defaults | `GATEWAY_ENV=production`, `GATEWAY_WEB_DIR=/app/web` |
+| Health check | `GET /health/ready` every 30 seconds |
+| Command | `serve` by default; any other subcommand can be passed |
+
+## The entrypoint
+
+The entrypoint only prepares secrets and runs the binary. It **never migrates the database or creates users**: those are explicit, one-off commands.
+
+For four variables it also reads a `_FILE` companion, so secrets can come from mounted files: `DATABASE_URL_FILE`, `GATEWAY_OIDC_CLIENT_SECRET_FILE`, `OPENAI_API_KEY_FILE` and `ANTHROPIC_API_KEY_FILE`. Set the variable or its `_FILE`, not both. The file must be one line, at most 4,096 bytes. Other secrets (for example a provider key with another name) must be passed as environment variables.
+
+```sh
+# One-off: create or upgrade the schema, as the migrator role.
+docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
+  -v ./secrets:/run/secrets:ro open-model-gateway:v0.3.0 migrate
+
+# One-off: name the first Platform Admin.
+docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
+  -v ./secrets:/run/secrets:ro open-model-gateway:v0.3.0 \
+  provision-user --email morgan.lee@example.edu --platform-admin
+```
+
+## Run it hardened
+
+The container is built to run with:
+
+- a read-only root filesystem and a small `/tmp` tmpfs;
+- all Linux capabilities dropped and `no-new-privileges`;
+- a stop grace period longer than the request deadline (the staging setup uses 150 seconds for a 120-second deadline), so requests in flight can finish and settle.
+
+## Compose
+
+The repository's staging setup (`deploy/staging/` and `scripts/staging.py`) is a single-host reference: PostgreSQL 17 on an internal network, separate migrator and runtime roles with file secrets, one-off `migrate` and `grant-runtime` services, the gateway, and Caddy terminating HTTPS. `staging.py` generates the secrets and runs each step:
+
+```sh
+python3 scripts/staging.py init      # generate secrets and configuration (once)
+python3 scripts/staging.py build
+python3 scripts/staging.py db
+python3 scripts/staging.py migrate   # migrate, then reapply runtime grants
+python3 scripts/staging.py up
+python3 scripts/staging.py verify
+```
+
+It starts on `https://localhost:18443` with Caddy's local certificate authority and single sign-on off. For a real hostname, set `GATEWAY_HOST`, `GATEWAY_PUBLIC_URL` and the bind address and ports in the generated `.local/staging/staging.env`, then enable OIDC (see [Identity setup](/docs/self-hosting/identity)).
+
+The shape of the gateway service, if you write your own Compose file:
+
+```yaml
+services:
+  gateway:
+    image: open-model-gateway:v0.3.0
+    init: true
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 150s
+    environment:
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+      GATEWAY_PUBLIC_URL: https://ai.example.edu
+      GATEWAY_OIDC_ISSUER: https://login.example.edu
+      GATEWAY_OIDC_CLIENT_ID: ai-gateway
+      GATEWAY_SECRET_ENV_ALLOWLIST: OPENAI_API_KEY,ANTHROPIC_API_KEY
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+    secrets: [runtime_database_url, openai_api_key, anthropic_api_key]
+```
+
+## The reverse proxy
+
+Put an HTTPS proxy in front of port 8080. It must:
+
+- serve the gateway on the exact origin in `GATEWAY_PUBLIC_URL` (sign-in cookies and the `Origin` check depend on it);
+- pass server-sent events through without buffering (Caddy: `flush_interval -1`);
+- allow WebSocket upgrades on `/v1/realtime`;
+- keep query strings, cookies and `Authorization` headers out of its access logs (sign-in callbacks carry codes);
+- not expose the metrics listener.
+
+The gateway sends no CORS headers and isn't meant to be called from other origins' pages.
+
+## Without a container
+
+Build the binary (`cargo build --release -p open-model-gateway`) and the dashboard (`npm ci && npm run build:web`), and point `GATEWAY_WEB_DIR` at `apps/web/dist`. Keep the binary and the dashboard from the same revision. Without `GATEWAY_WEB_DIR` the gateway serves the APIs only.

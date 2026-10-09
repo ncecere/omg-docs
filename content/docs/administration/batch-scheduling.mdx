@@ -1,0 +1,91 @@
+---
+title: Batch scheduling
+description: Let gateway-run batch lines use only spare capacity on a route, giving way to live traffic, the server's own load and time windows.
+---
+
+Batches on your own GPU servers compete with people using the same models interactively. Batch scheduling lets the gateway start batch lines only when a route has room: a few at a time, giving way to live requests, watching the model server's own load, and, if you like, only at certain hours. The model server needs no batch support of its own: each line is an ordinary request.
+
+The settings apply to **gateway-run** batch lines on any route, self-hosted or cloud. Native provider batches (OpenAI, Anthropic) are unaffected.
+
+<Screenshot slot="admin-batch-scheduling" />
+
+## Where
+
+Open the route from its model's page: **Admin › Models › *model* › *route* › Batch scheduling**. The section shows **Queued lines**, **Running** (against the route's limit, with live requests in flight), **Status** (why it is paused) and **Server load** (the last metrics reading), then the settings. Platform Admins change them with **Edit**; Auditors can only read them. A route without settings uses the defaults.
+
+## Settings
+
+| Setting | Default | A new line starts only while… |
+|---|---|---|
+| **Batch lines at once** | 2 | fewer than this many batch lines run on the route, across every batch and gateway process (1 to 256). |
+| **Yield to live traffic** (**Pause while live requests ≥**) | Off | fewer than this many live (non-batch) requests to the route are in flight (1 to 100,000). |
+| **Server load signal** | Off | the server's load readings are at or under your limits (below). |
+| **Time window** | Any time | the local time is inside an allowed window (below). |
+| **Priority hint** | Off | (not a gate) a vLLM priority sent on the route's batch lines (below). Shown only on vLLM and OpenAI-compatible routes. |
+
+When a gate closes, lines already running finish. Nothing is resent or retried.
+
+"Live traffic" is the gateway's own count of requests in flight on that route, shared by every gateway process. Requests that reach the server without going through the gateway aren't counted: use the server load signal for those.
+
+### Server load signal
+
+Give a **Server metrics URL** and the gateway reads the model server's vLLM-compatible Prometheus metrics. Set at least one limit; the route pauses while any reading is **above** its limit:
+
+| Limit | Reading |
+|---|---|
+| **Pause if waiting requests >** (0 to 100,000) | `vllm:num_requests_waiting`, summed over engines. `0` pauses whenever requests queue on the server. |
+| **Pause if running requests >** (0 to 100,000) | `vllm:num_requests_running`, summed over engines. Batch lines count too. |
+| **Pause if KV cache use > (%)** (1 to 100) | `vllm:kv_cache_usage_perc` (older servers: `vllm:gpu_cache_usage_perc`), the highest engine. |
+
+- The address must be the base of an endpoint approved in `GATEWAY_LOCAL_UPSTREAMS`, without its final `/v1`, followed by `/metrics`: for the approved base `http://models.example.internal:8000/v1`, that is `http://models.example.internal:8000/metrics`. Any other address is refused when you save.
+- It is fetched with the endpoint's pinned addresses, with no redirects, proxies, retries or credentials, a 2-second deadline and a 1 MiB limit. Each gateway process reuses a reading for 5 seconds.
+- **It fails closed.** If the server can't be read, or a gauge you set a limit for is missing, the route pauses as **Server metrics unavailable** and shows the error.
+
+### Time windows
+
+A **Time window** has a **Time zone** (any IANA zone, such as `Europe/London`), days (Mon to Sun), and local **From** and **Until** times.
+
+- The days are the days a window **starts**. An end earlier than the start spans midnight: Monday to Friday, 19:00 to 07:00 runs from Monday evening to Tuesday morning through Friday evening to Saturday morning. Monday before 07:00 is closed, because no Sunday window starts.
+- A start equal to the end allows the whole day.
+- Windows follow the wall clock, so an overnight window is an hour shorter or longer on the night the clocks change. A window that falls inside the hour skipped in spring doesn't open that night.
+- Outside the window no new line starts. People can ask for a longer [completion window](#completion-windows) for batches that need several nights.
+
+### Priority hint
+
+vLLM started with `--scheduling-policy priority` serves requests with a lower `priority` first, and requests without one count as `0`. With a **vLLM priority for batch lines** of 1 to 1,000,000, the gateway sends it on this route's batch lines only, so batch work always queues behind live requests inside vLLM.
+
+- Available on **vLLM** and **OpenAI-compatible** routes only.
+- Interactive requests, and routes without the setting, never get the field.
+- vLLM rejects a non-zero priority unless it runs with the priority policy, so turn it on only for such servers.
+
+## Sharing a route fairly
+
+When several batches wait for one route, the next free slot goes to the workspace with the fewest batch lines running on it, then the workspace served least recently; within a workspace, to the batch with the fewest lines running, then the one served least recently. One huge batch can't starve the others.
+
+A line's route is chosen with the model's routing policy, then fixed: a line never fails over after it starts, and a busy route never spills its lines onto another, possibly paid, route. A batch that uses several models progresses on each route independently.
+
+## What people see
+
+A gateway-run batch with lines held back and none running shows **Queued — waiting for capacity**, with the reason: **Outside its time window**, **Yielding to live traffic**, **Server busy**, **Server metrics unavailable**, **At its batch limit**, **Other batches' turn**, **Gateway batch workers busy** or **Rate limited · backing off**. The **Scheduling** section of its page lists each model's reason and its place in that route's queue. Through the API the batch stays `in_progress`.
+
+While a batch waits for any of these reasons, the **Batch stalled** alert doesn't count the time, except for **Server metrics unavailable**: unreadable server metrics aren't a legitimate wait.
+
+## Completion windows
+
+Every batch names its `completion_window`: `24h` (the OpenAI value), `48h`, `72h` or `168h`. Anything but `24h` always runs through the gateway, because provider batch APIs only offer 24 hours. When the window ends, no new line starts; running lines finish, and the batch ends `expired` with its partial results. Lines that never ran are listed as `batch_expired` and cost nothing.
+
+## Example
+
+A vLLM server on `10.0.0.5:8000`, started with `--scheduling-policy priority` and approved in `GATEWAY_LOCAL_UPSTREAMS`. Its route is set to:
+
+- **Batch lines at once**: 4
+- **Yield to live traffic**: pause while live requests ≥ 2
+- **Server load signal**: `http://10.0.0.5:8000/metrics`, pause if waiting requests > 0, pause if KV cache use > 90%
+- **Priority hint**: 10
+- **Time window**: Mon to Fri, from 19:00 until 07:00, America/New_York
+
+Overnight on weekdays, at most 4 batch lines run at once. They pause while 2 or more interactive requests are in flight, while any request queues on the server, or while its KV cache is over 90% full, and they always queue behind interactive requests inside vLLM. People submit with `"completion_window": "72h"` so a weekend doesn't expire their batches.
+
+## Monitoring
+
+New metrics: `gateway_batch_route_lines{provider,state}` (waiting and running lines), `gateway_batch_paused_routes{reason}` and `gateway_batch_route_pauses_total{reason}`. The settings are also in the management API: `GET` and `PUT /api/v1/platform/deployments/{id}/batch-scheduling`.

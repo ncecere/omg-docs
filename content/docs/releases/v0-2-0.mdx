@@ -1,0 +1,46 @@
+---
+title: v0.2.0
+description: Alerts and notifications, key safety, model compare, SCIM, signing-key refresh, metrics, backups, browser tests, realtime audio, async jobs and constant-time budget checks.
+---
+
+Released 2026-10-09.
+
+## Alerts and notifications
+
+- Rules for **budget thresholds**, **spend spikes**, **error rates** and **failing connections**, for the installation and for each Team and Project, checked by a background evaluator.
+- Built-in budget alerts for personal workspaces, for their owner only.
+- In-app notifications with a bell in the top bar, and email through the SMTP relay. Unknown cost is flagged, never counted as zero.
+
+See [Alerts](/docs/administration/alerts).
+
+## Keys and models
+
+- **Key safety**: findings for keys with no expiry, no budget, a holder who left, too long a lifetime, an old secret, no use, or access to every model, each with a fix. Personal keys appear in Admin only as counts.
+- **Model compare**: two to four models side by side, with exact prices, ceilings, readiness and 30 days of activity.
+
+## Identity
+
+- **SCIM 2.0** provisioning for users and groups, with deactivation that suspends and revokes keys, and group grants from pushed groups.
+- **Signing-key refresh**: the identity provider's keys are cached within bounds, refetched once on an unknown key, and kept for a bounded time if the provider is unreachable.
+
+## Operations
+
+- **Prometheus metrics** on a separate listener, with low-cardinality labels, plus example alert rules and a Grafana dashboard.
+- Readiness checks for the database, schema and dashboard.
+- **`scripts/backup.py`**: checksummed backups and guarded restores.
+- A load test against a mock provider with exact ledger checks. It found and fixed connection-pool exhaustion at 200 concurrent requests (`GATEWAY_DATABASE_MAX_CONNECTIONS`).
+- **Budget totals**: budget checks read maintained per-period totals instead of scanning history. In the load test with 200,000 requests in the month, throughput went from 19 to 124 requests per second. `budget verify` checks the totals.
+- A browser test suite for every persona, with axe accessibility checks, in CI.
+
+## New workloads
+
+- **Realtime audio**: `/v1/realtime`, a WebSocket proxy for OpenAI's Realtime interface, with an event allowlist, per-response budgets and session limits.
+- **Async jobs**: video generation and batches of Chat Completions on OpenAI, polled in the background.
+
+## Logs
+
+- The model the provider says it served is recorded beside the configured one, and Anthropic's thinking tokens are counted as reasoning tokens.
+
+## Upgrading
+
+Migrations `0011_alerts`, `0013_upstream_model`, `0014_scim`, `0015_budget_totals`, `0016_async_jobs` and `0017_realtime`. See [Upgrades](/docs/self-hosting/upgrades#to-v020).

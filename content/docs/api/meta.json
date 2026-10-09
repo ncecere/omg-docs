@@ -1,0 +1,26 @@
+{
+  "title": "API reference",
+  "description": "The inference endpoints and what each supports",
+  "root": true,
+  "pages": [
+    "index",
+    "errors-and-limits",
+    "---Inference---",
+    "models",
+    "chat-completions",
+    "responses",
+    "messages",
+    "embeddings",
+    "images",
+    "audio",
+    "rerank",
+    "system-one",
+    "realtime",
+    "---Files and jobs---",
+    "files",
+    "batches",
+    "videos",
+    "---Dashboard---",
+    "management-api"
+  ]
+}

@@ -1,0 +1,50 @@
+---
+title: Alerts and notifications
+description: Budget, spend-spike, error-rate and batch alerts for a workspace, built-in personal budget alerts, the notification bell and email.
+---
+
+Alerts tell people when a budget fills up, spend jumps, requests start failing or a batch fails or stalls. They only notify: a budget is enforced whether or not an alert exists.
+
+## Notifications
+
+The bell in the top bar shows how many alerts are unread. **Notifications** lists your alerts from the last 90 days, newest first, with **Unread**, **Firing** and **Resolved** filters, and marks them read for you only.
+
+<Screenshot slot="notifications" />
+
+You see an alert when you are allowed to see its subject right now:
+
+- workspace alerts, if you are an owner or admin of that Team or Project;
+- installation alerts, if you are a Platform Admin or Auditor;
+- your personal workspace's budget alerts, if it is yours.
+
+If you lose a role, its alerts leave your list.
+
+## Personal workspaces
+
+Every personal workspace has built-in budget alerts at **80%** and **100%** of each budget that applies to it. They can't be changed, and nobody but the owner sees them, Platform Admins included. They are emailed to the owner when email is set up.
+
+## Workspace alert rules
+
+Owners and admins of a Team or Project manage rules in **Settings › Alerts**. Each rule has a name, a kind, an on/off switch and its recipients: the workspace's admins, the Platform Admins, and up to 10 email addresses. A workspace can have up to 50 rules.
+
+| Kind | Fires when |
+|---|---|
+| **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50%, 80% and 100% by default). Choose which layers to watch: the type default or override, the workspace's own budgets, and each key's. |
+| **Spend spike** | Spend in the last hour is at least a chosen multiple of the hourly average over the 7 days before, and above a minimum amount. |
+| **Error rate** | The share of failed requests in a window (5 to 1,440 minutes) reaches a percentage, with at least a minimum number of finished requests. |
+| **Batch failed** | A batch ended failed or expired. One alert per batch, closed 24 hours later. |
+| **Batch stalled** | An unfinished batch made no progress for a chosen time (5 to 1,440 minutes). Time spent waiting for capacity on its routes doesn't count. |
+
+<Screenshot slot="workspace-alerts" />
+
+## How alerts behave
+
+- The gateway checks rules about once a minute.
+- An alert fires once and stays open until its condition clears. A budget alert that passes a higher threshold replaces the open one; a new window, a raised budget or a revoked key clears it.
+- Spend counts settled cost plus amounts on hold. Requests whose cost is unknown aren't added; the alert says spend may be higher.
+- Turning a rule off or deleting it closes its open alerts without email. Deleted rules keep their history.
+- Alerts never contain prompts, responses, key names or who made a request.
+
+## Email
+
+When a Platform Admin has set up email, alerts are emailed when they fire and when they clear. People whose accounts are disabled get nothing. If email isn't set up, alerts still appear in Notifications.

@@ -1,0 +1,92 @@
+---
+title: API keys
+description: Create a key, choose its expiry, models and limits, and rotate, disable or revoke it.
+---
+
+An API key lets your code call models through Open Model Gateway. Each key belongs to one workspace, and everything it does is counted against that workspace. Keys start with `omg_`.
+
+<Callout title="Keys are not dashboard logins">
+  An API key can only call the inference API (`/v1/...`). It can't sign in to the dashboard or change any setting.
+</Callout>
+
+## Create a key
+
+Open **API keys** in the workspace and choose **Create key**.
+
+<Screenshot slot="key-create" />
+
+| Field | What it does |
+|---|---|
+| **Name** | A label for you, up to 120 characters. |
+| **Who is this key for?** | **Me** or **A service account**. Shown when you manage the workspace's service accounts and it has some. A service account's key keeps working when people leave. |
+| **Expires in** | 7, 30, 90 or 180 days, 1 year, or a custom number of days. It can't be changed later. For your own keys, the installation may set a maximum below 365 days. |
+| **Spending limit** | **No limit**, $10, $50, $100 or a custom amount, with a **Reset period** (daily, weekly, monthly or lifetime). The limit includes what is on hold for requests in progress. **Add a budget for another period** stacks more budgets, one per period. |
+| **Rate limits** | Optional: requests per minute, tokens per minute, requests at once and jobs at once. Blank means the workspace's limits apply. |
+| **Models** | **All models in this workspace** (follows the workspace as models are added or removed) or **Only selected models**. You can't change a key's models later; create a new key instead. |
+
+A key's limits can only be **tighter** than the workspace's: a key budget can't be higher than an inherited budget for the same period. The dialog shows the inherited budgets.
+
+## Save it
+
+When the key is created, **Save your API key** shows it once. Copy it into your password manager or secret store, then choose **I have saved it**. The gateway keeps only a hash: nobody can show you the key again, not even an administrator. If you lose it, rotate the key or create a new one.
+
+<Screenshot slot="key-created" />
+
+## The key list and key page
+
+**API keys** lists your keys with their status (**Active**, **Disabled**, **Expired** or **Revoked**), when they were last used and what they have spent. Workspace admins and owners see every key in the workspace; members see their own. Filter by status, or by **Safety: Needs attention** to see keys with [safety findings](#key-safety).
+
+Open a key for its own page:
+
+- **Overview**: spending over the last 30 days and the key's details. A **Safety** card lists findings, when there are any.
+- **Access**: the models the key can use, and why each is or isn't available (see [workspace access](/docs/using/workspace-settings#access)).
+- **Limits**: the key's own rate limits and budgets, and every budget window that applies to it.
+
+<Screenshot slot="key-detail" />
+
+A key's limits can be tightened later on its **Limits** tab. A stored limit can't be raised or removed: create a new key for that.
+
+## Rotate, disable and revoke
+
+| Action | What happens | Reversible |
+|---|---|---|
+| **Rotate key…** | A new secret replaces the old one, which stops working immediately. Models, limits, budgets and usage carry over to the new secret. You choose a new expiry. | No |
+| **Disable key…** | The key stops working until someone enables it again. | Yes: **Enable key…** |
+| **Revoke key…** | The key stops working for good. | No |
+
+Who can do what:
+
+- You can rotate, disable, enable and revoke **your own** keys.
+- Workspace admins and owners can disable, enable and revoke **anyone's** key in a Team or Project, and rotate service-account keys. They can't rotate another person's key.
+- A disabled key can't be rotated; enable it first.
+- A revoked key never works again, even if its owner regains access later.
+
+Keys are also revoked automatically when their holder loses access: a person who loses their platform role or their membership of a Team or Project loses their keys there. Service-account keys are revoked when the service account is disabled, and enabling it again does not bring them back.
+
+## Expiry
+
+Every key you create expires, between 1 and 365 days after it is created or rotated. The maximum for people's own keys is set by the installation (**Admin › Settings › General**, 365 days unless changed). Service-account keys can always last up to 365 days. To extend a key, rotate it with a new expiry.
+
+## Key safety
+
+The gateway checks every active key for common risks and shows a **High**, **Medium** or **Low risk** badge next to keys that need attention:
+
+| Finding | Severity | Fix |
+|---|---|---|
+| No expiry | High | Rotate with an expiry |
+| No limits (no budget and no rate limit at any layer) | High | Add a budget |
+| Holder left (a Team or Project key whose holder has no membership now) | High | Revoke |
+| Expiry too long (beyond the installation maximum) | Medium | Rotate with a shorter expiry |
+| No budget (rate limits, but no budget at any layer) | Medium | Add a budget |
+| Not rotated (secret older than 180 days) | Medium | Rotate |
+| Unused (not used for 30 days) or never used | Low | Disable |
+| All models (no model restriction, and 5 or more models available) | Low | Create a restricted key, then revoke this one |
+
+The checks read live configuration; they never change a key. Platform Admins see the same findings for Team and Project keys on [Key safety](/docs/administration/key-safety).
+
+## Keeping keys safe
+
+- Treat a key like a password. Put it in a secret store or environment variable, never in source control or a browser page.
+- Use a separate key per application, restricted to the models it needs, with a budget.
+- For anything shared or long-lived in a Team or Project, use a service account's key rather than your own.
+- Clear your clipboard after storing a key.

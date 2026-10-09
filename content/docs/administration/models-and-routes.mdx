@@ -1,0 +1,91 @@
+---
+title: Models and routes
+description: Add models, connect them to providers with routes, set routing and failover, and read model readiness.
+---
+
+A **model** is what callers ask for by name. A **route** connects it to a [connection](/docs/administration/connections) and the provider's own model id. **Admin › Models** lists every model with its type, routes, price and readiness.
+
+<Screenshot slot="admin-models" />
+
+Type tabs (Text, Embeddings, Images, Speech to text, Text to speech, Rerank, System One, Realtime, Video, Batch) and filters (connection, status, readiness, pricing, input price, data collection) narrow the list. Tick two to four models to **compare** their prices, ceilings and the last 30 days of activity across Teams and Projects.
+
+## Add a model
+
+**Add model** creates the model, its first route, an optional price and its catalogs in one step. If anything fails, nothing is created.
+
+<Screenshot slot="admin-add-model" />
+
+| Section | Fields |
+|---|---|
+| **Identity** | **Type**, **API model name** (the global name callers use, such as `example/chat`; letters, digits and `/ - _ . :`, up to 200 characters), **Display name**, **Description**. |
+| **Source** | **Connection** and **Upstream model ID**, the provider's id for the model. |
+| **Add price now (optional)** | The first [price](/docs/administration/pricing) for the route. |
+| **Availability** | Whether it is enabled, and which [catalogs](/docs/administration/catalogs) it goes into. |
+
+### Types and protocols
+
+A model serves one kind of work. Text models can serve any of Chat Completions, Responses and Messages; every other type is a single protocol.
+
+| Type | Protocols | Endpoint |
+|---|---|---|
+| Text | Chat Completions, Responses, Messages | `/v1/chat/completions`, `/v1/responses`, `/v1/messages` |
+| Embeddings | Embeddings | `/v1/embeddings` |
+| Images | Image generation | `/v1/images/generations` |
+| Speech to text | Speech to text | `/v1/audio/transcriptions` |
+| Text to speech | Text to speech | `/v1/audio/speech` |
+| Rerank | Rerank | `/v1/rerank` |
+| System One | System One decisions | `/v1/systemone` |
+| Realtime audio | Realtime (WebSocket) | `/v1/realtime` |
+| Video | Video generation (async job) | `/v1/videos`: no supported provider at the moment |
+| Batch | Batch chat completions (async job) | Not needed any more: any text or embeddings model can be batched |
+
+Declaring a protocol doesn't make a provider support it: a request also needs a route whose connection can serve it. If none can, the request fails with `unsupported_capability`.
+
+## A model's page
+
+| Section | What's there |
+|---|---|
+| **Overview** | Status, type, display name and description, readiness. |
+| **Routes** | Each route's connection, upstream model, status, priority and weight. **Add route** adds another. A route's page also has its [batch scheduling](/docs/administration/batch-scheduling). |
+| **Pricing** | The current price lines of each route; **Price history** lists every version. |
+| **Routing** | The model's routing policy (below). |
+| **Availability** | The catalogs it is in and the workspaces it is assigned to directly. |
+| **Protocols & features** | What it serves, and features derived from its prices (cache pricing, prompt-size tiers, OpenRouter free variants). |
+| **Data policy** | For OpenRouter routes, the data-collection setting currently sent. Other providers show unknown. |
+| **Usage** | Recent activity with the model. |
+
+<Screenshot slot="admin-model-detail" />
+
+## Readiness
+
+A model is **Ready** when it is enabled, has an enabled route on an enabled connection, and is offered in a catalog or assigned directly. That is a configuration check, not a test of the provider. Ready models can show **Needs attention** when:
+
+- a route's input plus output token ceiling is larger than a tokens-per-minute limit of the installation or a workspace type that gets the model: those requests would be refused with `token_reservation_exceeds_limit`;
+- an OpenRouter route uses a `:free` variant while data collection is denied, so it can't be served.
+
+## Routing and failover
+
+Routing picks among a model's enabled routes for each request. Set the policy on the model's **Routing** section:
+
+| Setting | Values |
+|---|---|
+| **Strategy** | **Priority** (lowest number first) or **Weighted within priority tiers** (weights share traffic among routes of the same priority). |
+| **Max attempts** | 1 to 3. With 1 (the default), a failed request is not tried elsewhere. |
+| **Ambiguous failover** | **Disabled · recommended**, or **Allow · duplicate charges possible**: also fail over when it isn't known whether the provider did the work. |
+| **Required residency** | Optional: only routes with this residency label may be used. |
+
+Each route has a **priority**, a **weight** (1 to 1,000), an optional **residency label**, a **failure threshold** (3 by default) and a **cooldown** (30 seconds by default, 1 to 3,600).
+
+How failover behaves:
+
+- A route that fails the threshold number of times in a row (provider busy, unavailable or timing out) is skipped for its cooldown. When the cooldown ends, it is eligible again; there is no separate health probe.
+- Another attempt happens only if attempts remain and the failure allows it: a busy provider, or (with ambiguous failover allowed) an unavailable one. Timeouts, invalid requests and invalid responses are not retried.
+- **Never after a stream starts.** Once a response has begun, it is never moved to another route.
+- A fallback must have the **same residency label** as the first route chosen. A route with no label allows no fallback at all.
+- Every attempt is admitted, limited and charged on its own.
+
+Residency labels are your own assertions (for example `eu`), not something the gateway verifies.
+
+## Disable or retire
+
+Disabling a model or a route stops new requests at once; requests already admitted may finish. **Retire resource…** is a soft delete: records, prices and history stay. A model's API name is global, so plan names for the whole installation.

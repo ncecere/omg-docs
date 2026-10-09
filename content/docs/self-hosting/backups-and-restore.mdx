@@ -1,0 +1,61 @@
+---
+title: Backups and restore
+description: Checksummed PostgreSQL backups, restores that refuse to overwrite anything, point-in-time recovery, and the restore drill.
+---
+
+Everything that matters is in PostgreSQL, plus, if you use it, the file store and its encryption keys. Back up all three, separately.
+
+| What | How | Notes |
+|---|---|---|
+| Database | `scripts/backup.py`, or your platform's backups and point-in-time recovery | Contains identities and accounting data. |
+| File store objects | Bucket replication or versioning, or a copy of the local directory | Ciphertext only: useless without the keys. |
+| Encryption keys, secrets, configuration, TLS certificates | Your secret manager and an encrypted recovery plan | Never in the same place as the backups they unlock. |
+
+## scripts/backup.py
+
+The repository's backup script wraps `pg_dump` and `pg_restore` with checksums and checks against the release's migrations.
+
+```sh
+# Back up (custom format, without owners or ACLs): writes <dump> and <dump>.manifest.json, both 0600.
+python3 scripts/backup.py backup --url-file /secure/migrator_database_url --out-dir /secure/backups
+
+# Check the checksum, size and that the archive can be read.
+python3 scripts/backup.py verify /secure/backups/gateway-….dump.manifest.json
+
+# Restore only into an EMPTY database (or a new one with --create),
+# checking the backup's migrations against the binary that will serve it.
+python3 scripts/backup.py restore /secure/backups/gateway-….dump.manifest.json \
+  --url-env MIGRATOR_ADMIN_URL --target-db gateway_restore_20261009 --create \
+  --gateway-binary /usr/local/bin/open-model-gateway
+```
+
+- Connection URLs come from `--url-env` (default `DATABASE_URL`) or `--url-file`, and are never printed or put on a command line. `--pg-container NAME` runs the PostgreSQL 17 tools inside a container.
+- A backup refuses an empty or dirty migration history, or one that changed during the dump.
+- A restore checks the checksum, then that the backup's migrations equal the binary's (`--gateway-binary`, or the weaker `--expect-version N`). The target must be empty; system and demo databases are refused. It restores in a single transaction and never drops or overwrites existing data.
+- **Backups aren't encrypted by the script.** Encrypt them before they leave the host, restrict access and set retention.
+
+## Point-in-time recovery
+
+A dump gives you a recovery point at the time it was taken. For a smaller window, use your PostgreSQL platform's point-in-time recovery (a managed service's, or base backups with continuous WAL archiving), stored encrypted off the host. To recover:
+
+1. Restore the base backup to a **new** cluster.
+2. Set the recovery target to just before the incident.
+3. Promote it, then run the drill checks below before switching over.
+
+Never recover over the live cluster, never run down migrations, and never delete pending or unknown reservations to make numbers add up.
+
+## The restore drill
+
+Do this quarterly and after releases with migrations:
+
+1. Take a fresh backup and `verify` it.
+2. Restore it with `--create` into a new database on a non-production cluster, with the binary of the release you will run.
+3. Apply `deploy/staging/runtime-grants.sql` as the migrator, then run `verify-privileges.sql`.
+4. Start that release against the restored database: `/health/ready` must report `schema: ok`.
+5. Compare ledger and request counts with the source, spot-check costs, check that pending and unknown reservations survived, and run `open-model-gateway budget verify`.
+6. If you use the file store, run `open-model-gateway files verify` with your keys.
+7. Record how long it took (your recovery time) and the backup's age (your recovery point), then drop the drill database.
+
+## The staging setup
+
+`python3 scripts/staging.py backup` and `restore-check` do the same for the repository's staging stack. `restore-check` always restores into a new, disposable database and drops only that one afterwards. A same-host dump is not disaster recovery on its own.

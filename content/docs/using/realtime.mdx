@@ -1,0 +1,61 @@
+---
+title: Realtime audio
+description: Speech-to-speech and text sessions over a WebSocket, using OpenAI's Realtime interface, with per-response budgets.
+---
+
+`GET /v1/realtime` opens a WebSocket session with a realtime model, using OpenAI's Realtime (GA) interface. The gateway passes events through, checks every client event against an allowlist, and accounts for each response separately.
+
+It works with models whose route is on an OpenAI connection. Other providers return `unsupported_capability` before the session starts.
+
+## Connect
+
+```js
+// Server side (Node): the key in the Authorization header.
+import WebSocket from "ws";
+const ws = new WebSocket("wss://ai.example.edu/v1/realtime?model=example%2Fvoice", {
+  headers: { Authorization: `Bearer ${process.env.OMG_API_KEY}` },
+});
+```
+
+In a browser, which can't set headers, pass the key as a subprotocol, as the OpenAI SDK does:
+
+```js
+new WebSocket(url, ["realtime", `openai-insecure-api-key.${key}`]);
+```
+
+<Callout type="warn" title="Browser keys are visible">
+  A key in a web page can be read by anyone using that page. Use a key restricted to the realtime model, with a small budget and a short expiry.
+</Callout>
+
+- Use one key, in the header or the subprotocol, not both.
+- The query string takes `model` only.
+- The key never reaches the provider: the gateway connects with the connection's own credential.
+
+## What a session may do
+
+Before forwarding anything, the gateway configures the session itself: the model only responds when you send `response.create` (no automatic replies), and input transcription is off. It then forwards these client events, each checked field by field:
+
+- `session.update` (instructions, text or audio output, voice and format, turn detection that doesn't create responses, function tools)
+- `input_audio_buffer.append`, `.commit`, `.clear` and `output_audio_buffer.clear`
+- `conversation.item.create`, `.delete`, `.retrieve`, `.truncate` (text, audio and function items; no images)
+- `response.create` and `response.cancel`
+
+Anything else gets an `error` event and the socket closes with code 1008: nothing is silently dropped. One response may run at a time; a second `response.create` is refused but the session stays open.
+
+Not available: the beta interface, ephemeral client secrets, WebRTC and SIP, input transcription, automatic voice-activity responses, MCP and hosted tools, and image input.
+
+## Budgets
+
+A session is one request in [Logs](/docs/using/logs), but its budget is checked per response:
+
+- Each `response.create` reserves a hold sized from the conversation so far plus what you sent since the last response, up to the model's context window. If a budget can't cover it, you get an `error` event and the session closes with 1008.
+- When the response finishes, its hold becomes its actual cost. If usage is missing, the hold stays as unknown.
+- Every response carries an output maximum; the gateway adds one if you don't.
+
+The request's page in Logs shows a **Realtime responses** timeline: each response's status, text and audio tokens, cost or hold, and duration.
+
+## Limits
+
+Unless the operator changed them: sessions last at most 15 minutes, end after 2 minutes with no traffic either way, allow 50 client events per second, messages of up to 1 MiB, and up to 4,096 output tokens per response. Closing the socket, or losing the connection, closes the provider's side at once. If the provider fails, the session closes with 1011, never as a clean end.
+
+Audio, text and tool arguments are never logged or stored.

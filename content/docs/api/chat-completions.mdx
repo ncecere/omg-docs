@@ -1,0 +1,58 @@
+---
+title: Chat Completions
+description: POST /v1/chat/completions, the supported subset of OpenAI's Chat Completions API, streaming and per-provider notes.
+---
+
+```http
+POST /v1/chat/completions
+```
+
+```json
+{
+  "model": "example/chat",
+  "messages": [
+    {"role": "system", "content": "You answer in one sentence."},
+    {"role": "user", "content": "What is a reranker?"}
+  ],
+  "max_completion_tokens": 100,
+  "stream": false
+}
+```
+
+## Request fields
+
+| Field | Supported |
+|---|---|
+| `model` | Required: a gateway model name. |
+| `messages` | Required. Roles `system`, `developer`, `user`, `assistant` and `tool`. `content` is a **string**: content-part arrays (images, audio, files) are refused. Assistant `tool_calls` and tool `tool_call_id` are supported. |
+| `max_completion_tokens` | The output maximum. Required in practice on a priced model, and no higher than its output ceiling. The legacy `max_tokens` is refused. |
+| `temperature` | Supported (Anthropic: 0 to 1). |
+| `stream`, `stream_options.include_usage` | Supported. |
+| `tools`, `tool_choice` | Function tools only. |
+| `n` | Absent or 1. |
+| `user`, `metadata` | Accepted as [Logs labels](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only; never sent to the provider. `metadata` keeps OpenAI's bounds: up to 16 pairs, keys up to 64 and values up to 512 characters. |
+
+Any other field (for example `response_format`, `reasoning_effort`, `logprobs`, `seed`, `top_p`, `stop`, `parallel_tool_calls`) is refused with `400 invalid_request_error`.
+
+## Response
+
+The OpenAI response shape, with one choice, the gateway model name and `usage` with the token counts the provider reported. A count the provider didn't report is left out, never sent as 0.
+
+## Streaming
+
+With `"stream": true` the response is server-sent events, delivered token by token. With `stream_options.include_usage`, the final chunk carries `usage`. A successful stream ends with `data: [DONE]`; an error after the stream started closes it without `[DONE]`, never as a fake success.
+
+## Providers
+
+| Connection | Notes |
+|---|---|
+| OpenAI | Native Chat Completions. |
+| Anthropic | Translated to Messages: leading `system`/`developer` text, `temperature` up to 1; strict tool schemas and non-object tool arguments are refused. |
+| Amazon Bedrock | Translated to Converse: leading system messages only, no `developer` messages or assistant prefill; tool choice `none` and strict schemas are refused; `temperature` 0 to 1. |
+| OpenRouter | Compatible subset, streaming or not. Reasoning text isn't returned (its tokens count as output). |
+| vLLM, SGLang, OpenAI-compatible | Compatible subset; `max_completion_tokens` is sent upstream as `max_tokens`; strict tool schemas refused. The generic profile refuses required or named tool choice. |
+| Ollama | Compatible subset; explicit tool choice is refused. |
+
+## Failover
+
+If the model has several routes and its routing policy allows more than one attempt, a request that fails before any output (for example a busy provider) can be tried on another route with the same residency label. Each attempt is charged separately. There is never a failover once a stream has started.

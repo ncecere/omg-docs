@@ -1,0 +1,74 @@
+---
+title: First run
+description: Make the first Platform Admin, sign in, and follow the setup checklist to the first request.
+---
+
+A new installation has no users, no providers and no models. This page takes it to its first request.
+
+## Before you sign in
+
+An operator has to do three things on the server (see [Self-hosting](/docs/self-hosting)):
+
+<Steps>
+<Step>
+
+### Create the schema
+
+```sh
+open-model-gateway migrate
+```
+
+The gateway never creates or upgrades its database on its own.
+
+</Step>
+<Step>
+
+### Configure sign-in
+
+Set `GATEWAY_PUBLIC_URL`, `GATEWAY_OIDC_ISSUER`, `GATEWAY_OIDC_CLIENT_ID` (and the client secret, if your identity provider needs one), and register `https://ai.example.edu/api/v1/auth/callback` with the identity provider. See [Identity setup](/docs/self-hosting/identity).
+
+</Step>
+<Step>
+
+### Name the first Platform Admin
+
+```sh
+open-model-gateway provision-user --email morgan.lee@example.edu --platform-admin
+```
+
+This gives that email address the Admin role and allows one first sign-in to link to it. It needs direct database access, which is why it is a command and not a page.
+
+</Step>
+</Steps>
+
+Then sign in with that account. Your personal workspace is created, and Admin opens on **Overview**.
+
+## The setup checklist
+
+**Overview** shows a checklist until setup is complete (you can hide it and bring it back). Each step links to the page that does it.
+
+<Screenshot slot="admin-overview" />
+
+| Step | Where | Done when |
+|---|---|---|
+| **Connect a model provider** | [Connections](/docs/administration/connections) | A connection is enabled. |
+| **Add a model with an enabled route** | [Models › Add model](/docs/administration/models-and-routes) | A model has an enabled route. |
+| **Price every enabled route** | [Pricing](/docs/administration/pricing) | No enabled route is unpriced. Unpriced routes record their cost as unknown. |
+| **Offer a model in a catalog** | [Catalogs](/docs/administration/catalogs) | A model is enabled, has a route, and is in a catalog or assigned directly. |
+| **Choose default catalogs for each workspace type** | Catalogs › Defaults | Personal, Team and Project each have a default catalog. |
+| **Give people access** | [SSO groups](/docs/administration/sso-groups) or [Users](/docs/administration/people-and-roles) | A group mapping exists, or a second person has a role. |
+| **Set an installation-wide budget** (optional) | [Defaults & limits](/docs/administration/limits-and-budgets) | An installation budget exists. |
+
+Below the checklist, **Platform at a glance** shows users with access, Teams, Projects, ready models, and this month's requests and spend, plus any installation budgets and how much of them is used.
+
+## Then
+
+1. In **Settings › General**, name the installation and set a support link and the maximum lifetime of people's keys.
+2. In **Settings › Email**, set up an SMTP relay so invitations and alerts are emailed. Send a test.
+3. In **Settings › Data & privacy**, decide on request log retention and, if you will use batches or files, check the storage backend and allow the kinds of file you need.
+4. Make a key in your personal workspace and try a request with the [OpenAI SDK](/docs/using/calling-the-api).
+5. Grant a second Platform Admin. The last active Platform Admin can't be removed, so having two avoids getting stuck.
+
+<Callout title="No paid requests without you">
+  Nothing calls a provider until you enable a connection, a model and a route, and someone sends a request. Saving configuration is not a test of the provider: try a small request with a low budget.
+</Callout>

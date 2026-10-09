@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import '@fontsource-variable/inter';
+@import './brand.css';
+
+/*
+ * Fumadocs' theme variables, mapped onto Open Model Gateway's brand tokens
+ * (brand.css), so the docs use the dashboard's indigo and slate neutrals in
+ * light and dark mode.
+ */
+:root,
+.light,
+.dark {
+  --color-fd-background: var(--omg-bg);
+  --color-fd-foreground: var(--omg-text);
+  --color-fd-muted: var(--omg-surface-sunken);
+  --color-fd-muted-foreground: var(--omg-text-muted);
+  --color-fd-popover: var(--omg-surface-raised);
+  --color-fd-popover-foreground: var(--omg-text);
+  --color-fd-card: var(--omg-surface);
+  --color-fd-card-foreground: var(--omg-text);
+  --color-fd-border: var(--omg-border-emphasis);
+  --color-fd-primary: var(--omg-link);
+  --color-fd-primary-foreground: var(--omg-text-inverse);
+  --color-fd-secondary: var(--omg-surface-sunken);
+  --color-fd-secondary-foreground: var(--omg-text);
+  --color-fd-accent: var(--omg-primary-subtle);
+  --color-fd-accent-foreground: var(--omg-primary-subtle-text);
+  --color-fd-ring: var(--omg-focus-ring);
+  --color-fd-overlay: rgba(11, 13, 18, 0.45);
+}
+
+/* Fumadocs' neutral theme darkens the sidebar in dark mode; keep the dashboard's. */
+.dark #nd-sidebar {
+  --color-fd-muted: var(--omg-surface-sunken);
+  --color-fd-secondary: var(--omg-surface-sunken);
+  --color-fd-muted-foreground: var(--omg-text-muted);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Inter's alternate 1 and straight-sided 6/9, as the dashboard sets them. */
+body {
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Links in prose use the brand link colour and stay underlined (not colour alone). */
+.prose a:not([data-card]):not(.not-prose a) {
+  color: var(--omg-link);
+  text-decoration-color: color-mix(in srgb, var(--omg-link) 45%, transparent);
+}
+.prose a:not([data-card]):hover {
+  color: var(--omg-link-hover);
+}
+
+/* Lock page scroll while a screenshot is enlarged (components/screenshot-zoom.tsx); the gutter stays, so nothing shifts. */
+html:has(dialog[data-zoom][open]) {
+  overflow: hidden;
+}
+
+/* A visible focus indicator everywhere (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--omg-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Contrast fix for third-party UI (WCAG 1.4.3): the dark code theme's comments
+ * (#6a737d) are lightened on the near-black dark surface.
+ */
+.dark .shiki span[style*='--shiki-dark:#6A737D'] {
+  --shiki-dark: #8b949e !important;
+}

@@ -1,0 +1,44 @@
+---
+title: Images
+description: POST /v1/images/generations, base64 image generation on OpenAI gpt-image models and OpenRouter.
+---
+
+```http
+POST /v1/images/generations
+```
+
+```json
+{"model": "example/image", "prompt": "A watercolour of a university library at dusk", "n": 1, "size": "1024x1024", "quality": "low", "response_format": "b64_json"}
+```
+
+Not streamed. Images come back as base64 only: the gateway never hosts image files.
+
+## Request fields
+
+| Field | Supported |
+|---|---|
+| `model`, `prompt` | Required. The prompt is non-blank, up to 32,000 characters. |
+| `n` | 1 to 4 (default 1). |
+| `response_format` | Absent or `b64_json`. `url` is refused with `unsupported_capability`. |
+| `size`, `quality`, `seed` | Depend on the provider (below). A value no route supports is refused before anything is charged. |
+
+Other fields (`output_format`, `background`, `style`, `user`, …) are refused.
+
+| Connection | `size` | `quality` | `seed` |
+|---|---|---|---|
+| OpenAI (`gpt-image-*` models only) | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto`, `low`, `medium`, `high` | Not supported |
+| OpenRouter | Tier: `512`, `768`, `1K`, `1.5K`, `2K`, `4K` (default `1K`) | Passed through | Passed through |
+
+## Response
+
+```json
+{"created": 1760000000, "data": [{"b64_json": "iVBORw0KGgo…"}], "usage": {"input_tokens": 12, "output_tokens": 4160, "total_tokens": 4172}}
+```
+
+Each image is checked to be PNG, JPEG or WebP, and exactly `n` images must come back. `usage` has only what the provider reported. Images can be up to 20 MiB per response.
+
+## Cost
+
+The hold is `n` times the highest per-image price, plus token ceilings. Prices can differ per size: OpenAI's generated size (such as `1024x1024`) or OpenRouter's tier (`768`, `1k`, `1.5k`, `2k`, `4k`). A route without an output-image price has an unknown cost and can't run under a budget.
+
+Prompts and images are never logged or stored. Image edits, variations and image input are not available.

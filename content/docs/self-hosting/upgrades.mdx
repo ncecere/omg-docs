@@ -1,0 +1,73 @@
+---
+title: Upgrades
+description: The upgrade procedure, why migrations are forward-only, rolling back, and notes for each release.
+---
+
+Every release can change the database schema. The gateway never migrates itself, and replicas of different releases can't share a database, so upgrades are a short, planned procedure.
+
+## Procedure
+
+<Steps>
+<Step>
+
+### Read the release notes
+
+Check the [release](/docs/releases) for migrations, new settings and grant changes. Build or pull the image and note its digest.
+
+</Step>
+<Step>
+
+### Back up
+
+Take a backup and `verify` it. For releases with migrations, run a [restore drill](/docs/self-hosting/backups-and-restore#the-restore-drill) first.
+
+</Step>
+<Step>
+
+### Stop traffic
+
+Stop the proxy's traffic, then every gateway replica. Mixed-release replicas are not supported.
+
+</Step>
+<Step>
+
+### Migrate and grant
+
+As the migrator, run `open-model-gateway migrate` with the **new** binary, then reapply `deploy/staging/runtime-grants.sql`. (`python3 scripts/staging.py migrate` does both.)
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new release. Wait for `/health/ready` to show `schema: ok`, then check the metrics, a sign-in, and one small request.
+
+</Step>
+</Steps>
+
+## Rolling back
+
+- If **no migration ran**, redeploy the previous image by its digest.
+- If a migration ran, restore the pre-upgrade backup **into a new database** and switch to it. There are no down migrations, and an older binary refuses a newer schema.
+
+## Release notes
+
+### To v0.3.0
+
+- Migrations `0018` to `0022`. Reapply runtime grants.
+- `0018` adds **jobs at once** to every limit layer, with type defaults of **2** active batch or video jobs per workspace. If workspaces run more at once, raise it in Admin › Settings › Defaults & limits.
+- The [file store](/docs/self-hosting/file-storage) is new and **off** until you configure it. Files and batches need it. Each kind of file must then be allowed in Admin › Settings › Data & privacy.
+- New workspace **Storage** limit, 1 GiB per workspace by default.
+- `GATEWAY_MAX_BATCH_FILE_BYTES` and `GATEWAY_BATCH_MAX_OUTPUT_SCAN_BYTES` are no longer used (still checked at startup).
+- New variables: `GATEWAY_FILE_STORE` and the `GATEWAY_S3_*` family, `GATEWAY_FILE_ENCRYPTION_KEYS_ENV`, `GATEWAY_FILES_MAX_BYTES`, `GATEWAY_BATCH_WORKERS`, `GATEWAY_BATCH_CONCURRENCY`.
+- `0022` adds per-route [batch scheduling](/docs/administration/batch-scheduling) and adds no variables. Every route now runs at most **2 gateway-run batch lines at once** unless you change it in the route's **Batch scheduling** section; the other gates start off. Reapplied runtime grants cover the new tables. Batches admitted before `0022` keep a `24h` completion window.
+
+### To v0.2.0
+
+- Migrations `0011` and `0013` to `0017` (there is no `0012`). Reapply runtime grants.
+- `0015` backfills budget totals from history; run `open-model-gateway budget verify` after migrating.
+- New variables: `GATEWAY_ALERT_INTERVAL_SECONDS`, `GATEWAY_SCIM_TOKEN_ENV`, `GATEWAY_METRICS_ADDR`, `GATEWAY_DATABASE_MAX_CONNECTIONS`, `GATEWAY_JOB_POLL_INTERVAL_SECONDS`, `GATEWAY_MAX_BODY_BYTES_VIDEOS`, `GATEWAY_MAX_BATCH_FILE_BYTES`, `GATEWAY_BATCH_MAX_OUTPUT_SCAN_BYTES` and the `GATEWAY_REALTIME_*` family.
+
+### v0.1.0
+
+The first release of the single-enterprise gateway, on a new schema lineage (`0001` to `0010`). It can't upgrade a database from the earlier multi-organisation prototype: `migrate` refuses it. Start from an empty database.

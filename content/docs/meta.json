@@ -1,0 +1,4 @@
+{
+  "title": "Documentation",
+  "pages": ["getting-started", "using", "administration", "api", "self-hosting", "releases"]
+}

@@ -1,0 +1,54 @@
+---
+title: Catalogs
+description: Group approved models into catalogs, choose default catalogs for each kind of workspace, and replace them for one workspace.
+---
+
+A **catalog** is a named list of approved models. Catalogs decide which models each workspace *may* add; the workspace's owner or admin then adds the ones it uses.
+
+<Screenshot slot="admin-catalogs" />
+
+## Examples
+
+Catalogs are yours to define. Example University might have:
+
+| Catalog | Models | Default for |
+|---|---|---|
+| Self-hosted | Models on the university's own GPU servers | Personal, Team, Project |
+| Approved cloud | Selected cloud models under a data agreement | Team, Project |
+| Advanced cloud | Larger, costlier cloud models | (none: chosen per workspace) |
+
+## Create a catalog
+
+**Create catalog** with a name and description, then add models on its **Models** tab. A catalog's page also shows **Who gets it** (the workspace types whose defaults include it, and the workspaces that chose it themselves) and **Settings**.
+
+You can also set a model's catalogs from the model's own page, under **Availability**.
+
+## Defaults per workspace type
+
+**Defaults** is a matrix of catalogs against Personal, Team and Project. Every workspace of that type without its own choice gets exactly those catalogs, and follows changes at once.
+
+A new personal workspace, Team or Project whose type has no default catalog starts with no models. The setup checklist reminds you.
+
+## Replace them for one workspace
+
+On a Team's or Project's page in Admin, under **Models**, you can **replace** its catalogs with your own choice. A replacement:
+
+- replaces the type's defaults, it doesn't add to them;
+- can be empty, which means no catalog models at all (direct assignments still work);
+- no longer follows changes to the defaults, until you reset it.
+
+## Direct assignments
+
+A Platform Admin can assign a model to one workspace directly, outside any catalog, for exceptions. Direct assignments are independent: losing a catalog doesn't remove them, and removing one doesn't touch catalog access.
+
+## What happens when access is removed
+
+When a model leaves a catalog, or a catalog stops being available to a workspace, the workspace loses the models it added from it, unless another available catalog or a direct assignment still covers them.
+
+- Keys restricted to such a model lose it too. A key whose models are all removed can't use any model; it never turns into an unrestricted key.
+- Selections removed this way **don't come back** if the model returns later. The workspace's admin adds the model again, and keys that should use it must be re-created.
+- Requests already running may finish.
+
+<Callout title="Catalogs are availability, not permission">
+  Being in a catalog is not enough to use a model. The workspace must add it, the model and a route must be enabled, and the key must allow it. Settings › Access in each workspace explains which of these is missing.
+</Callout>

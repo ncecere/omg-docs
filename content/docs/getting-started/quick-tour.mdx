@@ -1,0 +1,69 @@
+---
+title: Quick tour
+description: Signing in, the Workspace and Admin portals, the sidebar, search and notifications.
+---
+
+A walk around the Open Model Gateway dashboard, so the rest of these docs make sense.
+
+## Signing in
+
+The dashboard has one way in: **Sign in with single sign-on**, through your organisation's identity provider. There are no local passwords and no development login.
+
+<Screenshot slot="sign-in" />
+
+Signing in only proves who you are. If you have no platform role yet, the page says **No access yet** and asks you to contact a platform admin. Once you have a role, your first sign-in also creates your personal workspace.
+
+## Two portals
+
+Everyone sees the **Workspace** portal. Platform Admins and Auditors also see a **Portal** switch at the top of the sidebar, with **Workspace** and **Admin**.
+
+### Workspace
+
+The sidebar has two groups:
+
+- **Workspace**: **Home**, your own summary across every workspace you belong to: the models you can use, your usage this month (spent, requests, tokens) and your API keys.
+- A group named after the **selected workspace**, with the pages for that workspace: **Overview**, **Models**, **API keys**, **Logs**, **Files**, **Usage & costs** and **Settings**. Pages you can't use there are not shown.
+
+The workspace selector at the top lists your workspaces under **Personal**, **Teams** and **Projects**. You only see workspaces you are a member of; a platform role never adds entries to it.
+
+<Screenshot slot="workspace-switcher" />
+
+### Admin
+
+The Admin portal is for the whole installation. Auditors see the same pages read-only, marked **Platform auditor: Configuration and totals, read-only**.
+
+| Group | Pages |
+|---|---|
+| (top) | **Overview**: a setup checklist and the installation at a glance |
+| People | **Users**, **Teams**, **Projects**, **SSO groups** |
+| Models | **Connections**, **Models**, **Catalogs** |
+| Usage & spend | **Usage & costs**, **Logs**, **Cost centers** |
+| Records | **Audit log**, **Key safety** |
+| Settings | **General**, **Defaults & limits**, **Data & privacy**, **Email**, **Alerts**, **Sign-in** |
+
+<Screenshot slot="admin-overview" />
+
+## Everywhere
+
+- **Search**: press <kbd>⌘</kbd> <kbd>K</kbd> or <kbd>Ctrl</kbd> <kbd>K</kbd> to jump to any page or workspace you can open. Search never looks inside requests or keys.
+- **Notifications**: the bell in the top bar shows how many alerts are unread. See [Alerts and notifications](/docs/using/alerts-and-notifications).
+- **Your account menu** (bottom of the sidebar): **Your profile**, **Reload my access** (after someone changes your roles), the theme (**System**, **Light**, **Dark**) and **Sign out**.
+- **Links are shareable.** Every page has its own address. If someone sends you a link to something you can't see, the page says so instead of showing it.
+
+## Who sees what
+
+| | Personal workspace | Team or Project member | Team or Project admin | Platform Auditor | Platform Admin |
+|---|---|---|---|---|---|
+| Own keys and requests | Owner only | Yes | Yes | Yes (own) | Yes (own) |
+| Others' requests in the workspace | No one | No | Yes | No | No |
+| Workspace cost totals | Owner | Own only | Yes | Yes | Yes |
+| Change workspace limits | Platform only | No | Tighten only | No | Yes |
+| Installation settings | | | | Read | Read and change |
+
+A Platform Admin who is not a member of a Team sees its configuration but not its keys or requests. To work inside a Team, an admin needs a membership like anyone else.
+
+## Phones
+
+The dashboard works at phone width: the sidebar becomes a menu, and page headers collapse their secondary actions into a **⋯** button.
+
+<Screenshot slot="phone-home" />

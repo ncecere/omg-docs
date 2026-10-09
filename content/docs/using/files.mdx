@@ -1,0 +1,63 @@
+---
+title: Files
+description: Upload, list, download and delete files with the OpenAI Files API or the Files page, and the workspace's storage quota.
+---
+
+Open Model Gateway keeps its own files: you upload them to the gateway, not to a provider, and every file id is the gateway's (`file-` followed by 32 hex characters). Files are encrypted before they are stored. Today their main use is as [batch](/docs/using/batches) input.
+
+<Callout title="The file store must be on">
+  Files need a Platform Admin to have configured the file store and allowed the kind of file you upload (**Batch files** or **User files**, both off by default). Otherwise uploads fail with `file_storage_not_configured` or `file_purpose_disabled`.
+</Callout>
+
+## What you can store
+
+| Purpose | Used for |
+|---|---|
+| `batch` | Input for a batch. |
+| `user_data`, `vision`, `assistants`, `evals` | Stored, listed and downloaded only. Referring to a `file_id` inside a chat or Responses request is planned, not available yet. |
+| `batch_output` | Written by the gateway: a batch's results and errors. You can list and download them, not upload them. |
+
+`fine-tune` and other purposes are refused.
+
+## With the OpenAI SDK
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="https://ai.example.edu/v1", api_key=os.environ["OMG_API_KEY"])
+
+uploaded = client.files.create(file=open("requests.jsonl", "rb"), purpose="batch")
+print(uploaded.id, uploaded.expires_at)
+
+for f in client.files.list(purpose="batch"):
+    print(f.id, f.filename, f.bytes)
+
+content = client.files.content(uploaded.id).read()
+client.files.delete(uploaded.id)
+```
+
+- Any key of the workspace can list, read and delete the workspace's files. Another workspace's file id returns `404`.
+- Uploads stream straight to the store; files can be up to 200 MiB unless the operator changed the limit.
+- A file expires at the sooner of `expires_after` (if you set one) and the retention for its kind: 7 days for batch files and 30 days for user files unless a Platform Admin changed them. An expired file can't be read.
+- A batch makes its own copy of its input, so deleting the input file doesn't affect a batch that has started.
+
+The full endpoint list is in the [Files API reference](/docs/api/files).
+
+## The Files page
+
+**Files** in the workspace lists the files with their name, purpose, size, creation and expiry dates, and status, with a search and a purpose filter. **Upload** asks for the purpose, then the file. Each row can be downloaded or deleted.
+
+<Screenshot slot="files" />
+
+- Owners and admins (and personal owners) see every file in the workspace and can delete any.
+- Members see, download and delete only the files they uploaded themselves, from the page or with their own keys.
+- Uploads and deletions in the dashboard are recorded in the workspace's audit log, with the purpose only.
+
+## Storage quota
+
+Everything a workspace keeps counts against its **Storage** limit: uploaded files, batch results and uploads still in progress. Unless a Platform Admin changed it, each workspace may keep 1 GiB. The Files page shows a bar of used storage against the quota to owners and admins.
+
+- The quota is checked while a file uploads. An upload that would go over it stops, nothing is kept, and you get `413 storage_quota_exceeded`.
+- Deleting a file frees its space at once.
+- Batch results always count, but a batch never fails because of the quota: that work is already done.
+
+Storage is measured in GB-days and shown in [Usage and costs](/docs/using/usage-and-costs#storage) as **Not charged**.

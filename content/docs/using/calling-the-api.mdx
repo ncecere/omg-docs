@@ -1,0 +1,185 @@
+---
+title: Calling the API
+description: The base URL, authentication, model names, and examples with the OpenAI and Anthropic SDKs.
+---
+
+Open Model Gateway speaks the OpenAI API and the Anthropic Messages API, so the official SDKs work with two settings changed: the base URL and the API key.
+
+## The base URL
+
+Use your gateway's address, the same one you open the dashboard on. In these examples it is `https://ai.example.edu`.
+
+| Client | Base URL |
+|---|---|
+| OpenAI SDKs (Python, Node) | `https://ai.example.edu/v1` |
+| Anthropic SDKs (Python, Node) | `https://ai.example.edu` (the SDK adds `/v1/messages`) |
+| Plain HTTP | `https://ai.example.edu/v1/...` |
+
+## Authentication
+
+Send your [API key](/docs/using/api-keys) as a bearer token:
+
+```http
+Authorization: Bearer omg_...
+```
+
+`/v1/messages` also accepts Anthropic's `x-api-key` header instead, but not both at once. The workspace comes from the key; there is no header or body field to choose another one.
+
+## Model names
+
+Ask for models by their gateway name, such as `example/chat`, not the provider's own id. To see the names your key can use:
+
+- open **Models** in the workspace and copy a model's name, or
+- call `GET /v1/models` with the key:
+
+```sh
+curl https://ai.example.edu/v1/models -H "Authorization: Bearer $OMG_API_KEY"
+```
+
+```json
+{"object":"list","data":[{"id":"example/chat","object":"model","created":1760000000,"owned_by":"platform"}]}
+```
+
+The list contains models that are enabled, have an enabled route, are available to the key's workspace, and are allowed by the key's own model restriction.
+
+## Examples
+
+<Tabs items={['Python (OpenAI)', 'Node (OpenAI)', 'Python (Anthropic)', 'curl']}>
+<Tab value="Python (OpenAI)">
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(base_url="https://ai.example.edu/v1", api_key=os.environ["OMG_API_KEY"])
+
+reply = client.chat.completions.create(
+    model="example/chat",
+    messages=[{"role": "user", "content": "Summarise the library's opening hours in one line."}],
+    max_completion_tokens=200,
+)
+print(reply.choices[0].message.content)
+```
+
+</Tab>
+<Tab value="Node (OpenAI)">
+
+```js
+import OpenAI from "openai";
+
+const client = new OpenAI({ baseURL: "https://ai.example.edu/v1", apiKey: process.env.OMG_API_KEY });
+
+const reply = await client.chat.completions.create({
+  model: "example/chat",
+  messages: [{ role: "user", content: "Summarise the library's opening hours in one line." }],
+  max_completion_tokens: 200,
+});
+console.log(reply.choices[0].message.content);
+```
+
+</Tab>
+<Tab value="Python (Anthropic)">
+
+```python
+import os
+from anthropic import Anthropic
+
+client = Anthropic(base_url="https://ai.example.edu", api_key=os.environ["OMG_API_KEY"])
+
+message = client.messages.create(
+    model="example/assistant",
+    max_tokens=200,
+    messages=[{"role": "user", "content": "Summarise the library's opening hours in one line."}],
+)
+print(message.content[0].text)
+```
+
+`/v1/messages` serves models whose routes are on Anthropic or Amazon Bedrock connections.
+
+</Tab>
+<Tab value="curl">
+
+```sh
+curl https://ai.example.edu/v1/chat/completions \
+  -H "Authorization: Bearer $OMG_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"example/chat","messages":[{"role":"user","content":"Hello"}],"max_completion_tokens":50}'
+```
+
+</Tab>
+</Tabs>
+
+### Streaming
+
+Chat Completions streams token by token. Ask for usage in the final chunk so your own code sees the token counts:
+
+```python
+stream = client.chat.completions.create(
+    model="example/chat",
+    messages=[{"role": "user", "content": "Write a haiku about autumn."}],
+    max_completion_tokens=100,
+    stream=True,
+    stream_options={"include_usage": True},
+)
+for chunk in stream:
+    if chunk.choices and chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+Responses and Messages streams work with the SDKs' stream helpers, but the gateway currently sends their content in larger pieces after it has arrived, not token by token. See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
+
+### Embeddings
+
+```python
+result = client.embeddings.create(
+    model="example/embed",
+    input=["First document", "Second document"],
+    encoding_format="float",
+)
+```
+
+Pass `encoding_format="float"`: the gateway returns float vectors only and refuses `base64`, which the OpenAI SDKs ask for when you leave it out.
+
+## Always set an output maximum
+
+Send `max_completion_tokens` (Chat Completions), `max_output_tokens` (Responses) or `max_tokens` (Messages, where it is required anyway). Before a request goes out, the gateway holds the most it could cost, and it needs your output maximum to work that out:
+
+- On a model with a price, a request without an output maximum, or with one above the model's configured output ceiling, is refused with `503 provider_configuration_error`.
+- Chat Completions refuses the older `max_tokens` field; use `max_completion_tokens`.
+
+A smaller maximum also means a smaller hold, so requests are less likely to hit a budget.
+
+## Label sessions and apps for Logs
+
+Two optional headers group and label your requests in [Logs](/docs/using/logs). They are never sent to the provider and never change what the model does.
+
+| Header | Meaning | Limit |
+|---|---|---|
+| `X-Session-Id` | Groups requests into a session, such as one conversation or one job run. | 1–128 characters |
+| `X-Title` | The name of your application. | 1–200 characters |
+
+```python
+client = OpenAI(
+    base_url="https://ai.example.edu/v1",
+    api_key=os.environ["OMG_API_KEY"],
+    default_headers={"X-Title": "Course assistant"},
+)
+reply = client.chat.completions.create(
+    model="example/chat",
+    messages=[{"role": "user", "content": "Hello"}],
+    max_completion_tokens=50,
+    extra_headers={"X-Session-Id": "conversation-1042"},
+)
+```
+
+Without the header, Chat Completions and Responses take a session id from `metadata.session_id`, then `user`, and Messages from `metadata.user_id`. A label that is too long, has control characters or is sent twice is ignored; it never fails the request. Workspace admins can see session ids, and for Teams and Projects so can Platform Admins and Auditors, so don't put personal information in them.
+
+## Retries and errors
+
+When a budget would be exceeded, the gateway answers `429` with `x-should-retry: false`, and the official SDKs then don't retry. Rate limits and "jobs at once" limits are ordinary `429`s that are worth retrying later. The full list is in [Errors and limits](/docs/api/errors-and-limits).
+
+The gateway never retries on its own. If a model has several routes and its administrator allowed failover, a failed attempt can move to another route before any output is returned; never after a stream has started.
+
+## What isn't supported
+
+Each endpoint accepts a documented subset of the vendor's API. Fields outside it are refused with an error instead of being silently dropped. For example: images or audio inside chat messages, structured output, reasoning settings, `n` above 1, stored Responses (`store: true`, `previous_response_id`) and hosted tools. The [API reference](/docs/api) lists what each endpoint accepts.

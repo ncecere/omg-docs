@@ -1,0 +1,46 @@
+---
+title: Management API
+description: The session-authenticated API behind the dashboard, its conventions, and where each area is described.
+---
+
+Everything the dashboard does goes through the management API under `/api/v1`. It exists for the dashboard: it authenticates with **browser sessions only**, and API keys can't use it.
+
+<Callout title="Not for scripts yet">
+  There are no machine credentials for the management API, and its routes may change between releases before 1.0. Automating administration (an operator CLI, declarative configuration) is a possible future feature, not something available now.
+</Callout>
+
+## Conventions
+
+- **Sessions**: sign-in creates a twelve-hour session in an `HttpOnly` cookie. Every request rechecks the person's live role and memberships.
+- **Changes** (anything but `GET` and `HEAD`) must send an `Origin` header that exactly matches the gateway's public URL and an `X-CSRF-Token` header equal to the `omg_csrf` cookie. No CORS is enabled.
+- **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`, where `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment` or `exceeds_parent_budget`.
+- **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset`. Financial lists add `has_more`.
+- **Money**: integer micro-dollar amounts as **strings**, such as `"1250000"` for $1.25. Unknown values are `null`, never 0.
+- **Dates**: UTC. Reports take `start_date` and `end_date` as `YYYY-MM-DD`, end excluded, 1 to 93 days.
+- **Privacy**: no response ever contains a credential, a secret reference, a plaintext key, a prompt or a response.
+
+## Areas
+
+| Area | Routes (under `/api/v1`) | Described in |
+|---|---|---|
+| Sign-in | `/auth/config`, `/auth/login`, `/auth/callback`, `/auth/logout` | [Identity setup](/docs/self-hosting/identity) |
+| You | `/me`, `/me/summary`, `/me/keys`, `/me/notifications` | [Quick tour](/docs/getting-started/quick-tour) |
+| People | `/platform/users`, `/platform/oidc/group-mappings` | [People and roles](/docs/administration/people-and-roles), [SSO groups](/docs/administration/sso-groups) |
+| Workspaces | `/platform/workspaces`, `/workspaces/{ws}`, `…/members`, `…/invitations`, `…/service-accounts`, `/invitations/accept` | [Teams and Projects](/docs/administration/teams-and-projects), [Workspace settings](/docs/using/workspace-settings) |
+| Keys | `/workspaces/{ws}/keys`, `…/keys/{key}/rotate`, `…/stats`, `…/access`, `…/key-safety`, `/platform/key-safety` | [API keys](/docs/using/api-keys), [Key safety](/docs/administration/key-safety) |
+| Models | `/platform/providers`, `/platform/models`, `/platform/deployments`, `/platform/model-setup`, `…/routing`, `…/prices`, `…/price-suggestion` | [Connections](/docs/administration/connections), [Models and routes](/docs/administration/models-and-routes), [Pricing](/docs/administration/pricing) |
+| Catalogs | `/platform/catalogs`, `/platform/catalog-defaults`, `/platform/workspaces/{ws}/catalogs`, `/workspaces/{ws}/models`, `…/catalog` | [Catalogs](/docs/administration/catalogs) |
+| Limits | `/platform/installation/policy`, `/platform/workspace-types/{kind}/policy`, `/platform/workspaces/{ws}/policy`, `/workspaces/{ws}/policy`, `…/keys/{key}/policy` | [Limits and budgets](/docs/administration/limits-and-budgets) |
+| Activity | `/workspaces/{ws}/requests`, `…/generations`, `…/sessions`, `…/logs/metrics`, `/platform/logs/…` | [Logs](/docs/using/logs) |
+| Costs | `…/cost-report`, `…/costs`, `…/usage-export`, `…/usage/overview`, `…/usage/explore`, `…/usage/storage`, `/platform/cost-centers` | [Usage and costs](/docs/using/usage-and-costs) |
+| Reconciliation | `POST /workspaces/{ws}/costs/{execution}/reconcile` | [Pricing](/docs/administration/pricing#cost-evidence-and-reconciliation) |
+| Files and batches | `/workspaces/{ws}/files`, `/workspaces/{ws}/batches`, `/platform/batches` | [Files](/docs/using/files), [Batches](/docs/using/batches) |
+| Alerts | `/platform/alerts/…`, `/workspaces/{ws}/alerts/…` | [Alerts](/docs/administration/alerts) |
+| Settings | `/platform/settings/general`, `…/privacy`, `…/email`, `…/storage`, `…/sign-in` | [Settings](/docs/administration/settings) |
+| Audit | `/platform/audit`, `/workspaces/{ws}/audit` | [Audit log](/docs/administration/audit-log) |
+
+The complete route list, with bodies and responses, is in the repository's [`docs/management-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/management-api.md) and [`docs/governance-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/governance-api.md).
+
+## SCIM
+
+SCIM 2.0 is a separate API at `/scim/v2`, authenticated with its own bearer token, for identity providers. See [SCIM provisioning](/docs/administration/scim).

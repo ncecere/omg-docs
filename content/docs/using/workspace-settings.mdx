@@ -1,0 +1,87 @@
+---
+title: Workspace settings
+description: Members and invitations, service accounts, limits, access, alerts and the audit log of a Team, Project or personal workspace.
+---
+
+**Settings** in a workspace holds its members, limits and access. Which tabs you see depends on your role and the kind of workspace.
+
+| Tab | Team or Project | Personal |
+|---|---|---|
+| **General** | Type, your role, cost center; owners and admins can rename it | — (always called "Personal") |
+| **Members** | Members and invitations | — |
+| **Service accounts** | Owners and admins | — |
+| **Limits** | Owners and admins tighten; members read | Read only: set by Platform Admins |
+| **Access** | Everyone | Owner |
+| **Alerts** | Owners and admins | Built-in budget alerts |
+| **Audit log** | The workspace's changes | Owner |
+
+## Members
+
+<Screenshot slot="workspace-members" />
+
+Shared workspaces have three roles:
+
+| Role | Can |
+|---|---|
+| **Owner** | Everything an admin can, plus make or remove owners. A workspace always keeps at least one owner. |
+| **Admin** | Manage members, invitations, service accounts, local limits, models and alerts; see everyone's activity; disable or revoke anyone's key. |
+| **Member** | Create and use their own keys; see their own activity. |
+
+To add someone, search by email under **Add member** and pick a role. Only people with a platform role who aren't already members appear. A membership can come from two places, shown on each row: given here by hand (**manual**), or from an [SSO group](/docs/administration/sso-groups). **Set manual role…** changes the manual one; **Remove manual access…** removes it, which also revokes their keys here unless an SSO group still gives them access.
+
+Members of one Team get nothing in another Team or in any Project.
+
+### Invitations
+
+For someone who can't be found by search yet, choose **Invite by email** with their address and a role (admin or member). The invite code is shown once, and is also emailed to them if email is set up; otherwise send it yourself. The person signs in, opens **Accept invitation** (`/invitations/accept`) and enters the code.
+
+- A code works only for the address it was made for: the person's signed-in, verified email must match.
+- It expires after 3 days and can be used once. **Revoke invitation…** stops it working.
+- Accepting an invitation doesn't give anyone a platform role; they need one first.
+
+## Service accounts
+
+A service account is a non-person identity for applications. Its keys don't depend on any one person, so they keep working when the person who made them leaves. Owners and admins **Create account**, then create its keys on **API keys** by choosing **A service account**.
+
+**Disable account…** revokes all of its keys. Enabling it again doesn't bring them back: create new keys.
+
+## Limits
+
+The **Limits** tab shows every limit that applies to the workspace, layer by layer: the installation's, the platform's (the workspace type's default, or an override for this workspace) and the workspace's own.
+
+<Screenshot slot="workspace-limits" />
+
+Owners and admins of a Team or Project can add their own limits on top:
+
+- **Rate limits**: requests per minute, tokens per minute, requests at once, jobs at once.
+- **Budgets**: up to one each for the day, week, month and lifetime (UTC).
+- **Storage**: the most the workspace keeps in the file store.
+
+Local limits only tighten. You can't set one above the platform's limit for the same thing, and once saved you can lower a local limit but not raise or remove it. Each budget shows how much of its current window is used. See [Limits and budgets](/docs/administration/limits-and-budgets) for how layers combine.
+
+A personal workspace's limits come from Platform Admins; its owner can still put limits on each key.
+
+## Access
+
+**Access** explains, model by model, whether the workspace can use it and why not:
+
+| Reason | Meaning |
+|---|---|
+| Model disabled | A Platform Admin turned the model off. |
+| No enabled route | The model has no enabled route on an enabled connection. |
+| Not in catalog | None of the workspace's available catalogs include it, and it isn't assigned directly. |
+| Not selected | It is available from a catalog, but nobody added it to the workspace. |
+| Key restriction | (On a key's Access tab) the key is limited to other models. |
+| Budget exhausted | A workspace or key budget's current window is used up. |
+| Unresolved usage | Requests with unknown, unbounded cost are blocking budgeted requests until they are resolved. |
+| Some routes unavailable | Usable, but some of its routes are off. |
+
+It also shows each layer: the platform defaults, any override for this workspace, the workspace's own limits and model choices, and (on a key) the key's restriction.
+
+## Alerts
+
+See [Alerts and notifications](/docs/using/alerts-and-notifications#workspace-alert-rules).
+
+## Audit log
+
+The workspace's own history: membership and invitation changes, key creation, rotation, disabling and revocation, model choices, limit changes, file uploads and deletions, cancelled batches. Entries record who did what and when, never request content. A personal workspace's log is visible to its owner only.

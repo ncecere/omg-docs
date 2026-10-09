@@ -1,0 +1,71 @@
+---
+title: People and roles
+description: Platform roles, adding and suspending users, what happens when someone loses access, and the last-admin safeguard.
+---
+
+**Admin › Users** lists everyone who has used or been given access to the installation, with their effective platform role, status, last sign-in and number of shared workspaces. Filter by role (**Platform admin**, **Platform auditor**, **Platform user**, **No role**) and status (**Active**, **Suspended**).
+
+<Screenshot slot="admin-users" />
+
+## Platform roles
+
+| Role | Can |
+|---|---|
+| **Platform user** | Use the gateway: a personal workspace and any Teams or Projects they belong to. |
+| **Platform auditor** | Platform user, plus read-only Admin: configuration, usage and cost totals, logs for Teams and Projects, and the audit log. |
+| **Platform admin** | Platform user, plus everything in Admin. |
+
+Signing in with the identity provider gives nothing by itself. Someone with no role who signs in is turned away and gets no personal workspace.
+
+A person's role can come from two sources, kept separately:
+
+- **Manual**: granted here, or with the `provision-user` command.
+- **Group**: from a mapped [SSO group](/docs/administration/sso-groups), updated when they sign in (or when SCIM pushes a change).
+
+A person can hold grants from both sources at once, and the users list shows their effective role. Removing a group grant never touches a manual one, and the other way round.
+
+## Add a user
+
+**Add user** takes an email address and a platform role. The person still signs in through single sign-on; their first sign-in with that verified email links to the account once. Use this for people whose groups aren't mapped yet, or for the first Auditor.
+
+## A user's page
+
+Open a user for:
+
+- **Overview**: profile and access, first and last sign-in, and their role grants with their source. **Grant platform role…** adds a manual role; a manual grant can be removed from its row.
+- **Shared workspaces**: the Teams and Projects they belong to, with their role and its source. Memberships are added on each workspace's **Members** page.
+- **Activity**: the audit log entries they performed (sign-in events can be hidden).
+
+No admin can see a user's personal keys, personal workspace or request details from here.
+
+<Screenshot slot="admin-user-detail" />
+
+### Change email
+
+**Change email…** updates the directory address. It ends the user's browser sessions, because a new address isn't proof of who they are. Sign-in still identifies people by their identity provider's subject, not their email.
+
+### Suspend and reactivate
+
+**Suspend…** stops a user at once: their sessions end and their own keys are revoked. Their grants are kept. **Reactivate** restores access from the grants they still have. **Revoked keys and sessions never come back**: the user signs in again and makes new keys.
+
+## When someone loses access
+
+When a person loses every platform role (for example, they leave the group that gave them access), at their next sign-in or SCIM update:
+
+1. Their access stops, their sessions end and the keys they hold are revoked.
+2. The account is kept for a **30-day grace period**. If a role comes back within it, they can sign in again, with fresh keys.
+3. After 30 days the gateway cleans up the account: it revokes remaining grants, disables the personal workspace and clears the email, keeping a record so that cost and audit history still point somewhere. If the person returns later, they get a new account.
+
+Service-account keys in Teams and Projects don't depend on any person and are not affected.
+
+<Callout type="warn" title="Group changes without SCIM">
+  Without [SCIM](/docs/administration/scim), group membership is only read when someone signs in. If a person is removed from a group and never signs in again, the gateway doesn't find out. Suspend them by hand when access must stop now.
+</Callout>
+
+## The last Platform Admin is protected
+
+The installation always keeps at least one active Platform Admin. Removing the last Admin grant, suspending the last Admin, or changing or deleting the SSO group mapping that holds it is refused, from this page, the API and SCIM alike. Grant Admin to a second person first. Keeping two Admins avoids the problem entirely.
+
+## Workspace memberships
+
+Team and Project memberships are managed by each workspace's owners and admins on its **Members** tab, and by Platform Admins on the workspace's page in Admin. See [Teams and Projects](/docs/administration/teams-and-projects).

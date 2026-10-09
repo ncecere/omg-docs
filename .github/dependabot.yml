@@ -1,0 +1,32 @@
+# Weekly dependency updates, grouped so each ecosystem opens at most one
+# pull request a week (security updates still arrive individually).
+# The site builds on Node 22: major Node updates are left to a deliberate change.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "library/node"
+        update-types: ["version-update:semver-major"]

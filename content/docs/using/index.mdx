@@ -1,0 +1,49 @@
+---
+title: Using the gateway
+description: For people who call models with a key, and for Team and Project admins.
+---
+
+These pages are for everyone with a platform role: people who create keys and call models from their code, and the owners and admins of Teams and Projects.
+
+<Cards>
+  <Card title="API keys" href="/docs/using/api-keys">
+    Create a key, choose its models and limits, and rotate, disable or revoke it.
+  </Card>
+  <Card title="Calling the API" href="/docs/using/calling-the-api">
+    The base URL, model names, and examples with the OpenAI and Anthropic SDKs.
+  </Card>
+  <Card title="Models" href="/docs/using/models">
+    The models your workspace can use, their prices, and comparing them.
+  </Card>
+  <Card title="Logs" href="/docs/using/logs">
+    Requests, generations and sessions, with timing, tokens and cost. Never prompts.
+  </Card>
+  <Card title="Usage and costs" href="/docs/using/usage-and-costs">
+    Spend, requests and tokens over time, broken down by model, key and member.
+  </Card>
+  <Card title="Alerts and notifications" href="/docs/using/alerts-and-notifications">
+    Budget, spend, error-rate and batch alerts, in the dashboard and by email.
+  </Card>
+  <Card title="Files" href="/docs/using/files">
+    Upload, list and download files with the OpenAI Files API.
+  </Card>
+  <Card title="Batches" href="/docs/using/batches">
+    Run thousands of requests as one job, for any model.
+  </Card>
+  <Card title="Realtime audio" href="/docs/using/realtime">
+    Speech-to-speech sessions over a WebSocket.
+  </Card>
+  <Card title="Workspace settings" href="/docs/using/workspace-settings">
+    Members, invitations, service accounts, limits, access, alerts and the workspace's audit log.
+  </Card>
+</Cards>
+
+## The short version
+
+1. Pick a workspace in the sidebar: your **Personal** workspace, or a Team or Project you belong to.
+2. Open **Models** to see which models the workspace can use, and copy a model's name.
+3. Open **API keys**, choose **Create key**, and save the key somewhere safe. It is shown once.
+4. Point the OpenAI or Anthropic SDK at your gateway's address with that key, and use the model's name.
+5. Watch **Logs** and **Usage & costs** to see what your requests did and what they cost.
+
+If a model you need isn't there, ask your workspace's admin (for a Team or Project) or a Platform Admin (for your personal workspace).

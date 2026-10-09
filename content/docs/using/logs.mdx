@@ -1,0 +1,75 @@
+---
+title: Logs
+description: Requests, generations, sessions and batches, with timing, tokens and cost. Metadata only, never prompts or responses.
+---
+
+**Logs** shows what each request did: which model and route served it, how long it took, how many tokens it used and what it cost. It never shows prompts or responses, because the gateway doesn't store them.
+
+<Screenshot slot="logs-requests" />
+
+## Who sees what
+
+- **Members** of a Team or Project see their own requests: those made with their own keys.
+- **Workspace owners and admins** see every request in the workspace, including service-account keys.
+- **Personal workspaces** are visible to their owner only, Platform Admins included.
+
+Platform Admins and Auditors have their own [Admin › Logs](/docs/administration/usage-logs-and-cost-centers), which covers Teams and Projects only.
+
+## The views
+
+Pill tabs switch between four views:
+
+| View | One row per |
+|---|---|
+| **Requests** | A request as you sent it. If the model's failover policy tried more than one route, the row shows the last attempt and the number of attempts. |
+| **Generations** | Each upstream attempt. |
+| **Sessions** | A group of requests with the same session id (see [labelling sessions](/docs/using/calling-the-api#label-sessions-and-apps-for-logs)). |
+| **Batches** | A [batch](/docs/using/batches), with its progress and cost so far. |
+
+Above the table, summary tiles describe the requests that match your filters: the number of requests, the error rate, median and 95th-percentile latency, average time to first token and tokens per second.
+
+## Filters
+
+One filter row narrows every view:
+
+- **Period**: UTC dates, the last 30 days by default, up to 93 days at a time.
+- **Model**, **Key**, **Status** (succeeded, failed, cancelled, indeterminate, in progress) and **Finish reason** (stop, length, tool calls, content filter, error, cancelled, unknown).
+- **Streamed** or **Not streamed**.
+- **Session**: an exact session id.
+- A **request ID** search: the full id or its first 4 characters or more.
+- **Jobs**: show only video and batch jobs.
+
+The table has a column chooser and a density setting.
+
+## A request's page
+
+Select a row to open the request. It shows the summary and every attempt in order, with:
+
+- the route and connection that served it, and the model the provider says it actually served (when it reports one; otherwise the configured model id, marked as configured);
+- status, error code and finish reason;
+- input, output, cached input and reasoning tokens;
+- latency, time to first token, generation time and tokens per second;
+- cost, or the amount still on hold, the accounting state and the price version used;
+- why a fallback attempt ran, if one did.
+
+**Previous** and **Next** move through the requests in your current filters.
+
+<Screenshot slot="request-detail" />
+
+## Reading the numbers
+
+- **Unknown is not zero.** If a provider didn't report usage, or the route has no price, the token count or cost shows as unknown. Totals that include an unknown value are marked as lower bounds, and a notice says some costs aren't known yet.
+- **On hold** is money the gateway reserved before sending the request and hasn't released, because the final cost isn't known yet. It counts against budgets.
+- **Time to first token** is measured from sending the request upstream to the first streamed piece. **Generation time** runs to the end of the provider's response. Neither includes the gateway's own admission work.
+- **Tokens per second** is output tokens divided by the time after the first token, for successful generation requests.
+- **Reasoning tokens** are part of output tokens, as the provider reports them; they are not charged separately.
+
+## Sessions
+
+The **Sessions** view groups requests by session id and shows, per session: requests and attempts, failures, tokens, cost, the models used, the app name from `X-Title` and the first and last request. Open a session for its requests, newest first.
+
+<Screenshot slot="logs-sessions" />
+
+## How long logs are kept
+
+Request metadata, usage and cost are kept. A Platform Admin may set a **request log retention** period; after it, the error details and timings of finished requests, and their session and app labels, are cleared. Usage, cost, prices and the ledger are never deleted. See [Settings](/docs/administration/settings#data--privacy).

@@ -1,0 +1,65 @@
+---
+title: v0.3.0 (unreleased)
+description: The Files API on an encrypted file store, storage quotas, batches for any model, jobs-at-once limits, the SCIM last-admin guard, realtime holds sized from the conversation, and batch scheduling for self-hosted models.
+---
+
+<Callout title="Not yet released">
+  v0.3.0 is the next release. These notes describe the `main` branch as these docs were written; details may change before it is tagged.
+</Callout>
+
+## Files
+
+- **An encrypted file store.** The gateway can now keep its own files, on local disk or S3-compatible storage (Amazon S3, MinIO, RustFS, Cloudflare R2 and others). Every object is encrypted with its own key under rotatable master keys before any backend sees it. Off by default. See [File storage](/docs/self-hosting/file-storage).
+- **The Files API.** `/v1/files` is OpenAI-compatible: upload, list, retrieve, download and delete, with workspace-scoped gateway ids and uploads streamed straight to the store. See [Files](/docs/using/files).
+- **Workspace › Files**: a page to upload, download and delete files.
+- **Storage quota.** A new **Storage** limit per workspace (1 GiB by default, a platform override, tighter local limits), checked while uploads stream. Storage is recorded in GB-days and shown as **Not charged**.
+- **Admin › Settings › Data & privacy › Storage**: the backend, encryption key and health, a storage test, and which kinds of file are allowed and for how long.
+- New commands: `files verify` and `files sweep --once`.
+
+## Batches for any model
+
+- `/v1/batches` now reads gateway files and runs Chat Completions, Responses, Embeddings and Messages lines, for any model.
+- The whole input is checked first, with a report by line number.
+- **Native** on OpenAI Batch and Anthropic Message Batches when every line uses one route; **gateway-run** otherwise, line by line with exactly-once claims and resume after a restart.
+- **Batch prices**: routes can publish the provider's batch rates beside their standard prices. They are never worked out automatically.
+- Results and errors are encrypted `batch_output` files. **Logs › Batches** and a batch page show progress and cost; new **Batch failed** and **Batch stalled** alerts and batch metrics.
+
+See [Batches](/docs/using/batches).
+
+## Batch scheduling for self-hosted models
+
+- Gateway-run batch lines start only when their route has capacity: a per-route limit on lines at once (2 by default), and optionally yielding to live traffic, the server's load from vLLM-compatible `/metrics` on an approved endpoint (failing closed), and time windows. Routes are shared fairly between workspaces and batches, and a line stays on the route it was scheduled on.
+- An optional vLLM priority hint on batch lines (vLLM and OpenAI-compatible routes) keeps them behind live requests inside vLLM.
+- Batches show **Queued — waiting for capacity** with the reason, and legitimate waiting doesn't count toward **Batch stalled** alerts.
+- `completion_window` can be `24h`, `48h`, `72h` or `168h`; anything but `24h` always runs through the gateway. An expired batch keeps its partial results, and lines that never ran cost nothing.
+
+See [Batch scheduling](/docs/administration/batch-scheduling).
+
+## Limits
+
+- **Jobs at once.** A new limit on every layer: how many batch and video jobs may be active at once. Type defaults allow 2 per workspace. Jobs no longer hold "requests at once" slots and skip per-minute limits, but stay fully budgeted. A refused job gets `429 job_limit_exceeded`.
+
+## SCIM
+
+- **The last Platform Admin is protected.** SCIM can no longer deactivate or remove the last active Platform Admin: the whole request is refused with `409`, recorded in the audit log, and raises a built-in alert. See [SCIM](/docs/administration/scim#the-last-platform-admin).
+
+## Realtime
+
+- **Holds sized from the conversation.** Each response's hold is now worked out from the session's reported context plus new input, up to the model's context window, instead of the full input ceiling every time. Responses cut off at their output limit show as **Incomplete**.
+
+## Video
+
+- OpenAI shut down its Videos API on 2026-09-24. `/v1/videos` now returns `unsupported_capability`, and the dashboard says so. An OpenRouter video adapter is planned.
+
+## Releases and security
+
+{/* verify after release-prep: the first three items (signed images and their tags, the 0.3.0 version and docs/releases/v0.3.0.md, SECURITY.md). The MIT licence is merged. */}
+
+- **Versioned, signed images.** The first release published as a container image: `ghcr.io/ncecere/open-model-gateway:v0.3.0`, also tagged `v0.3` and `latest-release`, signed with cosign keyless signing. See [Container and Compose](/docs/self-hosting/container#release-images).
+- The binary's version is now `0.3.0` (it reported `0.1.0` before), as shown by `gateway_build_info`. The release notes are also in the repository, in `docs/releases/v0.3.0.md`.
+- **A security policy.** `SECURITY.md` in the repository says how to report a vulnerability privately.
+- The project is now under the MIT licence.
+
+## Upgrading
+
+Migrations `0018_job_limits`, `0019_file_store`, `0020_files_api`, `0021_batch_engine` and `0022_batch_scheduling`. Back up, run `migrate`, reapply runtime grants, then review the new "jobs at once" defaults and, to use files and batches, configure the file store. See [Upgrades](/docs/self-hosting/upgrades#to-v030).

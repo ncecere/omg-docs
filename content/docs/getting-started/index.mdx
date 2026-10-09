@@ -1,0 +1,68 @@
+---
+title: What is Open Model Gateway
+description: A self-hosted AI model gateway for one enterprise, with workspaces, keys, budgets and exact cost estimates built in.
+---
+
+Open Model Gateway is an open-source AI model gateway that one organisation runs for itself: a university, a research institute or a company. People and applications send requests to one API with their own keys. The gateway checks who may use which model, applies budgets and limits, sends the request to a cloud provider or a self-hosted model server, and records what it cost.
+
+Administrators decide what happens: which providers and models are connected, which workspaces can use them, how much each workspace and key may spend, and who can see what. Everyone else gets keys that work with the official OpenAI and Anthropic SDKs.
+
+<Screenshot slot="home" />
+
+## What it does
+
+<Cards>
+  <Card title="One API, many providers" href="/docs/using/calling-the-api">
+    OpenAI-style Chat Completions, Responses, embeddings, images, audio and files, and Anthropic-style Messages, routed to OpenAI, Anthropic, Amazon Bedrock, OpenRouter or approved self-hosted servers (vLLM, SGLang, Ollama).
+  </Card>
+  <Card title="Workspaces and keys" href="/docs/getting-started/concepts">
+    Everyone gets a private personal workspace. Teams and Projects are shared workspaces with their own members, service accounts and limits. Keys belong to exactly one workspace.
+  </Card>
+  <Card title="Budgets that are enforced" href="/docs/administration/limits-and-budgets">
+    Daily, weekly, monthly and lifetime budgets, rate limits and "jobs at once" limits at the installation, workspace type, workspace and key level. Every applicable limit applies.
+  </Card>
+  <Card title="Exact cost estimates" href="/docs/using/usage-and-costs">
+    Prices you configure, pinned to each request, in exact integer micro-dollars. Unknown usage is shown as unknown, never as zero.
+  </Card>
+  <Card title="Your identity provider" href="/docs/administration/sso-groups">
+    Sign-in with OpenID Connect, roles and memberships from signed group claims, and optional SCIM provisioning.
+  </Card>
+  <Card title="Batches and files" href="/docs/using/batches">
+    An OpenAI-compatible Files API on an encrypted file store, and batches for any model: on the provider's batch API or run by the gateway line by line.
+  </Card>
+</Cards>
+
+## How it is built
+
+Open Model Gateway is one Rust service. It serves the inference API (`/v1/*`), the dashboard's management API (`/api/v1/*`), health checks (`/health/*`) and, optionally, the dashboard itself, a React app built ahead of time. There is no Node.js at run time.
+
+It stores everything in **PostgreSQL 17**. Files that the gateway owns, such as batch inputs and results, go to an encrypted file store on local disk or in S3-compatible storage. Redis is not needed. Most settings live in the dashboard; environment variables cover what must exist before the database is read, and every credential is a reference to a server-side secret, never a value typed into the browser. See [Self-hosting](/docs/self-hosting).
+
+## Who these docs are for
+
+| You are | Start with |
+|---|---|
+| Someone calling models with a key | [Using the gateway](/docs/using) |
+| A Team or Project admin | [Workspace settings](/docs/using/workspace-settings) |
+| A Platform Admin setting up the installation | [First run](/docs/administration/first-run) |
+| A Platform Auditor | [Audit log](/docs/administration/audit-log) and [Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers) |
+| An operator installing and hosting it | [Self-hosting](/docs/self-hosting) |
+| A developer looking for endpoints | [API reference](/docs/api) |
+
+To see it working first, [try it locally](/docs/getting-started/try-it-locally) with the demo.
+
+## Accessibility
+
+The dashboard is checked automatically with axe against WCAG 2.2 AA rules in a browser test suite that signs in as every persona, at desktop and phone widths, in light and dark mode. The suite also checks the skip link, focus trapping in dialogs and reduced motion. Automated checks are a regression net, not a conformance assessment: screen reader and zoom passes are manual.
+
+## Project status
+
+Open Model Gateway is **pre-1.0 development software**. These docs describe **v0.3.0**, the next release, as it stands on the `main` branch; see [Releases](/docs/releases). What to expect:
+
+- The project's own notes say that local checks do not establish production readiness: live identity-provider acceptance, real-provider certification, load testing in your environment and off-host recovery are still open work. Run a pilot before people depend on it.
+- Database migrations are forward-only, and the gateway never migrates on its own. Rolling back past a migration means restoring a backup. See [Upgrades](/docs/self-hosting/upgrades).
+- Supported request fields are a deliberate subset of each vendor's API. Unsupported fields are refused with a clear error, not silently dropped. See the [API reference](/docs/api).
+
+<Callout title="Costs are estimates">
+  Open Model Gateway values each request with the prices an administrator configured. These are estimates for budgeting and allocation, not provider invoices.
+</Callout>

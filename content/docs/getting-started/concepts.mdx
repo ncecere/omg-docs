@@ -1,0 +1,91 @@
+---
+title: Concepts
+description: The installation, workspaces, platform roles, keys, catalogs, models, routes and connections, limits and budgets, and how costs are estimated.
+---
+
+A short glossary of the ideas the rest of these docs use.
+
+## The installation
+
+One installation of Open Model Gateway serves **one enterprise**. There is no organisation picker and no tenant switching: the installation itself is the boundary for sign-in, administration and settings. Everything below lives inside it.
+
+```text
+Installation (Example University)
+├── People, sign-in, platform roles and settings
+├── Connections → routes → models, prices and routing
+├── Catalogs, default limits and budgets, cost reports
+└── Workspaces
+    ├── Teams         (shared)
+    ├── Projects      (shared)
+    └── Personal      (one per person, private)
+```
+
+## Platform roles
+
+Signing in with your identity provider proves who you are; it does not give you access. Access comes from a **platform role**:
+
+| Role | Can |
+|---|---|
+| **User** | Use the gateway: a personal workspace, plus any Team or Project they are a member of. |
+| **Auditor** | Everything a User can, plus read-only access to Admin: configuration, usage and cost totals, and the audit log. |
+| **Admin** | Everything a User can, plus run the installation: people, workspaces, connections, models, catalogs, limits, settings. |
+
+Admin and Auditor include User. Neither role lets anyone see another person's personal keys or request details. Roles are granted by hand or mapped from groups in your identity provider; the two sources are kept separate. See [People and roles](/docs/administration/people-and-roles).
+
+## Workspaces
+
+A **workspace** owns keys, usage and limits. There are three kinds:
+
+- **Personal**: created automatically when an entitled person first signs in. It is private to its owner: nobody else can see its keys or requests, Platform Admins included. Admins and Auditors see only its cost totals.
+- **Team** and **Project**: shared workspaces that only Platform Admins create. They are equivalent siblings: a Project does not belong to a Team, and being in one Team gives nothing in another.
+
+Members of a shared workspace are **owners**, **admins** or **members**. Owners and admins manage members, service accounts and local limits, and see everyone's activity. Members see their own activity only. See [Workspace settings](/docs/using/workspace-settings).
+
+## Keys
+
+An **API key** belongs to one workspace, and the gateway works out the workspace from the key alone. Keys start with `omg_` and are shown once, when they are made. They:
+
+- expire after 1 to 365 days (the installation may set a lower maximum for people's own keys);
+- can be limited to some of the workspace's models, and given their own budgets and rate limits, when they are created;
+- can be rotated (a new secret, same limits and history), disabled (reversible) or revoked (permanent).
+
+A key belongs either to a person (a **human key**) or to a **service account** of a Team or Project, for applications that should not stop working when someone leaves. API keys never sign in to the dashboard. See [API keys](/docs/using/api-keys).
+
+## Connections, routes and models
+
+- A **connection** is an upstream provider and how to reach it: OpenAI, Anthropic, OpenRouter, Amazon Bedrock, or an approved self-hosted server (vLLM, SGLang, Ollama or another OpenAI-compatible server). Its credential is a reference to a secret held by the server, never the secret itself.
+- A **model** is what callers ask for by name, such as `example/chat`. The name is global across the installation. A model declares which APIs it serves (Chat Completions, Responses, Messages, embeddings, images and so on).
+- A **route** connects a model to a connection and the provider's own model id. A model can have several routes, with priorities, weights and an explicit failover policy.
+
+See [Connections](/docs/administration/connections) and [Models and routes](/docs/administration/models-and-routes).
+
+## Catalogs
+
+A **catalog** is a named list of approved models, such as "Approved cloud" or "Self-hosted". Each workspace type (Personal, Team, Project) has **default catalogs**, and an admin can replace them for one workspace. Being in a catalog makes a model *available*; a workspace's owner or admin then chooses which available models the workspace uses. Platform Admins can also assign a model to one workspace directly. See [Catalogs](/docs/administration/catalogs).
+
+## Limits and budgets
+
+Limits are set in **layers**, and every layer that applies is enforced:
+
+1. **Installation**: optional ceilings shared by all workspaces together.
+2. **Workspace type default**: per workspace, for each Personal, Team and Project workspace.
+3. **Platform override**: replaces the type default for one workspace.
+4. **Workspace**: a Team or Project admin may tighten (never loosen) their own limits.
+5. **Key**: each key may be tightened further.
+
+Each layer can set requests per minute, tokens per minute, requests at once, **jobs at once** (batch and video jobs) and up to one **budget** per period: day, ISO week, month and lifetime, all in UTC. Workspace layers also set a **storage** quota for files. A missing limit in a lower layer inherits; it never removes a higher one. Raising a limit never resets what was already spent. See [Limits and budgets](/docs/administration/limits-and-budgets).
+
+## Costs are exact estimates
+
+Each route has **prices**: lines such as "$0.40 per million input tokens" or "$0.02 per image", published as an immutable version. Every request pins the price version it was admitted with, so a later price change never reprices it.
+
+- Amounts are **integer micro-US-dollars** (millionths of a dollar), with no floating point anywhere.
+- Before a request is sent, the gateway **holds** the most it could cost, from the price and the request's token ceilings, and checks it against every budget. When the provider reports usage, the hold is replaced by the actual estimate.
+- **Unknown is never zero.** If usage is missing or a price line is missing, the cost stays unknown and the hold stays in place until someone resolves it.
+- Costs are **estimates** from configured prices, not invoices.
+
+See [Usage and costs](/docs/using/usage-and-costs) and [Pricing](/docs/administration/pricing).
+
+## Privacy by default
+
+The gateway does not store prompts or responses: not by default, and there is no setting to turn it on. Logs hold metadata only (model, timing, tokens, cost, status). Files you upload on purpose, such as batch inputs, are stored encrypted. See [Security](/docs/self-hosting/security).

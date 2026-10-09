@@ -1,0 +1,124 @@
+---
+title: Try it locally
+description: Run the local demo with its own PostgreSQL, a passwordless demo sign-in and five personas.
+---
+
+The repository includes a local demo: its own PostgreSQL container, a small OpenID Connect issuer that signs you in as one of five personas without a password, and sample (disabled) configuration. It is for exploring on your own machine only.
+
+<Callout type="warn" title="Development only">
+  The demo is passwordless. Never register its issuer with a real deployment, and never point the demo at existing data. It uses a separate Compose project, volume and database (`gateway_enterprise_demo`) and refuses to run anywhere else.
+</Callout>
+
+## What you need
+
+- Docker with Compose v2
+- The current stable Rust toolchain
+- Node.js 22.12 or later, and npm
+- A clone of [the repository](https://github.com/ncecere/open-model-gateway)
+
+## Start it
+
+Run everything from the repository root.
+
+<Steps>
+<Step>
+
+### Start PostgreSQL and build
+
+```sh
+npm ci
+docker compose -p omg-enterprise-demo -f deploy/demo/compose.yaml up -d --wait postgres
+mkdir -p .local/enterprise-rebuild
+cp .env.demo.example .local/enterprise-rebuild/demo-bootstrap.env
+chmod 600 .local/enterprise-rebuild/demo-bootstrap.env
+set -a
+source .local/enterprise-rebuild/demo-bootstrap.env
+set +a
+cargo build -p open-model-gateway
+```
+
+PostgreSQL listens on `127.0.0.1:54349`.
+
+</Step>
+<Step>
+
+### Create the schema and the demo data
+
+```sh
+./target/debug/open-model-gateway migrate
+./target/debug/open-model-gateway bootstrap-demo
+python3 scripts/demo-runtime.py
+npm run build --workspace @omg/web -- --outDir ../../.local/enterprise-rebuild/web-dist
+```
+
+`bootstrap-demo` seeds the personas and sample configuration once; running it again changes nothing. `demo-runtime.py` creates a restricted database role for the running gateway and writes its private environment file.
+
+</Step>
+<Step>
+
+### Start the demo sign-in issuer
+
+In one terminal:
+
+```sh
+OMG_ENABLE_LOCAL_DEMO=1 node scripts/demo-oidc.mjs
+```
+
+It listens on `127.0.0.1:18084`.
+
+</Step>
+<Step>
+
+### Start the gateway
+
+In another terminal, load the runtime environment (not the bootstrap one) and serve:
+
+```sh
+set -a
+source .local/enterprise-rebuild/demo-runtime.env
+set +a
+./target/debug/open-model-gateway serve
+```
+
+</Step>
+<Step>
+
+### Sign in
+
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000), choose **Sign in with single sign-on**, and pick a persona.
+
+</Step>
+</Steps>
+
+## The personas
+
+| Persona | Email | What they can do |
+|---|---|---|
+| Platform Admin | `operator@demo.invalid` | Configure the installation and administer Teams and Projects; see cost totals, but not others' personal keys or requests. |
+| Platform Auditor | `auditor@demo.invalid` | Read Admin, the audit log and cost totals; has their own personal workspace. |
+| Alex, Team Admin | `alex@demo.invalid` | Owner or admin of the demo's Team and Project, plus a personal workspace. |
+| Blair, Platform User | `blair@demo.invalid` | Member of the same Team and Project: their own keys and activity only. |
+| Unentitled user | `unentitled@demo.invalid` | Signs in successfully but has no platform role, so access is denied and no personal workspace is made. |
+
+To switch persona, sign out from the account menu and sign in again.
+
+## Things to try
+
+- Switch between the Workspace and Admin portals as the Platform Admin; notice that Alex and Blair only have Workspace.
+- Create a key, see it once, rotate it and revoke it. Check that Blair can't manage the Team or see Alex's activity.
+- Compare the Team's default catalogs with the Project, which replaces them.
+- Look at the empty cost reports: the demo seeds no fake requests or costs.
+
+## Make a request
+
+The sample connections and routes start **disabled**, and their prices are illustrative, not vendor prices. To make a real request, point a connection at a model server you run (the demo pre-approves `http://127.0.0.1:19091/v1`), enable it, price the route, and create a key. Paid providers need your own credentials; see [Provider credentials](/docs/self-hosting/provider-credentials).
+
+## Stop it
+
+```sh
+docker compose -p omg-enterprise-demo -f deploy/demo/compose.yaml stop
+```
+
+Then stop the issuer and the gateway with <kbd>Ctrl</kbd> <kbd>C</kbd>. This keeps the data. Restart the issuer and the gateway together: the demo issuer's signing key is new each time it starts.
+
+To run Open Model Gateway for real, see [Self-hosting](/docs/self-hosting).

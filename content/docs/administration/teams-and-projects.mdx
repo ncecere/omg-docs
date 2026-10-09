@@ -1,0 +1,51 @@
+---
+title: Teams and Projects
+description: Creating shared workspaces, their owners and members, per-workspace overrides for catalogs and limits, and cost centers.
+---
+
+Teams and Projects are the installation's shared workspaces. They work the same way; the two kinds exist so you can organise by both, for example a Team per department and a Project per grant. A Project never belongs to a Team, and membership of one gives nothing in the other.
+
+Only Platform Admins create them, in **Admin › Teams** and **Admin › Projects**.
+
+## Create one
+
+Give it a **name** and an **initial owner**, who must already have a platform role. The owner can then add members, admins and service accounts on the workspace's **Members** page. People don't have to be members of anything to get their personal workspace.
+
+<Screenshot slot="admin-team-detail" />
+
+## A Team's or Project's page
+
+| Tab | Shows |
+|---|---|
+| **Overview** | Members, available catalogs, models available and cost center at a glance. |
+| **Members** | Members and their roles and sources. Platform Admins can add, change and remove manual memberships here too, including owners; the last owner can't be removed. |
+| **Models** | The models it can use, the catalogs it gets, and direct assignments. |
+| **Limits** | The type default, and an optional override for this workspace. |
+| **Access** | Why each model is or isn't usable, layer by layer. |
+| **General** | Name, cost center, and disabling the workspace. |
+
+A Platform Admin who isn't a member sees configuration here, not the workspace's keys or requests.
+
+## Overrides for one workspace
+
+Each kind of workspace takes its **defaults** from Admin: default catalogs (see [Catalogs](/docs/administration/catalogs)) and default limits (see [Limits and budgets](/docs/administration/limits-and-budgets)). Workspaces without an override follow changes to the defaults at once.
+
+For one workspace you can **replace** either:
+
+- **Catalogs**: choose exactly which catalogs it gets. This replaces the type's defaults; it doesn't add to them. An empty replacement means no catalog models. **Reset catalog inheritance** goes back to the defaults.
+- **Limits**: set a platform override for its rate limits, jobs at once, storage and budgets. This replaces the type default entirely, even fields you leave blank. **Reset policy inheritance** goes back to the defaults.
+
+You can also **assign a model directly**, outside any catalog. Direct assignments survive catalog changes, and the workspace's admins still choose whether to use them.
+
+## Cost centers
+
+A cost center is an optional label for chargeback, such as "Chemistry" with the code `CHEM`. Several workspaces can share one. Create them in **Admin › Cost centers**, then assign one with **Assign a team or project** there, or on the workspace's **General** tab in Admin.
+
+- Every request records the workspace's cost center **at the moment it was admitted**. Changing or removing the assignment, or renaming the cost center, only affects new requests; history keeps its original label.
+- Usage without a cost center is tracked in full as **Unallocated**.
+- Archiving a cost center clears its current assignments and keeps it on past records.
+- Cost centers never give anyone access to anything.
+
+## Disable a workspace
+
+**Disable workspace…** (in the page's menu, or on the **General** tab) refuses new requests and revokes the workspace's keys. Its history, costs and audit records are kept, and its pages stay readable but read-only. **Enable workspace** makes it usable again, but revoked keys don't come back: issue new ones.

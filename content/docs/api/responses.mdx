@@ -1,0 +1,43 @@
+---
+title: Responses
+description: POST /v1/responses, the stateless text and function-tool subset of OpenAI's Responses API.
+---
+
+```http
+POST /v1/responses
+```
+
+```json
+{
+  "model": "example/chat",
+  "instructions": "Answer briefly.",
+  "input": "Name three noble gases.",
+  "max_output_tokens": 100
+}
+```
+
+Responses is served by models whose route is on an **OpenAI** connection. The gateway always sends `store: false` upstream: nothing is kept at the provider.
+
+## Request fields
+
+| Field | Supported |
+|---|---|
+| `model` | Required. |
+| `input` | A string, or a non-empty list of items: messages (`user`, `assistant`, `system`, `developer` with text or input text; assistant output text is accepted), function calls (`call_id`, `name`, `arguments` as a string) and function call outputs (`call_id`, `output` as a string). |
+| `instructions` | Supported. |
+| `max_output_tokens` | The output maximum; needed on a priced model. |
+| `temperature`, `stream` | Supported. |
+| `store` | Absent or `false`. `true` is refused. |
+| `tools`, `tool_choice` | Flat function tools only. Strict schemas are passed through. |
+| `text` | Only `{"format": {"type": "text"}}`. |
+| `user`, `metadata` | [Logs labels](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only. |
+
+Not supported, and refused: `previous_response_id`, background and other stateful operations, hosted tools, structured output, reasoning items, images and audio, and annotations.
+
+## Response
+
+The Responses shape, with `store: false`. If the model stops at its output limit or a content filter, `status` is `incomplete`, not `completed`. Text from upstream preamble ("commentary") and final-answer phases is returned in order.
+
+## Streaming
+
+`"stream": true` works, including with the SDKs' `responses.stream` helper. The gateway reads the upstream stream as it arrives but sends it on as ordered events once up to 4 MiB of content has been collected, so text doesn't appear token by token yet. Text is sent before tool calls.

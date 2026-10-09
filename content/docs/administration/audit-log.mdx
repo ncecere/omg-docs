@@ -1,0 +1,41 @@
+---
+title: Audit log
+description: Every administrative change and sign-in synchronisation, recorded in the same transaction as the change, without request content.
+---
+
+**Admin › Audit log** lists the installation's administrative history, newest first. Platform Admins and Auditors read it; nobody can edit or delete it.
+
+<Screenshot slot="admin-audit" />
+
+## What is recorded
+
+Every change made through the dashboard, the management API or SCIM is written to the audit log in the same database transaction as the change itself, so a change can't happen without its record. Each entry has the time, the actor, the action, the target and typed details, such as a role, a period or a count. Entries never contain prompts, responses, credentials, email bodies or secret references.
+
+Examples of actions, by area:
+
+| Area | Actions |
+|---|---|
+| People | `user.provisioned`, `user.updated`, `identity.groups_synchronized`, `identity.rebound` |
+| Workspaces | `workspace.created`, `workspace.updated`, `workspace.manual_membership_set`, `workspace.manual_membership_revoked`, `invitation.created`, `invitation.accepted`, `invitation.revoked`, `service_account.created`, `service_account.updated` |
+| Keys | `key.created`, `key.rotated`, `key.disabled`, `key.enabled`, `key.revoked` |
+| Models | `provider.created`, `provider.updated`, `model.created`, `model.updated`, `deployment.created`, `price.created`, `routing.model_updated`, `routing.deployment_updated`, `model.granted`, `model.grant_revoked` |
+| Catalogs | `catalog.created`, `catalog.updated`, `catalog.deleted`, `catalog.models_replaced`, `catalog.type_defaults_replaced`, `catalog.override_replaced`, `catalog.override_reset` |
+| Limits | `policy.installation_updated`, `policy.type_updated`, `policy.override_updated`, `policy.override_reset`, `policy.local_updated`, `policy.key_updated` |
+| Spending | `cost_center.created`, `cost_center.updated`, `cost_center.archived`, `alert_rule.created`, `alert_rule.updated`, `alert_rule.deleted` |
+| Files and batches | `file.uploaded`, `file.deleted`, `batch.cancelled` |
+| Settings | `settings.general_updated`, `settings.privacy_updated`, `settings.email_updated`, `settings.email_test`, `settings.storage_updated`, `settings.storage_test` |
+| SCIM | `scim.user.created`, `scim.user.updated`, `scim.user.deactivated`, `scim.user.reactivated`, `scim.group.created`, `scim.group.updated`, `scim.group.deleted`, `scim.last_admin_protected` |
+
+Routes and prices, which have no name of their own, are shown as "*upstream model* on *connection*" and "Price v*N* for *upstream model* on *connection*".
+
+## Privacy
+
+Admin's audit log leaves out every event of every personal workspace, whoever made it. A personal workspace's owner sees its events in that workspace's **Settings › Audit log**. Each Team and Project also has its own audit log, under **Settings › Audit log**.
+
+## Filtering
+
+The log can be narrowed to one person's actions, and sign-in side effects (group synchronisation) can be hidden. A user's page in Admin shows their own actions under **Activity**.
+
+## Keeping it
+
+The audit log is append-only for the running gateway: its database role can add entries and read them, never change or delete them. Account cleanup after the 30-day grace period keeps audit history. Back it up with the rest of the database; see [Backups and restore](/docs/self-hosting/backups-and-restore).

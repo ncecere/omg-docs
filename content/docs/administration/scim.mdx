@@ -1,0 +1,58 @@
+---
+title: SCIM provisioning
+description: Let your identity provider push user deactivation and group membership to the gateway as they change.
+---
+
+SCIM keeps the gateway's users and group memberships up to date between sign-ins. When your identity provider deactivates someone, they lose access at once; when a group's members change, the [SSO group mappings](/docs/administration/sso-groups) apply without waiting for the next sign-in.
+
+SCIM doesn't replace single sign-on, and provisioning a user grants nothing on its own: access still comes from manual grants and group mappings.
+
+## Turn it on
+
+SCIM is enabled by the operator, with a bearer token in the server's environment (see [Identity setup](/docs/self-hosting/identity#scim)). It needs OIDC to be configured. When it is on, **Admin › Settings › Sign-in** shows:
+
+- the base URL to give your identity provider, `https://ai.example.edu/scim/v2`, with a copy button;
+- user, active user, group and membership counts;
+- the time of the last SCIM change.
+
+The token is never shown.
+
+In the identity provider, use HTTP header authentication (`Authorization: Bearer <token>`) and match users on `userName`.
+
+## What it supports
+
+The subset of SCIM 2.0 that Okta and Microsoft Entra ID use:
+
+- **Users**: list (with one `eq` filter on `userName`, `externalId`, `id` or `emails.value`), create, read, replace, patch, and delete (which deactivates).
+- **Groups**: list (filters on `displayName`, `externalId` or `id`), create, read, replace, patch and delete.
+- `ServiceProviderConfig`, `ResourceTypes` and `Schemas`.
+- Pages of up to 200. No sorting, ETags, bulk operations or passwords.
+
+Every SCIM write is in the audit log as `scim.user.*` or `scim.group.*`, without names or emails.
+
+## Users
+
+- **Create**: adds a user with no grants. Their first sign-in with the same verified email links the account.
+- **Email change**: updates the directory email and ends the user's sessions.
+- **Deactivate** (`active: false` or delete): suspends the user; their sessions and keys are revoked; grants are kept and the normal 30-day cleanup applies.
+- **Reactivate** (`active: true`): lifts SCIM's suspension within the 30 days. Revoked keys and sessions stay revoked. SCIM never lifts a suspension an administrator made.
+
+Existing users (made by hand or by sign-in) appear in SCIM lists too, so the identity provider can match them instead of creating duplicates. Service accounts are not SCIM users.
+
+## Groups
+
+A pushed group's `displayName` and `externalId` are matched against your SSO group mappings for the configured issuer. Grants made this way are group grants, the same as from a sign-in.
+
+- **SCIM owns a group once it pushes it.** From then on that group's membership comes from SCIM, not from the token. Groups SCIM hasn't pushed still come from the token at sign-in.
+- Membership changes apply to the affected people at once. Losing the last platform grant this way starts the 30-day grace period.
+- Removing someone from a group that gave a Team or Project membership revokes their keys there.
+
+## The last Platform Admin
+
+SCIM never removes access from the last active Platform Admin. A change that would (deactivating them, deleting them, or a group change that drops their Admin grant) is refused whole with `409` and the detail "Can't deactivate the last active Platform Admin. Grant Admin to someone else first." Nothing in the request is applied.
+
+The gateway also records `scim.last_admin_protected` in the audit log and opens a built-in alert, "SCIM tried to remove the last Platform Admin", for Platform Admins and Auditors (emailed to Platform Admins). It clears when a second active Platform Admin exists. Grant Admin to someone else, then let the identity provider retry.
+
+## Status of this feature
+
+SCIM is tested with local requests. It has not yet been accepted against a real Okta or Entra tenant: try it in a test tenant first.

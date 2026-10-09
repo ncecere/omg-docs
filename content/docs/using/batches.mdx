@@ -1,0 +1,100 @@
+---
+title: Batches
+description: Run many requests as one job for any model, on the provider's batch API or line by line through the gateway.
+---
+
+A batch runs many requests from one file and writes the results to files, using the OpenAI Batch API's shape. It works for any model the gateway serves:
+
+- **Native**: when every line goes to one route on OpenAI or Anthropic, the gateway submits the batch to that provider's batch API. If the route has batch prices, the batch is charged at those.
+- **Gateway-run**: otherwise the gateway runs the lines itself, a few at a time, through its normal request path, at standard prices. This includes batches that mix models.
+
+<Callout title="Before you start">
+  Batches need the [file store](/docs/using/files) with **Batch files** allowed by a Platform Admin; otherwise creating one fails with `batch_files_disabled`. A batch also takes one "jobs at once" slot (2 per workspace unless changed).
+</Callout>
+
+## Write the input file
+
+Each line is one request, in JSON Lines:
+
+```json
+{"custom_id": "q-001", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "example/chat", "messages": [{"role": "user", "content": "Classify: 'The lab was great.'"}], "max_completion_tokens": 20}}
+{"custom_id": "q-002", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "example/chat", "messages": [{"role": "user", "content": "Classify: 'The lecture ran late.'"}], "max_completion_tokens": 20}}
+```
+
+- The endpoint can be `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings` or `/v1/messages`, the same for every line.
+- Each body follows the same rules as an interactive request to that endpoint, without streaming. Every line needs an output maximum, within the model's ceiling, and a model with a price.
+- `custom_id` must be unique. Up to 50,000 lines, each up to 4 MiB.
+
+## Create and follow a batch
+
+```python
+batch_input = client.files.create(file=open("requests.jsonl", "rb"), purpose="batch")
+batch = client.batches.create(
+    input_file_id=batch_input.id,
+    endpoint="/v1/chat/completions",
+    completion_window="24h",
+)
+batch = client.batches.retrieve(batch.id)
+print(batch.status, batch.request_counts)
+```
+
+The gateway checks the whole file before accepting the batch. If anything is wrong, nothing is created and the error lists up to 20 problems with their line numbers, such as `duplicate_custom_id`, `model_not_found` or `missing_max_tokens`.
+
+Statuses are `validating`, `in_progress`, `finalizing` and `cancelling`, then `completed`, `failed`, `cancelled` or `expired`.
+
+### Options
+
+`metadata` is checked but not stored, so batches come back with `metadata: null`. Two keys change how the gateway runs the batch:
+
+| Key | Values | Effect |
+|---|---|---|
+| `omg_mode` | `auto` (default), `gateway` | `gateway` always runs the batch line by line, even when a native batch API could take it. |
+| `omg_retries` | `0` (default), `1`, `2` | Retries lines that failed with a retryable error (rate limit, provider unavailable, timeout), after 2 then 4 seconds. Each retry is a new attempt with its own cost. |
+
+## Results
+
+When the batch ends, `output_file_id` holds the successful lines and `error_file_id` everything else. Each exists only if it has at least one line. Download them like any file:
+
+```python
+results = client.files.content(batch.output_file_id).text
+```
+
+Each line has your `custom_id` and either the response (`status_code`, `body`) or an error. Results are in completion order, not input order. Result files count toward the workspace's storage and expire like other batch files.
+
+## Cancel
+
+`client.batches.cancel(batch.id)`, or **Cancel** on the batch's page:
+
+- **Gateway-run**: no new lines start, running lines finish, and the rest are listed in the error file as `batch_cancelled`.
+- **Native, not yet sent to the provider**: cancelled at once, at no cost.
+- **Native, already sent**: cancelled at the provider; whatever results it returns are collected.
+
+## When a batch stops early
+
+- **Budget**: if a line would go over a budget, the batch stops and ends `failed` with `budget_exceeded`. Finished lines keep their results; lines that never ran are listed with `budget_exceeded`.
+- **Time**: when the completion window ends, no new line starts. Running lines finish, and the batch ends `expired` with its partial results. Lines that never ran are listed as `batch_expired` and cost nothing.
+
+## Waiting for capacity
+
+Gateway-run lines start only when their route has room. Each route runs at most 2 batch lines at once unless an administrator changed it, and a route can also give way to live traffic, watch its server's load, or only run at certain hours (see [Batch scheduling](/docs/administration/batch-scheduling)). A batch with lines held back and none running shows **Queued — waiting for capacity** and the reason; the **Scheduling** section of its page shows each model's reason and the batch's place in that route's queue. A batch that is waiting like this isn't counted as stalled, unless the reason is that the server's metrics can't be read.
+
+For a route that only runs batches at night, ask for a longer window: `completion_window` can be `24h` (the OpenAI value), `48h`, `72h` or `168h`. Anything but `24h` always runs through the gateway.
+
+## Costs
+
+When it is created, a batch holds the sum of what every line could cost, and checks it against every budget at once. Gateway-run lines are each charged at standard prices from their own usage; the rest of the hold is released when the batch ends. A native batch is charged once from the provider's reported usage, at the route's batch prices when it has them (the batch shows **Batch prices**), or at standard prices (**No batch price**).
+
+## In the dashboard
+
+**Logs › Batches** lists the workspace's batches with their mode (Native or Gateway), status (including **Queued — waiting for capacity**), a progress bar, cost so far and creation time. Members see the batches they created; owners and admins see all of them. Open one for its page: status, **Cancel**, progress, completed and failed counts, cost so far, the files, and how many lines ended in each state.
+
+<Screenshot slot="batch-detail" />
+
+Workspace admins can add **Batch failed** and **Batch stalled** [alert rules](/docs/using/alerts-and-notifications).
+
+## Limits to know
+
+- `metadata` isn't echoed back.
+- Results follow completion order.
+- Native batches never fail over to another route, and native OpenAI batches always use Chat Completions upstream for chat-like lines.
+- A mixed-model batch always runs through the gateway, even if every model has a native batch API.

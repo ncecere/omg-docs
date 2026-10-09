@@ -1,0 +1,62 @@
+---
+title: Security
+description: What Open Model Gateway does to protect credentials, data and money, and what remains the operator's job.
+---
+
+## What the gateway does
+
+**Credentials**
+
+- Provider secrets are references to server-side environment variables, AWS identities or file mounts, allowed by name. They are never accepted from the browser, stored in the database or returned by any API.
+- API keys and session tokens are stored only as hashes. Keys are shown once.
+- Callers' API keys are never sent to providers. API keys can't use the management API; browser sessions can't call inference.
+- The SCIM token is read once at startup and kept as a hash.
+
+**Data**
+
+- Prompts and responses are never stored or logged. Logs, metrics, audit entries and alerts hold metadata only.
+- Files the gateway keeps are encrypted with per-object keys before any backend sees them.
+- Personal workspaces' keys and requests are private to their owner, Platform Admins included.
+
+**Network**
+
+- Cloud providers are reached over HTTPS at fixed addresses. Self-hosted servers only at approved, IP-pinned addresses.
+- No redirects are followed, proxy environment variables are ignored, and nothing is retried implicitly.
+- Upstream bodies, frames and responses have size limits.
+
+**Sign-in and the dashboard**
+
+- OpenID Connect with PKCE, state and nonce; verified email required; asymmetric signatures only.
+- Signing in grants nothing: access needs a platform role. Losing it revokes sessions and keys, and revoked keys never return.
+- Changes need an exact `Origin` and a CSRF token. No CORS. Sessions last 12 hours.
+- The last Platform Admin can't be removed.
+
+**Money**
+
+- Integer micro-dollar arithmetic with no floating point. Prices are immutable versions pinned to each request.
+- Every request is admitted, held and settled durably in PostgreSQL before and after it runs, across replicas.
+- Unknown cost is never treated as zero, and holds are never deleted to make numbers fit.
+
+**The database**
+
+- The running gateway uses a restricted role with a reviewed allowlist of table and column privileges. Prices, the ledger and the audit log are insert-only for it.
+
+## What is yours to do
+
+- **HTTPS and the edge.** Terminate TLS in front of the gateway. Rate-limit sign-in and `/scim`. Keep query strings, cookies and `Authorization` headers out of access logs.
+- **Network egress.** Restrict where the gateway's host can connect. The gateway's allowlists are not a firewall.
+- **Secrets.** Keep provider keys, the SCIM token, file-store keys and database passwords in a secret manager; rotate them; never put them in `VITE_*` variables or images.
+- **The metrics listener.** Keep it private.
+- **Backups.** Encrypt them, store them off the host, and drill restores.
+- **People.** Without SCIM, group removals arrive only at sign-in: suspend people by hand when access must end now. Keep two Platform Admins.
+- **Costs.** Prices are your estimates. Compare them with provider invoices; set budgets with that margin in mind.
+
+## Known limits
+
+The project's own notes list what isn't done yet: an independent security review, production load testing, live identity-provider and SCIM acceptance, off-host recovery exercises, login abuse limits and session cleanup, single logout, and provider-invoice reconciliation. Treat a deployment as a pilot until you have covered these for your environment.
+
+## Reporting a vulnerability
+
+{/* verify after release-prep */}
+
+Follow the repository's [security policy](https://github.com/ncecere/open-model-gateway/blob/main/SECURITY.md) (`SECURITY.md`) and report privately; don't open a public issue.

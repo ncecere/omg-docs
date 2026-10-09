@@ -1,0 +1,73 @@
+---
+title: Database and migrations
+description: PostgreSQL 17, separate migrator and runtime roles with reviewed grants, and explicit, checked migrations.
+---
+
+Open Model Gateway keeps everything durable in **PostgreSQL 17**: identity, configuration, limits, reservations, the cost ledger and the audit log. Every replica shares the same database, which is how limits and budgets hold across replicas.
+
+## Roles
+
+Use three database roles, never one:
+
+| Role | Used for |
+|---|---|
+| `gateway_bootstrap` | Cluster administration: creating roles, backups and restores. Never given to the gateway. |
+| `gateway_migrator` | Owns the database and schema. Runs `migrate`, `provision-user` and the grant script, as one-off jobs. |
+| `gateway_runtime` | The running gateway. Only the table and column privileges it needs; no schema changes, no ownership. |
+
+The repository's `deploy/staging/init-db.sql` creates the migrator and runtime roles on a new database, and `deploy/staging/runtime-grants.sql` grants the runtime role exactly what it needs. The grant script is an allowlist: tables it doesn't name are closed to the runtime role. It keeps prices, the cost ledger and the audit log insert-only for the runtime role, and stops it from making anyone a Platform Admin directly.
+
+<Callout type="warn" title="Reapply grants after every migration">
+  Run `runtime-grants.sql` as the migrator after **every** `migrate`. New tables are closed to the runtime role until it runs, so a release whose grants weren't applied fails safely, but it fails. `deploy/staging/verify-privileges.sql` checks the result with rollback-only probes.
+</Callout>
+
+## Migrations are explicit
+
+The gateway never changes its schema on its own. `serve` checks that the database has exactly the migrations compiled into the binary (versions and checksums) and refuses to start otherwise; `/health/ready` stays unready until they match.
+
+```sh
+DATABASE_URL=postgres://gateway_migrator:…@db.example.internal/gateway open-model-gateway migrate
+psql "postgres://gateway_migrator:…@db.example.internal/gateway" -f deploy/staging/runtime-grants.sql
+```
+
+Before changing anything, `migrate` runs read-only checks. It accepts only an empty database or one with a recognised prefix of this release's migrations, and refuses unrelated schemas, older pre-1.0 layouts and changed or dirty migration histories. Migrations only go forward; there are no down migrations. See [Upgrades](/docs/self-hosting/upgrades).
+
+`open-model-gateway schema-version` prints the migrations compiled into a binary, as JSON, without touching a database. Backup tooling uses it to check that a backup matches a release.
+
+## Migrations in v0.3.0
+
+| Migration | Adds |
+|---|---|
+| `0001` to `0010` | The enterprise schema, multimodal pricing, budget periods and stacked budgets, sign-in return path, display names, Bedrock access modes, request telemetry, installation settings (v0.1.0) |
+| `0011`, `0013` to `0017` | Alerts, the provider-reported model, SCIM, maintained budget totals, async jobs, realtime (v0.2.0) |
+| `0018_job_limits` | The "jobs at once" limit on every layer (default 2 per workspace) and the SCIM last-admin alert |
+| `0019_file_store` | Metadata for the encrypted file store |
+| `0020_files_api` | The Files API, the storage quota and hourly storage usage |
+| `0021_batch_engine` | Batch lines and result segments, batch price lists |
+| `0022_batch_scheduling` | Per-route batch scheduling, completion windows, and each batch line's route |
+
+There is no `0012`.
+
+## Sizing
+
+- Each replica opens up to `GATEWAY_DATABASE_MAX_CONNECTIONS` connections (10 by default). Size PostgreSQL's `max_connections` for every replica, plus migrator and backup sessions.
+- Admission, settlement and configuration changes take an installation-wide lock, so the throughput of admitted requests is shared by all replicas. In the project's load test on a laptop, that ceiling was roughly 115 to 150 requests per second; adding replicas or connections doesn't raise it. Measure in your own environment.
+- Budget checks read maintained totals, so their cost doesn't grow with history. `open-model-gateway budget verify` compares those totals with a full scan (read-only; run it off-peak on large installations).
+
+## Network
+
+Don't expose PostgreSQL to the internet. If the database is on another host, use TLS with certificate verification (`sslmode=verify-full`).
+
+## Maintenance commands
+
+| Command | Does |
+|---|---|
+| `migrate` | Apply migrations, after read-only checks. |
+| `schema-version` | Print the binary's migrations as JSON. |
+| `provision-user --email … [--platform-admin]` | Give an email a User (or Admin) role and allow one first sign-in link. |
+| `budget verify` | Compare maintained budget totals with a full scan. Exits non-zero on a mismatch. |
+| `reconcile-executions [--limit N]` | Close expired requests now; unknown costs keep their holds. `serve` does this on its own. |
+| `compact-history --older-than-days N [--limit N]` | Clear old settled requests' error and timing details now. Never touches money. |
+| `alerts evaluate --once` | Evaluate every alert rule once and send pending email. |
+| `files verify [--limit N]` | Compare file metadata with the store (read-only). |
+| `files sweep --once [--limit N]` | Delete expired and abandoned file objects once. `serve` sweeps every minute. |

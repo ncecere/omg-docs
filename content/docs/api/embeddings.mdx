@@ -1,0 +1,41 @@
+---
+title: Embeddings
+description: POST /v1/embeddings, string input and float vectors, on OpenAI, OpenRouter and self-hosted routes.
+---
+
+```http
+POST /v1/embeddings
+```
+
+```json
+{"model": "example/embed", "input": ["First document", "Second document"], "encoding_format": "float"}
+```
+
+## Request fields
+
+| Field | Supported |
+|---|---|
+| `model` | Required. |
+| `input` | A non-empty string or list of strings. Token-id arrays are refused. |
+| `encoding_format` | Absent or `float`. `base64` is refused; the OpenAI SDKs ask for it unless you pass `float`. |
+| `dimensions` | Only where the route's profile supports it (below). |
+
+Not streamed. Up to 128 inputs and 1 MiB of text in total; `dimensions` up to 16,384.
+
+## Response
+
+The OpenAI list shape, with one finite float vector per input, all the same length, in input order. `usage` holds the input tokens when the provider reported them, and is left out otherwise.
+
+## Providers
+
+| Connection | Notes |
+|---|---|
+| OpenAI | Native; `dimensions` supported. |
+| OpenRouter | Float vectors; `dimensions` only equal to the model's fixed native width, where it has one. |
+| vLLM, SGLang | OpenAI-style; bounded `dimensions`, subject to the model. |
+| OpenAI-compatible | OpenAI-style; no `dimensions`. |
+| Ollama | Native `/api/embed` on the approved address, with truncation off; no `dimensions`. |
+
+## Cost
+
+Embeddings are input-only: the gateway holds the route's full input ceiling and no output. Set the input ceiling to the model's real limit, on a server that doesn't silently truncate long input: the gateway trusts the configured ceiling and can't measure it.

@@ -1,0 +1,40 @@
+---
+title: Key safety
+description: Find Team and Project API keys that need attention, without seeing anyone's personal keys.
+---
+
+**Admin › Key safety** lists the active Team and Project API keys that need attention. It reads live configuration on every visit; it stores nothing and changes no key.
+
+<Screenshot slot="admin-key-safety" />
+
+## The page
+
+- **High**, **Medium** and **Low** tiles count Team and Project keys by their worst finding. A fourth tile counts personal keys that need attention, as a number only.
+- One toolbar row: search by workspace or finding, and a **Severity** filter.
+- One row per key: "API key in *workspace*", whether it belongs to a member or a service account, up to three findings, last use, expiry and one fix.
+
+Rows never show a key's name or its holder. Personal keys are never listed, only counted.
+
+## Findings
+
+| Finding | Severity | Rule |
+|---|---|---|
+| **No expiry** | High | The key has no expiry date. |
+| **No limits** | High | No budget and no rate limit at any layer that applies. |
+| **Holder left** | High | A member's key whose holder no longer has a membership in that Team or Project. |
+| **Expiry too long** | Medium | A person's key that expires later than the installation's maximum key lifetime allows. |
+| **No budget** | Medium | A rate limit applies, but no budget at any layer. |
+| **Not rotated** | Medium | The secret is 180 days old or more. |
+| **Unused** | Low | Not used for 30 days or more. |
+| **Never used** | Low | Never used, and at least 7 days old. |
+| **All models** | Low | No model restriction, and the workspace has 5 or more usable models. |
+
+"Any layer" means the installation, the type default or override, the workspace and the key: a budget anywhere, even of $0, counts. Revoked, expired and disabled keys, and keys of disabled workspaces, are skipped.
+
+## Fixes
+
+Each finding offers one fix: **Set expiry** or **Rotate** (the rotate dialog), **Add budget** (the key's Limits tab), **Restrict models** (create a restricted key, then revoke this one), **Disable** or **Revoke**.
+
+A fix opens the key's own page only if you administer that workspace. Otherwise it opens the Team's or Project's page in Admin: a platform role doesn't give authority over a workspace's keys.
+
+The same findings appear to workspace members and admins on their **API keys** page; see [API keys](/docs/using/api-keys#key-safety). Key safety raises no notifications; use [alerts](/docs/administration/alerts) for that.

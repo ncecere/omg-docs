@@ -1,0 +1,29 @@
+{
+  "title": "Administration",
+  "description": "Running the installation from Admin",
+  "root": true,
+  "pages": [
+    "index",
+    "first-run",
+    "---People---",
+    "people-and-roles",
+    "teams-and-projects",
+    "sso-groups",
+    "scim",
+    "---Models---",
+    "connections",
+    "models-and-routes",
+    "pricing",
+    "catalogs",
+    "batch-scheduling",
+    "---Spending---",
+    "limits-and-budgets",
+    "usage-logs-and-cost-centers",
+    "alerts",
+    "---Records---",
+    "key-safety",
+    "audit-log",
+    "---Installation---",
+    "settings"
+  ]
+}

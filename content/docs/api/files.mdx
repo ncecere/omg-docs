@@ -1,0 +1,54 @@
+---
+title: Files
+description: The gateway-owned, OpenAI-compatible Files API on an encrypted file store, scoped to the key's workspace.
+---
+
+The gateway owns `/v1/files`. Files are stored, encrypted, in the gateway's [file store](/docs/self-hosting/file-storage), never at a provider, and ids are the gateway's (`file-<32 hex>`). The official OpenAI SDKs work unchanged. Guide: [Files](/docs/using/files).
+
+## Endpoints
+
+| Route | Behaviour |
+|---|---|
+| `POST /v1/files` | Multipart: `file`, `purpose`, and optionally `expires_after[anchor]=created_at` with `expires_after[seconds]` (3,600 to 2,592,000). Fields may come in any order. Returns the file object. |
+| `GET /v1/files` | Query: `purpose`, `limit` (1 to 10,000, default 10,000), `after` (a file id), `order` (`asc` or `desc`, default `desc`). Returns `{object: "list", data, first_id, last_id, has_more}`. Unknown parameters are refused. |
+| `GET /v1/files/{id}` | The file object. |
+| `GET /v1/files/{id}/content` | The contents, streamed as `application/octet-stream` with `Content-Disposition: attachment`. |
+| `DELETE /v1/files/{id}` | `{id, object: "file", deleted: true}`. Frees the storage at once. |
+
+```json
+{"id": "file-0f1e…", "object": "file", "bytes": 120000, "created_at": 1760000000, "expires_at": 1760604800,
+ "filename": "requests.jsonl", "purpose": "batch", "status": "processed", "status_details": null}
+```
+
+## Purposes
+
+| `purpose` | Use |
+|---|---|
+| `batch` | Batch input. Must look like JSON Lines: text starting with `{`, no NUL bytes. |
+| `user_data`, `vision`, `assistants`, `evals` | Stored, listed and downloadable. `vision` files must be PNG, JPEG, GIF or WebP. Using a `file_id` in a chat or Responses request is not available yet. |
+| `batch_output` | Batch results and errors, written by the gateway. Listed and downloadable; not uploadable. |
+
+`fine-tune` returns `400 unsupported_capability`; other purposes `400 invalid_request_error`. Empty files are refused.
+
+## Rules
+
+- **Scope**: every key of the workspace can list, read and delete its files. Another workspace's id returns `404`.
+- **Size**: up to 200 MiB per file unless the operator changed it (`413 file_too_large`).
+- **Quota**: the workspace's storage limit is checked as the upload streams (`413 storage_quota_exceeded`, type `insufficient_quota`).
+- **Expiry**: `expires_at` is the sooner of `expires_after` and the purpose's retention set in Admin (7 days for batch files and 30 days for user files by default). Expired files can't be read.
+- **Filename**: only the last path segment is kept, without control characters, up to 255 characters.
+- **Failures leave nothing**: a refused, failed or interrupted upload is deleted and frees its quota.
+- **Contents** never appear in logs, audit or metrics.
+
+## Errors
+
+| Status | `code` | When |
+|---|---|---|
+| 503 | `file_storage_not_configured` | The operator hasn't configured the file store. |
+| 403 | `file_purpose_disabled` | The purpose's kind (Batch files or User files) isn't allowed in Admin. |
+| 413 | `storage_quota_exceeded`, `file_too_large` | Over the workspace quota or the size limit. |
+| 400 | `invalid_request_error`, `unsupported_capability` | A bad form, purpose, `expires_after` or content. |
+| 404 | `not_found` | Unknown, expired, deleted or another workspace's file. |
+| 503 | `file_storage_unavailable` | The store or database failed. |
+
+Except for 503s, errors carry `x-should-retry: false`.

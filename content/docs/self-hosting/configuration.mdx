@@ -1,0 +1,137 @@
+---
+title: Configuration
+description: Every environment variable Open Model Gateway reads, with its default and allowed values.
+---
+
+The gateway reads its configuration from environment variables at startup. Invalid values stop startup with an error that names the variable, never its value. Most settings, such as providers, models, prices, limits and email, live in the dashboard instead; these variables cover what must exist before the database can be read, and secrets.
+
+On startup the gateway also loads a `.env` file from its working directory if there is one, or the file named by `GATEWAY_ENV_FILE`.
+
+## Core
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DATABASE_URL` | (required) | PostgreSQL connection URL. Use the runtime role for `serve` and the migrator role for `migrate`. The container also accepts `DATABASE_URL_FILE`. |
+| `GATEWAY_LISTEN` | `127.0.0.1:8080` (container: `0.0.0.0:8080`) | Address and port to listen on. |
+| `GATEWAY_ENV` | `production` | `production` or `development`. Development allows plain-HTTP sign-in on loopback addresses only. |
+| `GATEWAY_PUBLIC_URL` | unset | The browser-visible origin, such as `https://ai.example.edu`. Needed for sign-in; also used in invitation and alert emails. |
+| `GATEWAY_WEB_DIR` | unset (container: `/app/web`) | Directory of the built dashboard. Unset serves the APIs only. An invalid directory stops startup. |
+| `GATEWAY_ENV_FILE` | unset | Load this file instead of `./.env`. |
+| `GATEWAY_DATABASE_MAX_CONNECTIONS` | `10` | Database pool size per replica, 2 to 500. |
+| `GATEWAY_MAX_CONCURRENT_REQUESTS` | `128` | Inference requests at once per replica, 1 to 10,000. Beyond it: `429`. |
+| `GATEWAY_REQUEST_TIMEOUT_SECONDS` | `120` | Inference deadline, 1 to 3,600 seconds, including time waiting for admission. |
+| `GATEWAY_METRICS_ADDR` | unset (off) | Separate Prometheus listener, such as `127.0.0.1:9464`. Must differ from `GATEWAY_LISTEN`. |
+| `RUST_LOG` | `open_model_gateway=info` | Log filter. Logs are JSON on standard error. |
+
+## Sign-in
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_OIDC_ISSUER` | unset | Your identity provider's exact issuer URL. |
+| `GATEWAY_OIDC_CLIENT_ID` | unset | The registered client id. Without issuer and client id, sign-in is off. Setting only some sign-in variables stops startup. |
+| `GATEWAY_OIDC_CLIENT_SECRET` | unset | For confidential clients. The container also accepts `GATEWAY_OIDC_CLIENT_SECRET_FILE`. |
+| `GATEWAY_OIDC_GROUPS_CLAIM` | `groups` | The ID-token claim that lists groups. A dotted path reaches into nested claims. |
+| `GATEWAY_SCIM_TOKEN_ENV` | unset (SCIM off) | The **name** of the variable holding the SCIM bearer token (32 to 1,024 printable characters). Needs OIDC. |
+
+See [Identity setup](/docs/self-hosting/identity).
+
+## Credentials and network approvals
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of environment variables that connections and the email password may reference as `env:NAME`. Anything not listed is refused. |
+| `GATEWAY_LOCAL_UPSTREAMS` | unset | JSON list of approved self-hosted endpoints and their pinned IP addresses: `[{"endpoint":"http://models.example.internal:8000/v1","addresses":["10.10.1.20"]}]`. Up to 64 endpoints, 16 addresses each. |
+| `GATEWAY_AWS_PROFILE_ALLOWLIST` | empty | Comma-separated AWS profile names that Bedrock connections and the file store may use. |
+| `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST` | empty | Comma-separated HTTPS origins of Bedrock VPC endpoints that connections may use. |
+
+The provider keys themselves are ordinary variables with names of your choice, such as `OPENAI_API_KEY`, listed in the allowlist. The container also reads `OPENAI_API_KEY_FILE` and `ANTHROPIC_API_KEY_FILE`. See [Provider credentials](/docs/self-hosting/provider-credentials).
+
+## OpenRouter
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_OPENROUTER_DATA_COLLECTION` | unset | `deny` or `allow`. Fixes the data-collection setting sent to OpenRouter and locks it in Admin. Unset: Admin › Settings › Data & privacy decides (default `deny`). |
+| `GATEWAY_OPENROUTER_HTTP_REFERER` | unset | An absolute URL sent as `HTTP-Referer`, for OpenRouter's attribution. |
+| `GATEWAY_OPENROUTER_TITLE` | unset | 1 to 128 printable ASCII characters sent as `X-Title`. |
+
+## Data retention
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_EXECUTION_DETAIL_RETENTION_DAYS` | unset | 30 to 3,650. Fixes request log retention and locks it in Admin. Unset: Admin decides (default: keep). |
+
+## File store
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_FILE_STORE` | `off` | `off`, `local` or `s3`. |
+| `GATEWAY_FILE_ENCRYPTION_KEYS_ENV` | (required when on) | The **name** of the variable holding the master keys, `kid:base64key[,kid:base64key…]`. |
+| `GATEWAY_FILE_STORE_DIR` | | `local`: an absolute directory owned by the gateway user, not readable by others. |
+| `GATEWAY_S3_BUCKET` | | `s3`: the bucket (never created by the gateway). |
+| `GATEWAY_S3_PREFIX` | none | Key prefix: path segments of `A-Z a-z 0-9 . _ -`. |
+| `GATEWAY_S3_REGION` | `us-east-1` | AWS region, or a short code such as `auto` with a custom endpoint. |
+| `GATEWAY_S3_ENDPOINT` | unset (AWS S3) | Exact origin of an S3-compatible store or AWS VPC endpoint. Must be in the allowlist below. |
+| `GATEWAY_S3_ENDPOINT_ALLOWLIST` | empty | Comma-separated exact origins. An `http://` entry approves plain HTTP. |
+| `GATEWAY_S3_FORCE_PATH_STYLE` | `true` with an endpoint, else `false` | Path-style addressing (MinIO, RustFS and Ceph usually need it). |
+| `GATEWAY_S3_AUTH` | `aws:default` | `aws:default`, `aws:profile:<name>`, `aws:role:<role-arn>` or `static`. |
+| `GATEWAY_S3_ACCESS_KEY_ID_ENV`, `GATEWAY_S3_SECRET_ACCESS_KEY_ENV` | | `static` only: the **names** of the variables holding the access key id and secret. |
+| `GATEWAY_S3_CA_FILE` | none | PEM bundle of extra trust anchors for a private endpoint. |
+| `GATEWAY_FILES_MAX_BYTES` | 200 MiB | Largest Files API upload, 1 KiB to 8 GiB. |
+
+See [File storage](/docs/self-hosting/file-storage).
+
+## Background work
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_ALERT_INTERVAL_SECONDS` | `60` | How often alerts are evaluated, 0 to 86,400. `0` turns the evaluator off. |
+| `GATEWAY_JOB_POLL_INTERVAL_SECONDS` | `30` | How often provider jobs (native batches, videos) are polled, 0 to 3,600. `0` turns polling off, and native batches stop being processed. |
+| `GATEWAY_BATCH_WORKERS` | `4` | Gateway-run batch lines at once per process, 0 to 256. `0` turns the batch runner off. |
+| `GATEWAY_BATCH_CONCURRENCY` | `2` | Lines of one batch at once, 1 to 64. |
+
+Each route also has its own batch capacity and gates, set in the dashboard rather than with variables: see [Batch scheduling](/docs/administration/batch-scheduling). A route's server metrics URL must belong to an endpoint approved in `GATEWAY_LOCAL_UPSTREAMS`.
+
+## Request size limits
+
+| Variable | Default | Range |
+|---|---|---|
+| `GATEWAY_MAX_BODY_BYTES_IMAGES` | 2 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_BODY_BYTES_AUDIO_TRANSCRIPTIONS` | 26 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_BODY_BYTES_AUDIO_SPEECH` | 2 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_BODY_BYTES_RERANK` | 2 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_BODY_BYTES_SYSTEMONE` | 2 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_BODY_BYTES_VIDEOS` | 2 MiB | 1 KiB to 64 MiB |
+| `GATEWAY_MAX_RESPONSE_BYTES_IMAGES` | 20 MiB | 1 MiB to 64 MiB (provider response) |
+| `GATEWAY_AUDIO_MAX_UPLOAD_BYTES` | 25 MiB | 1 KiB to 64 MiB (the audio file itself) |
+| `GATEWAY_AUDIO_SPEECH_MAX_INPUT_CHARS` | 4,096 | 1 to 100,000 |
+| `GATEWAY_AUDIO_SPEECH_MAX_OUTPUT_BYTES` | 64 MiB | 64 KiB to 1 GiB |
+
+Other JSON bodies are fixed at 2 MiB, and provider responses at 4 MiB.
+
+## Realtime
+
+| Variable | Default | Range |
+|---|---|---|
+| `GATEWAY_REALTIME_MAX_SESSION_SECONDS` | 900 | 10 to 3,600 |
+| `GATEWAY_REALTIME_IDLE_SECONDS` | 120 | 5 to 3,600 |
+| `GATEWAY_REALTIME_MAX_OUTPUT_TOKENS` | 4,096 | 1 to 4,096 |
+| `GATEWAY_REALTIME_MAX_MESSAGE_BYTES` | 1 MiB | 1 KiB to 16 MiB |
+| `GATEWAY_REALTIME_MAX_EVENTS_PER_SECOND` | 50 | 1 to 1,000 |
+
+## Retired
+
+| Variable | Note |
+|---|---|
+| `GATEWAY_MAX_BATCH_FILE_BYTES` (200 MiB, 1 KiB to 512 MiB), `GATEWAY_BATCH_MAX_OUTPUT_SCAN_BYTES` (1 GiB, 1 MiB to 16 GiB) | Still checked at startup but no longer used: batch inputs are Files API uploads. |
+
+## Development only
+
+| Variable | Meaning |
+|---|---|
+| `GATEWAY_INTERNAL_URL` | Read by the dashboard's development server (Vite), not the gateway: where to proxy `/api`, `/v1` and `/health` (default `http://127.0.0.1:8080`). |
+
+Never put secrets in `VITE_*` variables: they are compiled into the public dashboard.
+
+## AWS
+
+Bedrock connections and the S3 file store with `aws:default` use the AWS SDK's standard credential chain (environment, web identity, container and instance roles, SSO). Endpoint overrides such as `AWS_ENDPOINT_URL` are deliberately **not** used.

@@ -1,0 +1,50 @@
+---
+title: Usage, logs and cost centers
+description: Installation-wide usage and costs, logs for Teams and Projects, storage usage and chargeback with cost centers.
+---
+
+The **Usage & spend** group in Admin covers the whole installation. Platform Admins and Auditors see the same figures.
+
+## Usage & costs
+
+Admin's **Usage & costs** has the same **Overview** and **Explore** views as a workspace's (see [Usage and costs](/docs/using/usage-and-costs)), across every workspace, plus **By workspace**: one row per workspace with its spend, requests and tokens, its cost center, and actions to adjust it.
+
+<Screenshot slot="admin-usage" />
+
+- **Personal workspaces count in every total**, but only as totals. Their keys are grouped into one "Personal workspace keys" row, and members' rows show per-person totals only. No personal request or key is ever listed.
+- **Installation budgets** are shown with their current window, settled and held amounts.
+- Filter by workspace, model, key, member, status, cost center or service account. Periods are 1 to 93 UTC days.
+- The **By workspace** row menu has shortcuts: assign a future cost center, assign a direct model, replace catalog availability, set custom limits, and reset catalog or policy inheritance.
+
+## Logs
+
+Admin's **Logs** is the same view as a workspace's [Logs](/docs/using/logs), over every Team and Project, with a **Workspace** column and filter. Personal workspaces never appear as rows: their activity stays in Usage & costs totals. **Batches** lists Team and Project batches, with running, finished and failed totals for personal workspaces.
+
+<Screenshot slot="admin-logs" />
+
+Remember that session ids sent by clients (`X-Session-Id`, or the `user` field) are visible here for Teams and Projects.
+
+## Storage usage
+
+Storage in the file store is recorded hourly per workspace and purpose, and shown in GB-days (1 GiB kept for 24 hours). Admins see per-workspace totals; personal workspaces show totals only. Storage is **Not charged**: it has no price yet.
+
+## Cost centers
+
+**Cost centers** label spending for chargeback, such as a department's code. **Create cost center** with a name and code, then **Assign a team or project**. You can also set it on a Team's or Project's **General** tab, or with **Assign future cost center…** in Usage & costs › By workspace.
+
+- A request takes the workspace's cost center **when it is admitted**. Changes and renames apply to new requests only; history keeps the label it had.
+- Usage with no cost center is **Unallocated**, and fully counted.
+- **Archive cost center…** clears current assignments; past usage keeps the label.
+- Cost centers give no access to anything.
+
+Reports can filter and group by cost center, including `unallocated`.
+
+## Exports
+
+Workspace admins can export a workspace's cost records as CSV, up to 1,000 rows per page, and Explore tables as CSV. There is no installation-wide export of individual requests: platform reports are aggregates.
+
+## Reading reports correctly
+
+- **Settled** cost and amounts **on hold** are shown separately. Don't add holds as extra spend.
+- Health counts (pending, unknown, unpriced, unbounded, aged holds) overlap: one request can be in several.
+- Reports are live estimates from configured prices, not frozen statements or invoices.

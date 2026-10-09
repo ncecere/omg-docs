@@ -1,0 +1,25 @@
+---
+title: System One
+description: POST /v1/systemone serves typed yes/no, choice and score decisions with the TypeSafe System One contract, on OpenRouter routes.
+---
+
+`POST /v1/systemone` implements the TypeSafe System One contract, so the TypeSafe SDK works unchanged with the gateway's address as its base URL and an inference key. It is served on **OpenRouter** routes.
+
+```json
+{
+  "model": "example/decide",
+  "state": "Thanks so much for your help with my enrolment!",
+  "questions": {
+    "is_thanks": {"type": "noul", "instructions": "Is the message thanking someone?"},
+    "topic": {"type": "choice", "instructions": "What is it about?", "options": ["enrolment", "fees", "housing"]}
+  }
+}
+```
+
+- **`state`**: a non-blank string, an object, or a non-empty array. Image parts are refused.
+- **`questions`**: 1 to 64, each keyed by a name of 1 to 128 bytes. Types: `noul` (optional `criteria`), `choice` (2 to 255 options) and `score` (2 to 10 levels).
+- Client `provider`, `user` and unknown fields are refused. Validation errors return **422**, as TypeSafe expects.
+
+The response is `{"id", "model", "answers", "usage": {"input_tokens", "output_tokens"}}`. Every answer is checked against its question: the right type, a valid option, probabilities between 0 and 1 that add up. Gateway costs are never added to the body.
+
+The hold covers input tokens at the route's input ceiling and output tokens up to its output ceiling, because providers may report output tokens for decisions.

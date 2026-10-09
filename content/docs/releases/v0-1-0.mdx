@@ -1,0 +1,35 @@
+---
+title: v0.1.0
+description: The first release of the single-enterprise gateway, with workspaces, catalogs, price lines, stacked budgets, many workloads and providers, logs, Admin settings and the dashboard.
+---
+
+Released 2026-10-08. The first release of Open Model Gateway as a gateway for one enterprise, rebuilt from an earlier multi-organisation prototype on a new database schema.
+
+## Installation and people
+
+- One installation per enterprise, with **Platform User, Auditor and Admin** roles that sign-in alone never grants.
+- Roles and memberships from **signed OIDC group claims**, kept separate from manual grants.
+- **Teams and Projects** as sibling shared workspaces, and a private **personal workspace** for everyone with a role.
+- A 30-day grace period when someone loses access, after which the account is cleaned up while history is kept. Revoked keys never come back.
+- Least-privilege database roles with reviewed table and column grants.
+
+## Models and money
+
+- **Multiple catalogs**, with live defaults per workspace type, replacements per workspace and direct assignments.
+- **Price lines** in exact integer micro-dollars, including cache reads and writes, prompt-size tiers and per-image, per-character and per-second prices, published as immutable versions.
+- Conservative holds before each request, **stacked budgets** per day, week, month and lifetime at every layer, reconciliation with evidence, and reports where unknown is never zero.
+
+## Workloads and providers
+
+- Chat Completions, Responses, Messages, embeddings, image generation, speech to text, text to speech, rerank and System One decisions.
+- OpenAI, Anthropic, Amazon Bedrock (server identity, named profiles and assumed roles, optional VPC endpoint), OpenRouter (with price import from its public catalog), and approved self-hosted vLLM, SGLang, Ollama and OpenAI-compatible servers.
+
+## Dashboard
+
+- A Workspace portal with Home, Overview, Models, API keys, Logs, Usage & costs and Settings, and an Admin portal for the installation.
+- **Logs** with Requests, Generations and Sessions views, per-attempt timing and tokens, and `X-Session-Id` and `X-Title` labels.
+- **Admin › Settings**: General, Defaults & limits, Data & privacy, Email and Sign-in.
+
+## Installing
+
+Migrations `0001` to `0010`, on an empty database. See [Self-hosting](/docs/self-hosting).

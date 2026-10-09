@@ -1,0 +1,77 @@
+---
+title: Metrics and monitoring
+description: Liveness and readiness checks, the Prometheus metrics listener, example alert rules and dashboard, and what to do when they fire.
+---
+
+## Health checks
+
+Both are on the public port, need no authentication and never return error details.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health/live` | `200 {"status":"ok"}`, without touching the database. Use it for restarts. |
+| `GET /health/ready` | `200` only when every check passes, `503` otherwise. Use it for load-balancer membership and the container health check. |
+
+```json
+{"status": "ready", "checks": {"database": "ok", "schema": "ok", "web": "ok"}}
+```
+
+- `database`: a pooled connection answered within 2 seconds.
+- `schema`: the database's migrations match this binary exactly (`unknown` if the database is unreachable). A release whose migrations haven't been applied stays unready.
+- `web`: `disabled` without `GATEWAY_WEB_DIR`; otherwise the dashboard's files are still there.
+
+Probe `/health/ready` from outside as well, since metrics can't tell you the public address is reachable.
+
+## Metrics
+
+Set `GATEWAY_METRICS_ADDR` (for example `127.0.0.1:9464`) to serve Prometheus metrics on a **separate** listener: `GET /metrics` in OpenMetrics format, everything else `404`. It has no authentication, so keep it on loopback or a private scrape network, and never route your proxy to it.
+
+Labels are deliberately few: route templates (not raw paths), provider kinds and configured model names (at most 200 each, then `other`), and safe error codes. No workspace, key, user or request ids, and nothing from prompts or responses.
+
+| Metric | Type | Labels |
+|---|---|---|
+| `gateway_build_info` | gauge | `version` |
+| `gateway_http_requests_total` | counter | `method`, `route`, `status` |
+| `gateway_http_request_duration_seconds` | histogram | `method`, `route` |
+| `gateway_inference_attempts_total` | counter | `provider`, `model`, `outcome` |
+| `gateway_inference_attempt_errors_total` | counter | `provider`, `code` |
+| `gateway_upstream_duration_seconds` | histogram | `provider`, `model` |
+| `gateway_upstream_time_to_first_token_seconds` | histogram | `provider`, `model` |
+| `gateway_inference_tokens_total` | counter | `provider`, `model`, `direction` |
+| `gateway_settlements_total` | counter | `outcome` (`settled`, `unknown`, `held`) |
+| `gateway_admission_denials_total` | counter | `code`, `scope` |
+| `gateway_reservations_held` | gauge | `state` (`pending`, `unknown`) |
+| `gateway_alert_evaluations_total` | counter | `result` |
+| `gateway_alert_rule_failures_total` | counter | |
+| `gateway_db_pool_connections`, `gateway_db_pool_max_connections` | gauge | `state` |
+| `gateway_metrics_collection_errors_total` | counter | `collector` |
+| `gateway_file_store_operations_total` | counter | `backend`, `op`, `outcome` |
+| `gateway_file_store_bytes_total` | counter | `backend`, `op` |
+| `gateway_batches` | counter | `mode`, `event` |
+| `gateway_batch_lines` | counter | `mode`, `provider`, `outcome` |
+| `gateway_batch_queue_depth` | gauge | `mode` |
+| `gateway_batch_workers` | gauge | `state` |
+| `gateway_batch_route_lines` | gauge | `provider`, `state` (`waiting`, `running`) |
+| `gateway_batch_paused_routes` | gauge | `reason` |
+| `gateway_batch_route_pauses_total` | counter | `reason` |
+
+Counters and most gauges are per replica: `sum` them. `gateway_reservations_held` counts the whole installation, so take the `max` across replicas.
+
+## Alert rules and a dashboard
+
+The repository's `deploy/monitoring/` has:
+
+- `prometheus.example.yml`: a scrape configuration;
+- `prometheus-rules.yml`: example alerts for metrics down, 5xx rate, p95 latency, held settlements, growing unknown reservations, a stuck pending floor, budget denials, capacity saturation, upstream failure rate, time to first token, pool saturation, alert-evaluator failures and collector errors (validated with `promtool`; thresholds are starting points);
+- `grafana-dashboard.json`: a Grafana dashboard with overview, HTTP, inference, accounting and internals rows.
+
+## When something fires
+
+- **Held settlements**: the gateway couldn't record a result. Holds are kept, never refunded as zero. Fix the database first; expired holds become unknown, then review unknown usage.
+- **Unknown reservations**: they keep budget holds and can block budgeted requests (`unresolved_usage`). Resolve them with evidence; never delete reservations.
+- **Capacity or pool saturation**: requests beyond `GATEWAY_MAX_CONCURRENT_REQUESTS` get `429`. Admission is serialised per installation, so more connections or replicas don't raise its ceiling; measure before tuning.
+- **Upstream failures**: check the provider and the connection's credential. Routes that keep failing are skipped for their cooldown.
+
+## Logs
+
+The gateway logs JSON to standard error: request ids, methods, status and timing. Never prompts, bodies, query strings or credentials. Don't turn on trace-level logging of the AWS SDK or HTTP clients in production.

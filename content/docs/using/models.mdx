@@ -1,0 +1,51 @@
+---
+title: Models
+description: The models a workspace can use, adding them from catalogs, model pages and comparing models.
+---
+
+**Models** in a workspace lists the models that workspace can use, with their type, input and output prices, and whether they are serving. It also lists models the workspace could add from its catalogs.
+
+<Screenshot slot="workspace-models" />
+
+## Where a workspace's models come from
+
+A model is usable in a workspace in one of two ways:
+
+- **From a catalog.** Platform Admins put approved models into catalogs, and each workspace has some catalogs available (its type's defaults, or a replacement chosen for that workspace). The workspace's owner or admin, or the owner of a personal workspace, then **adds** the models they want. Being in a catalog alone does not make a model usable.
+- **Directly.** A Platform Admin can assign a model to one workspace directly, outside any catalog.
+
+If a catalog stops being available, models added from it are removed, unless another available catalog or a direct assignment still covers them. Keys restricted to those models lose them too, and don't get them back if the model returns later.
+
+## Add or remove models
+
+Owners and admins (and the owner of a personal workspace) see **Add models**. Choose one or more models from the available catalogs and confirm. To stop using one, open its row menu and choose **Remove from workspace…**. Removing a model that was assigned directly is a Platform Admin's job.
+
+Filters at the top narrow the list by type (Text, Embeddings, Images, Speech to text, Text to speech, Rerank, System One, Realtime, Video, Batch), status, price and readiness.
+
+## A model's page
+
+Open a model to see:
+
+- **API model name**: the name to send as `model`, with a copy button.
+- **Type**, the protocols it serves and its **input price** and **output price** per million tokens (or per image, per character or per second, depending on the type).
+- **How to call it**: the headers and body for a request with a key from this workspace, and what isn't supported: anything not listed is refused, never silently dropped.
+- **Usage**: your requests with this model, or the whole workspace's if you are an admin. **Requests with this model** opens them in [Logs](/docs/using/logs).
+
+Prices are the configured estimates the gateway uses for budgets and reports, not provider invoices. "Unknown" means no price is set: requests still run (unless a budget applies), but their cost is recorded as unknown, not as free.
+
+## Compare models
+
+Tick two to four models on **Models**, then choose **Compare**. The comparison shows, side by side:
+
+- type and protocols;
+- input, output and other prices, and the context and output ceilings;
+- whether each is serving;
+- the last 30 days of requests, error rate, median latency, median time to first token and tokens per second.
+
+<Screenshot slot="model-compare" />
+
+The best value in each row is marked only when the values differ. The prices come from each model's first enabled route. The activity figures follow the same rules as Logs: members see their own requests, workspace admins see the whole workspace.
+
+## Why can't I use a model?
+
+**Settings › Access** shows, model by model, why each one is or isn't usable in the workspace, and each key's page has the same view under **Access**. Reasons include: the model or its routes are disabled, it isn't in an available catalog, it wasn't added, the key is restricted to other models, or a budget is used up. See [Workspace settings](/docs/using/workspace-settings#access).

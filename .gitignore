@@ -1,0 +1,18 @@
+# dependencies
+/node_modules
+
+# generated
+.source
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.env*.local
+
+# Review screenshots of the site itself, not for committing.
+.review/

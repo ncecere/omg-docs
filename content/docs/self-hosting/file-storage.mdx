@@ -1,0 +1,115 @@
+---
+title: File storage
+description: The encrypted file store for files and batches, on Amazon S3, MinIO, RustFS, other S3-compatible stores or local disk, and its encryption keys.
+---
+
+The gateway keeps the files it owns (Files API uploads, batch inputs and results) in an encrypted object store. It is **off by default**. While it is off, `/v1/files` and batches don't work, and the kinds of file that hold customer content can't be turned on in Admin.
+
+Every object is encrypted by the gateway before the backend sees it, whatever the backend, and the database holds metadata only.
+
+## Choose a backend
+
+<Tabs items={['Amazon S3', 'MinIO', 'RustFS', 'Local disk']}>
+<Tab value="Amazon S3">
+
+```sh
+GATEWAY_FILE_STORE=s3
+GATEWAY_S3_BUCKET=example-university-ai-files
+GATEWAY_S3_PREFIX=prod
+GATEWAY_S3_REGION=eu-west-1
+GATEWAY_S3_AUTH=aws:role:arn:aws:iam::123456789012:role/ai-gateway-files
+GATEWAY_FILE_ENCRYPTION_KEYS_ENV=GATEWAY_FILE_KEYS
+GATEWAY_FILE_KEYS=k2026a:<base64 of 32 random bytes>
+```
+
+The identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` and `s3:AbortMultipartUpload` on the prefix. Turn on Block Public Access, and add a lifecycle rule that aborts incomplete multipart uploads after a day. With bucket versioning, expire noncurrent versions quickly, or deleted files linger.
+
+</Tab>
+<Tab value="MinIO">
+
+```sh
+GATEWAY_FILE_STORE=s3
+GATEWAY_S3_BUCKET=ai-gateway-files
+GATEWAY_S3_ENDPOINT=https://minio.example.internal:9000
+GATEWAY_S3_ENDPOINT_ALLOWLIST=https://minio.example.internal:9000
+GATEWAY_S3_AUTH=static
+GATEWAY_S3_ACCESS_KEY_ID_ENV=MINIO_GATEWAY_KEY_ID
+GATEWAY_S3_SECRET_ACCESS_KEY_ENV=MINIO_GATEWAY_SECRET
+GATEWAY_S3_CA_FILE=/etc/gateway/minio-ca.pem   # if MinIO uses a private CA
+GATEWAY_FILE_ENCRYPTION_KEYS_ENV=GATEWAY_FILE_KEYS
+```
+
+Use a dedicated MinIO user limited to the bucket, not the root credentials. Path-style addressing is on because an endpoint is set.
+
+</Tab>
+<Tab value="RustFS">
+
+```sh
+GATEWAY_FILE_STORE=s3
+GATEWAY_S3_BUCKET=ai-gateway-files
+GATEWAY_S3_ENDPOINT=http://rustfs.storage.svc:9000
+GATEWAY_S3_ENDPOINT_ALLOWLIST=http://rustfs.storage.svc:9000
+GATEWAY_S3_AUTH=static
+GATEWAY_S3_ACCESS_KEY_ID_ENV=RUSTFS_GATEWAY_KEY_ID
+GATEWAY_S3_SECRET_ACCESS_KEY_ENV=RUSTFS_GATEWAY_SECRET
+GATEWAY_FILE_ENCRYPTION_KEYS_ENV=GATEWAY_FILE_KEYS
+```
+
+The `http://` allowlist entry is what approves plain HTTP; use it only inside a private network. Objects are still encrypted.
+
+</Tab>
+<Tab value="Local disk">
+
+```sh
+GATEWAY_FILE_STORE=local
+GATEWAY_FILE_STORE_DIR=/var/lib/open-model-gateway/files
+GATEWAY_FILE_ENCRYPTION_KEYS_ENV=GATEWAY_FILE_KEYS
+```
+
+The directory is created with mode 0700 if missing; if it exists it must be a real directory owned by the gateway user and closed to others. Local disk is for a single host: with more than one replica, use S3. It needs a Unix host. With the read-only container, mount a writable volume there.
+
+</Tab>
+</Tabs>
+
+Other S3-compatible stores (Cloudflare R2 with region `auto`, Wasabi, Ceph RGW, Google Cloud Storage's interoperability API) are configured the same way, with an allowlisted endpoint and static keys. MinIO and RustFS are exercised by the project's automated tests; the others are not. See [Configuration](/docs/self-hosting/configuration#file-store) for every variable.
+
+The S3 client uses one attempt per request, follows no redirects, ignores proxy variables and `AWS_ENDPOINT_URL*`, and avoids newer AWS-only checksum and session features that older S3-compatible servers reject.
+
+## Encryption keys
+
+`GATEWAY_FILE_ENCRYPTION_KEYS_ENV` names a variable whose value is a list of master keys:
+
+```sh
+GATEWAY_FILE_KEYS=k2027a:<new key>,k2026a:<old key>
+```
+
+- Each key id is 1 to 32 characters of `A-Z a-z 0-9 . _ -`; each key is base64 of exactly 32 random bytes (`openssl rand -base64 32`). Up to 16 keys.
+- The **first** key encrypts new objects; the others only decrypt.
+- Each object gets its own random data key, wrapped by the master key, and is sealed with AES-256-GCM in 64 KiB chunks bound to the object's name. Any tampering, truncation or reordering is detected.
+
+<Callout type="error" title="Losing a key loses its files">
+  Keep the key list in your secret manager and your recovery plan, separately from database and object backups. Without the keys, stored objects can't be read by anyone.
+</Callout>
+
+### Rotate a key
+
+1. Generate a new key and put it **first**; keep the old one after it. Restart every replica.
+2. Run `open-model-gateway files verify`. Its `by_key_id` counts show how many live files still use the old key. Files expire with their retention (365 days at most; branding files never expire).
+3. Remove the old key only when its count reaches 0. Removing it earlier makes those files unreadable (`key_unavailable`).
+
+If a master key leaks, add a new first key at once, then shorten retention and run `files sweep --once` to remove files under the old key before removing it.
+
+## Retention and the sweeper
+
+What may be stored, and for how long, is set in **Admin › Settings › Data & privacy › Storage** (see [Settings](/docs/administration/settings#storage)). `serve` sweeps every minute: it deletes expired files and abandoned uploads (after a day), at most 200 per run, safely across replicas. Database rows are never deleted: a deleted file keeps its metadata, without its name.
+
+```sh
+open-model-gateway files sweep --once [--limit 1000]   # one sweep now
+open-model-gateway files verify [--limit 100000]       # read-only check; non-zero exit on problems
+```
+
+`files verify` reports missing objects, size mismatches, files under another backend, key ids no longer configured, stale uploads and failed deletions. It doesn't list the bucket, so stray objects without a row aren't found: use a bucket lifecycle rule or inventory for those.
+
+## Test it
+
+In **Settings › Data & privacy**, **Test storage** writes, reads and deletes a small object. Run it after any change, then allow the kinds of file you need.

@@ -1,0 +1,267 @@
+{
+  "sign-in": {
+    "files": [
+      "sign-in"
+    ],
+    "alt": "The Open Model Gateway sign-in page: the product name, a Sign in card with the button \"Sign in with single sign-on\", and a note that signing in alone doesn't give access."
+  },
+  "home": {
+    "files": [
+      "home"
+    ],
+    "alt": "Home for Priya Shah: the models she can use, her usage this month (spent, requests, tokens) and her API keys across her workspaces."
+  },
+  "workspace-switcher": {
+    "files": [
+      "workspace-switcher"
+    ],
+    "alt": "The workspace selector open, listing the Personal workspace, the Team \"Chemistry Teaching\" and the Project \"Climate Data Study\"."
+  },
+  "admin-overview": {
+    "files": [
+      "admin-overview"
+    ],
+    "alt": "Admin Overview: the setup checklist with most steps done and one route still unpriced, and \"Platform at a glance\" with users, Teams, Projects, ready models, requests and spend this month."
+  },
+  "key-create": {
+    "files": [
+      "key-create"
+    ],
+    "alt": "The Create API key dialog: a name, a service account chosen as the holder, a 90-day expiry, a $50 monthly spending limit, collapsed rate limits, and one selected model."
+  },
+  "key-created": {
+    "files": [
+      "key-created"
+    ],
+    "alt": "The \"Save your API key\" dialog showing a new key once, with Copy key and I have saved it."
+  },
+  "key-detail": {
+    "files": [
+      "key-detail"
+    ],
+    "alt": "An API key's page: spending over the last 30 days, its details, and a Safety card listing the finding \"No budget\"."
+  },
+  "workspace-models": {
+    "files": [
+      "workspace-models"
+    ],
+    "alt": "A workspace's Models page: models with their type, input and output prices and serving state, two of them ticked for comparison."
+  },
+  "model-compare": {
+    "files": [
+      "model-compare"
+    ],
+    "alt": "Two models compared side by side: prices, context and output ceilings, serving state, and 30 days of requests, error rate, latency, time to first token and speed."
+  },
+  "logs-requests": {
+    "files": [
+      "logs-requests"
+    ],
+    "alt": "Logs, Requests view: summary tiles for requests, error rate, latency, time to first token and speed above a table of requests with model, key, status, tokens and cost."
+  },
+  "request-detail": {
+    "files": [
+      "request-detail"
+    ],
+    "alt": "A request's page: the summary and two attempts in order, the first failed on one route and the second succeeded on another, with tokens, timings and cost."
+  },
+  "logs-sessions": {
+    "files": [
+      "logs-sessions"
+    ],
+    "alt": "Logs, Sessions view: requests grouped by session id with request counts, tokens, cost, models and the app name \"Course assistant\"."
+  },
+  "usage-overview": {
+    "files": [
+      "usage-overview"
+    ],
+    "alt": "Usage and costs overview: spend with the amount on hold, requests, tokens, cache hit rate and cost per million tokens, a daily chart, and top models, keys and members."
+  },
+  "usage-explore": {
+    "files": [
+      "usage-explore"
+    ],
+    "alt": "The Explore tab: spend grouped by model and then by key, with each group's share of the total and a daily series."
+  },
+  "files": {
+    "files": [
+      "files"
+    ],
+    "alt": "The Files page: batch inputs, a batch result and a user file with purpose, size, created and expiry dates, and a storage bar against the workspace's quota."
+  },
+  "batch-detail": {
+    "files": [
+      "batch-detail"
+    ],
+    "alt": "A batch's page: status and Cancel, progress, completed and failed lines, cost so far, its files, and how many lines ended in each state."
+  },
+  "notifications": {
+    "files": [
+      "notifications"
+    ],
+    "alt": "Notifications: a firing budget alert for a Team, a resolved error-rate alert and a personal budget alert, one of them unread."
+  },
+  "workspace-alerts": {
+    "files": [
+      "workspace-alerts"
+    ],
+    "alt": "A Team's alert rules: a budget threshold rule and an error rate rule, one of them firing."
+  },
+  "workspace-members": {
+    "files": [
+      "workspace-members"
+    ],
+    "alt": "A Team's Members tab: people with their roles and whether each membership is manual or from an SSO group, and a pending invitation."
+  },
+  "workspace-limits": {
+    "files": [
+      "workspace-limits"
+    ],
+    "alt": "A Team's Limits tab: the platform's limits and the Team's own tighter limits, with how much of each budget window is used."
+  },
+  "admin-users": {
+    "files": [
+      "admin-users"
+    ],
+    "alt": "Admin Users: people with their platform role, status, last sign-in and number of shared workspaces."
+  },
+  "admin-user-detail": {
+    "files": [
+      "admin-user-detail"
+    ],
+    "alt": "A user's page in Admin: profile and access, sign-in dates, and a Platform user role granted through an SSO group."
+  },
+  "admin-sso-groups": {
+    "files": [
+      "admin-sso-groups"
+    ],
+    "alt": "SSO group mappings: four groups mapped to the Platform user, auditor and admin roles and to membership of the Team \"Chemistry Teaching\"."
+  },
+  "admin-team-detail": {
+    "files": [
+      "admin-team-detail"
+    ],
+    "alt": "A Team's page in Admin: its members, available catalogs, models available and cost center."
+  },
+  "admin-connections": {
+    "files": [
+      "admin-connections"
+    ],
+    "alt": "Admin Connections: a self-hosted vLLM cluster, OpenAI, Anthropic, Amazon Bedrock and OpenRouter, with endpoint or region, status and model counts."
+  },
+  "admin-connection-bedrock": {
+    "files": [
+      "admin-connection-bedrock"
+    ],
+    "alt": "The Add connection form for Amazon Bedrock: a region, the Assume role access mode with a role ARN, and an empty VPC endpoint."
+  },
+  "admin-models": {
+    "files": [
+      "admin-models"
+    ],
+    "alt": "Admin Models: models of several types with their routes, price and readiness, one needing attention and one unpriced."
+  },
+  "admin-add-model": {
+    "files": [
+      "admin-add-model"
+    ],
+    "alt": "The Add model form: type, API model name, connection and upstream model id, an optional first price, and catalogs."
+  },
+  "admin-model-detail": {
+    "files": [
+      "admin-model-detail"
+    ],
+    "alt": "A model's page: two routes with their priority, current price lines and a priority routing policy allowing two attempts."
+  },
+  "admin-price-editor": {
+    "files": [
+      "admin-price-editor"
+    ],
+    "alt": "The price editor: input, output and cache read lines, the hard input and output token ceilings, and a separate set of batch prices."
+  },
+  "admin-catalogs": {
+    "files": [
+      "admin-catalogs"
+    ],
+    "alt": "Admin Catalogs: three catalogs with their models and who gets them, and the defaults matrix for Personal, Team and Project workspaces."
+  },
+  "admin-batch-scheduling": {
+    "files": [
+      "admin-batch-scheduling"
+    ],
+    "alt": "A route's Batch scheduling section: queued lines, running lines, status and server load, above the settings: batch lines at once, yield to live traffic, a server load signal with its limits, a priority hint and a weekday overnight time window."
+  },
+  "admin-limits": {
+    "files": [
+      "admin-limits"
+    ],
+    "alt": "Defaults and limits for Teams: rate limits, jobs at once, storage and a monthly budget, with tabs for the installation ceiling and each workspace type."
+  },
+  "admin-usage": {
+    "files": [
+      "admin-usage"
+    ],
+    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, requests, tokens and cost center, and personal workspaces as totals."
+  },
+  "admin-logs": {
+    "files": [
+      "admin-logs"
+    ],
+    "alt": "Admin Logs: requests from Teams and Projects with a Workspace column; personal workspaces are not listed."
+  },
+  "admin-alerts": {
+    "files": [
+      "admin-alerts"
+    ],
+    "alt": "Installation alert rules: a budget threshold, a spend spike, a failing connection and a batch failed rule, one firing."
+  },
+  "admin-alert-rule": {
+    "files": [
+      "admin-alert-rule"
+    ],
+    "alt": "An alert rule's page: a spend spike rule with its factor, minimum amount and recipients, with Cancel and Save."
+  },
+  "admin-key-safety": {
+    "files": [
+      "admin-key-safety"
+    ],
+    "alt": "Key safety: tiles counting keys by severity and a personal-keys count, and rows of Team and Project keys with findings such as Holder left and No budget."
+  },
+  "admin-audit": {
+    "files": [
+      "admin-audit"
+    ],
+    "alt": "The Audit log: recent administrative actions with time, actor, action and target."
+  },
+  "admin-settings-general": {
+    "files": [
+      "admin-settings-general"
+    ],
+    "alt": "General settings: the installation's display name, support URL, logo URL and maximum key lifetime."
+  },
+  "admin-settings-privacy": {
+    "files": [
+      "admin-settings-privacy"
+    ],
+    "alt": "Data and privacy settings: OpenRouter data collection, request log retention, prompt storage, and the Storage card with its backend, encryption key, health and allowed kinds of file."
+  },
+  "admin-settings-email": {
+    "files": [
+      "admin-settings-email"
+    ],
+    "alt": "Email settings: an SMTP relay with STARTTLS, a password reference, the From address, and a Ready status with a successful test."
+  },
+  "admin-settings-sign-in": {
+    "files": [
+      "admin-settings-sign-in"
+    ],
+    "alt": "Sign-in settings: the identity provider configuration and callback URL, signing-key status, and SCIM provisioning status with its base URL."
+  },
+  "phone-home": {
+    "files": [
+      "phone-home"
+    ],
+    "alt": "Home on a phone: the menu button and Priya Shah's models, usage and keys stacked in one column.",
+    "phone": true
+  }
+}

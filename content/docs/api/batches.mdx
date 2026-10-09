@@ -1,0 +1,66 @@
+---
+title: Batches
+description: The OpenAI-compatible Batch API for any model, run natively on OpenAI or Anthropic or line by line by the gateway.
+---
+
+Guide: [Batches](/docs/using/batches).
+
+## Endpoints
+
+| Route | Behaviour |
+|---|---|
+| `POST /v1/batches` | `{input_file_id, endpoint, completion_window, metadata?}`. Validates the whole input file, then returns the batch (`validating`). An invalid file returns `400` with a line-numbered report and creates nothing. |
+| `GET /v1/batches` | The workspace's batches, newest first. `after`, `limit` (1 to 100). |
+| `GET /v1/batches/{id}` | One batch. |
+| `POST /v1/batches/{id}/cancel` | Cancels it. |
+
+- `endpoint`: `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings` or `/v1/messages` (Anthropic shape).
+- `input_file_id`: a `file-…` id with purpose `batch`.
+- `metadata`: up to 16 string values, checked but not stored (`metadata: null` on the batch). Gateway options: `omg_mode` (`auto` or `gateway`) and `omg_retries` (`0`, `1` or `2`).
+- `completion_window` (required): `24h`, `48h`, `72h` or `168h`; anything else is a `400`. Longer windows are for routes that only run batch lines at certain hours ([Batch scheduling](/docs/administration/batch-scheduling)). A window other than `24h` always runs gateway-side. The batch echoes the window and its `expires_at`.
+- Refused: `output_expires_after` (`unsupported_capability`).
+- Ids are gateway ids (`batch_<32 hex>`). Provider batch ids and your `custom_id`s never cross to the other side.
+
+## Input lines
+
+```json
+{"custom_id": "q-001", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "example/chat", "messages": [{"role": "user", "content": "Hi"}], "max_completion_tokens": 16}}
+```
+
+Up to 50,000 lines, each up to 4 MiB. Blank lines are skipped. Each body is checked like an interactive request to the endpoint, without streaming. Chat Completions lines may use `max_tokens` or `max_completion_tokens`, not both.
+
+## Validation report
+
+```json
+{"error": {"type": "invalid_request_error", "code": "invalid_batch_input", "param": "input_file_id", "message": "…"},
+ "errors": {"object": "list", "data": [{"code": "duplicate_custom_id", "message": "custom_id must be unique within the file.", "line": 3, "param": null}]}}
+```
+
+Up to 20 problems, by physical line number. Codes: `invalid_json`, `invalid_line`, `invalid_custom_id`, `duplicate_custom_id`, `invalid_method`, `invalid_url`, `invalid_body`, `unsupported_feature`, `missing_max_tokens`, `model_not_found`, `model_unsupported`, `model_not_priced`, `max_tokens_too_large`, `line_too_large`, `too_many_lines`, `empty_file`. Batches without the file store's **Batch files** allowed fail with `400 batch_files_disabled`.
+
+## Modes
+
+| | Native | Gateway-run |
+|---|---|---|
+| When | Every line routes to one route whose provider (OpenAI Batch, Anthropic Message Batches) can take every line, `omg_mode` isn't `gateway`, and the window is `24h` | Everything else, including mixed models |
+| Upstream | One provider batch | One request per line, through normal routing |
+| Prices | The route's batch prices if published, else standard | Standard |
+
+## Results
+
+`output_file_id` (successes) and `error_file_id` (everything else), each present only with at least one line, purpose `batch_output`:
+
+```json
+{"id": "batch_req_…", "custom_id": "q-001", "response": {"status_code": 200, "request_id": "…", "body": {…}}, "error": null}
+{"id": "batch_req_…", "custom_id": "q-002", "response": null, "error": {"code": "batch_cancelled", "message": "…"}}
+```
+
+`request_counts` is `{total, completed, failed}`. Statuses: `validating`, `in_progress`, `finalizing`, `cancelling`, `completed`, `failed`, `cancelled`, `expired`. Results follow completion order.
+
+## Limits and errors
+
+- Each batch takes one **jobs at once** slot (`429 job_limit_exceeded` when none is free). Batches don't count toward per-minute limits.
+- The whole batch's maximum cost is checked against every budget when it is created (`429 budget_exceeded`).
+- A line refused for budget stops the batch: it ends `failed` with `budget_exceeded`.
+- Gateway-run lines start only when their route has capacity ([batch scheduling](/docs/administration/batch-scheduling)); while waiting, the batch stays `in_progress`.
+- At the end of its window no new line starts; running lines finish and the batch ends `expired`, with lines that never ran listed as `batch_expired` at no cost.

@@ -1,0 +1,16 @@
+---
+title: Videos
+description: /v1/videos exists but has no supported provider since OpenAI shut down its Videos API on 2026-09-24.
+---
+
+<Callout type="warn" title="No supported provider">
+  OpenAI shut down its Sora 2 models and Videos API on 2026-09-24. The gateway's video support targeted that API, so `POST /v1/videos` now validates the request and returns `400 unsupported_capability` before anything is charged or sent. A video adapter for OpenRouter is planned.
+</Callout>
+
+What remains:
+
+- `GET /v1/videos` and `GET /v1/videos/{id}` read jobs created before the shutdown from the gateway's own records.
+- `GET /v1/videos/{id}/content` and refreshing an old job call the retired API and fail.
+- In Admin, the **Video** model type is shown as unavailable ("No supported provider yet"), and existing video models show **Provider API retired**.
+
+The request contract the planned adapter will serve: `model`, `prompt` (up to 32 KiB), `seconds` (`4`, `8` or `12`), `size` (`720x1280`, `1280x720`, `1024x1792` or `1792x1024`), as JSON or multipart. Remixes, edits, extensions and reference images are not supported. Jobs are one attempt and one hold each, priced per second of video by resolution, and take a jobs-at-once slot.

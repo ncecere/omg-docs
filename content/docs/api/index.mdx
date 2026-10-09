@@ -1,0 +1,58 @@
+---
+title: API reference
+description: The inference API's endpoints, conventions and the subset of each vendor API that Open Model Gateway supports.
+---
+
+Open Model Gateway has two HTTP APIs:
+
+- **The inference API** under `/v1`, authenticated with [API keys](/docs/using/api-keys). It follows the OpenAI API, plus Anthropic's Messages API, so the official SDKs work against it. This reference covers it.
+- **The management API** under `/api/v1`, used by the dashboard with browser sessions. API keys can't use it. See [Management API](/docs/api/management-api).
+
+<Callout title="A supported subset, on purpose">
+  Each endpoint accepts a documented subset of the vendor's API, and each provider supports a subset of that. Anything outside it is refused with an error, never silently dropped or changed. This reference is written by hand from the gateway's source: there is no OpenAPI document yet.
+</Callout>
+
+## Endpoints
+
+| Method and path | What it does | Providers |
+|---|---|---|
+| `GET /v1/models` | [Models this key can use](/docs/api/models) | |
+| `POST /v1/chat/completions` | [Chat Completions](/docs/api/chat-completions), streaming or not | OpenAI, Anthropic, Bedrock, OpenRouter, self-hosted |
+| `POST /v1/responses` | [Responses](/docs/api/responses), stateless | OpenAI |
+| `POST /v1/messages` | [Anthropic Messages](/docs/api/messages) | Anthropic, Bedrock |
+| `POST /v1/embeddings` | [Embeddings](/docs/api/embeddings) | OpenAI, OpenRouter, self-hosted |
+| `POST /v1/images/generations` | [Image generation](/docs/api/images), base64 only | OpenAI (`gpt-image-*`), OpenRouter |
+| `POST /v1/audio/transcriptions` | [Speech to text](/docs/api/audio#transcriptions) | OpenAI, OpenRouter |
+| `POST /v1/audio/speech` | [Text to speech](/docs/api/audio#speech) | OpenAI, OpenRouter |
+| `POST /v1/rerank` | [Rerank](/docs/api/rerank) | OpenRouter |
+| `POST /v1/systemone` | [System One decisions](/docs/api/system-one) | OpenRouter |
+| `GET /v1/realtime` | [Realtime](/docs/api/realtime) WebSocket | OpenAI |
+| `/v1/files` | [Files](/docs/api/files): upload, list, retrieve, content, delete | Gateway-owned |
+| `/v1/batches` | [Batches](/docs/api/batches): create, list, retrieve, cancel | Any model |
+| `/v1/videos` | [Videos](/docs/api/videos): no supported provider | |
+
+Health checks (`GET /health/live`, `GET /health/ready`) need no key; see [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring).
+
+## Conventions
+
+- **Base URL**: your gateway's address plus `/v1`, for example `https://ai.example.edu/v1`.
+- **Authentication**: `Authorization: Bearer omg_...`. `/v1/messages` also accepts `x-api-key` (one or the other, not both). Repeated or conflicting credentials are refused.
+- **Workspace**: always the key's own. Requests can't name another.
+- **Models**: the gateway's model names, such as `example/chat`, never the provider's ids. Responses return the gateway name too.
+- **Body size**: JSON bodies are limited to 2 MiB, with per-endpoint limits for uploads and some workloads.
+- **Errors** use the OpenAI shape `{"error": {"message", "type", "code", "param"}}`, or Anthropic's on `/v1/messages`. See [Errors and limits](/docs/api/errors-and-limits).
+- **Unknown values are omitted, not zero.** If a provider didn't report a token count, the `usage` field leaves it out.
+- **Optional labels** for Logs: `X-Session-Id` and `X-Title` headers. See [Calling the API](/docs/using/calling-the-api#label-sessions-and-apps-for-logs).
+
+## Streaming
+
+- Chat Completions streams token by token as server-sent events, ending with `data: [DONE]` only on success. An error mid-stream closes the stream without `[DONE]`.
+- Responses and Messages streams are accepted, but the gateway collects up to 4 MiB of the upstream response and then sends it as ordered events: not token by token yet.
+- Closing the connection cancels the upstream request. The provider may still charge for work it did; the gateway keeps the hold until it knows.
+- There is never a failover after a stream has started.
+
+## Not supported
+
+Request features that are refused with an error: images or audio inside chat messages (vision), structured output and JSON schemas, reasoning controls, logprobs, `n` above 1, stored or background Responses, hosted tools (web search, file search, code interpreter) and referencing uploaded files in chat requests.
+
+Endpoints that don't exist return `404`, for example image edits and variations, fine-tuning, assistants, vector stores and moderation.

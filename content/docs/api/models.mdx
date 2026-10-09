@@ -1,0 +1,31 @@
+---
+title: Models
+description: GET /v1/models lists the models an API key can use right now.
+---
+
+```http
+GET /v1/models
+Authorization: Bearer omg_...
+```
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"id": "example/chat", "object": "model", "created": 1760000000, "owned_by": "platform"},
+    {"id": "example/embed", "object": "model", "created": 1760000000, "owned_by": "platform"}
+  ]
+}
+```
+
+- `id` is the model's gateway name, to send as `model`.
+- `created` is when the model was added to the installation (Unix seconds). `owned_by` is always `platform`.
+- The list is sorted by name.
+
+A model is listed when all of these are true at the moment of the request:
+
+- the model is available to the key's workspace (added from a catalog, or assigned directly);
+- the key's own model restriction, if it has one, includes it;
+- it has at least one enabled route on an enabled connection.
+
+The list doesn't say which endpoints a model serves; see the model's page in the dashboard. A listed model can still be refused by a budget or rate limit. There is no `GET /v1/models/{id}`.

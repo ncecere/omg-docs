@@ -1,0 +1,66 @@
+---
+title: Connections
+description: Connect OpenAI, Anthropic, OpenRouter, Amazon Bedrock and approved self-hosted model servers, with credentials that stay on the server.
+---
+
+A **connection** is an upstream provider and how to reach it. **Admin › Connections** lists them with their provider, endpoint or region, status and how many models use them. **Add connection** makes a new one.
+
+<Screenshot slot="admin-connections" />
+
+## Credentials stay on the server
+
+You never paste an API key into the dashboard. A connection stores a **reference** to a secret that the operator puts in the server's environment:
+
+- **Secret in an environment variable**: you enter the variable's name, such as `OPENAI_API_KEY`. The operator must also list that name in `GATEWAY_SECRET_ENV_ALLOWLIST`, or the gateway refuses to use it.
+- **No authentication**: only for approved self-hosted servers. Cloud connections always need a credential.
+- **AWS identities** for Amazon Bedrock (below).
+
+The reference is never shown again after saving, and API keys sent by callers are never passed to a provider. See [Provider credentials](/docs/self-hosting/provider-credentials).
+
+## Providers
+
+| Provider profile | Address | Serves |
+|---|---|---|
+| **OpenAI** | Fixed: `https://api.openai.com/v1` | Chat Completions, Responses, embeddings, image generation (`gpt-image-*`), speech to text, text to speech, realtime, native batches |
+| **Anthropic** | Fixed: `https://api.anthropic.com/v1` | Messages, a Chat Completions subset, native batches |
+| **OpenRouter** | Fixed: `https://openrouter.ai/api/v1` | Chat Completions, embeddings, image generation, speech to text, text to speech, rerank, System One |
+| **Amazon Bedrock** | AWS region, optional VPC endpoint | Chat Completions and Messages (text and tools, via Converse) |
+| **OpenAI-compatible**, **vLLM**, **SGLang**, **Ollama** | An approved local endpoint | Chat Completions and embeddings |
+
+Each profile supports a tested subset of requests, not every option of the provider. See the [API reference](/docs/api) for what each endpoint accepts.
+
+## OpenAI, Anthropic and OpenRouter
+
+Choose the profile, give the connection a name, and enter the name of the environment variable that holds its key. The address can't be changed.
+
+**OpenRouter** sends your installation's data-collection choice on every request (deny by default; see [Settings › Data & privacy](/docs/administration/settings#data--privacy)). OpenRouter's `:free` model variants may train on prompts, so with **deny** they have no eligible provider and fail; a model page warns about this. OpenRouter routes can also [import their current price](/docs/administration/pricing#import-an-openrouter-price) from OpenRouter's public catalog.
+
+## Amazon Bedrock
+
+| Field | Value |
+|---|---|
+| **Region** | An AWS region code, such as `us-east-1`. The form lists common Bedrock regions and accepts any valid code. |
+| **AWS access** | **Server identity**: the server's own AWS credentials, such as an ECS task role, EC2 instance profile or EKS role (preferred). **Named profile**: a profile from the server's AWS config, which the operator must allow in `GATEWAY_AWS_PROFILE_ALLOWLIST`. **Assume role**: an IAM role ARN the server identity assumes, with an optional external ID and session name. |
+| **Endpoint** | Blank for the regional Bedrock endpoint, or an interface VPC endpoint (PrivateLink) that the operator allowed in `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST`. |
+
+<Screenshot slot="admin-connection-bedrock" />
+
+A route's upstream model on Bedrock is a model id (`anthropic.claude-…`), an inference profile id (`us.…`, `eu.…`, `apac.…`, `global.…`) or a Bedrock ARN in the connection's region. The identity needs `bedrock:InvokeModel` and, for streaming, `bedrock:InvokeModelWithResponseStream`. Model access and quotas are configured in AWS. To change an assumed role's options, choose **Change AWS access** and restate the role.
+
+## Self-hosted servers
+
+Self-hosted servers (OpenAI-compatible, vLLM, SGLang, Ollama) can use plain HTTP on a private network, but only at addresses the operator has approved in `GATEWAY_LOCAL_UPSTREAMS`, each pinned to its IP addresses. Enter the approved base URL, ending in `/v1`, such as `http://models.example.internal:8000/v1`. The form can't approve a new address.
+
+- Choose **No authentication**, or a secret in an environment variable that is sent as a bearer token to that server only.
+- Ollama's embeddings use its native `/api/embed` on the same address, with truncation off.
+- Strict tool schemas aren't supported on local profiles; Ollama doesn't accept an explicit tool choice.
+
+Gateway-run batch lines on these routes can wait for spare capacity, watch the server's vLLM metrics and send a vLLM priority hint: see [Batch scheduling](/docs/administration/batch-scheduling).
+
+## Network safety
+
+For every connection the gateway follows no redirects, ignores proxy environment variables and never retries a request on its own. Cloud connections use HTTPS. Restrict outbound network access on the server as well; the application's approval list is not a firewall.
+
+## Disable or retire
+
+When you add a connection, **Enable now** decides whether its routes can serve requests straight away. A connection's status can be changed later on its page. **Retire resource…** disables it: its records, prices and history are kept, never deleted, but no new request runs on it. Disabling a connection stops its routes at once, and also stops client calls and polling for its provider batch jobs.

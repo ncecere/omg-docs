@@ -1,0 +1,22 @@
+{
+  "title": "Using the gateway",
+  "description": "Keys, calling models, logs, usage and workspace settings",
+  "root": true,
+  "pages": [
+    "index",
+    "---Calling models---",
+    "api-keys",
+    "calling-the-api",
+    "models",
+    "---Seeing what happened---",
+    "logs",
+    "usage-and-costs",
+    "alerts-and-notifications",
+    "---Long-running work---",
+    "files",
+    "batches",
+    "realtime",
+    "---Your workspace---",
+    "workspace-settings"
+  ]
+}

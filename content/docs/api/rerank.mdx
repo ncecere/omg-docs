@@ -1,0 +1,33 @@
+---
+title: Rerank
+description: POST /v1/rerank scores documents against a query, on OpenRouter routes.
+---
+
+```http
+POST /v1/rerank
+```
+
+```json
+{"model": "example/rerank", "query": "laboratory safety rules", "documents": ["Wear goggles in the lab.", "The café opens at 8.", "No food near fume hoods."], "top_n": 2}
+```
+
+A Cohere v2 and Jina style subset. Served on **OpenRouter** routes.
+
+| Field | Supported |
+|---|---|
+| `model`, `query`, `documents` | Required. Documents are non-blank strings: up to 1,000, each up to 64 KiB; the query up to 32 KiB; 1 MiB of text in total. |
+| `top_n` | 1 or more; clamped to the number of documents. |
+
+Other fields, including `return_documents` and object documents, are refused.
+
+## Response
+
+```json
+{"object": "list", "id": "…", "model": "example/rerank", "results": [{"index": 0, "relevance_score": 0.91}, {"index": 2, "relevance_score": 0.77}], "usage": {"total_tokens": 31}}
+```
+
+Results keep the provider's order, with unique indices into your `documents`. Documents are never echoed back. `usage` includes only counts the provider reported (`total_tokens`, `search_units`).
+
+## Cost
+
+Rerank is input-only: tokens count as input, and each call is one request. If the provider bills per search, price `search_units` with a per-request maximum, or the cost is unbounded under a budget. OpenRouter's catalog has no rerank prices, so enter them by hand.

@@ -1,0 +1,45 @@
+---
+title: Administration
+description: Running an Open Model Gateway installation from the Admin portal, as a Platform Admin or Auditor.
+---
+
+These pages are for **Platform Admins**, who run the installation, and **Platform Auditors**, who read everything in Admin without changing it. Open Admin with the **Portal** switch at the top of the sidebar.
+
+<Screenshot slot="admin-overview" />
+
+<Cards>
+  <Card title="First run" href="/docs/administration/first-run">
+    From an empty installation to the first request, following the setup checklist.
+  </Card>
+  <Card title="People and roles" href="/docs/administration/people-and-roles">
+    Platform roles, suspension, the 30-day lifecycle and the last-admin safeguard.
+  </Card>
+  <Card title="Teams and Projects" href="/docs/administration/teams-and-projects">
+    Creating shared workspaces, their owners, overrides and cost centers.
+  </Card>
+  <Card title="SSO groups and SCIM" href="/docs/administration/sso-groups">
+    Mapping identity-provider groups to roles and memberships, and pushing changes with SCIM.
+  </Card>
+  <Card title="Connections, models and prices" href="/docs/administration/connections">
+    Providers, models, routes, routing and failover, and price versions.
+  </Card>
+  <Card title="Catalogs" href="/docs/administration/catalogs">
+    Which models each kind of workspace can use.
+  </Card>
+  <Card title="Limits and budgets" href="/docs/administration/limits-and-budgets">
+    Stacked layers of rate limits, jobs at once, storage and budgets.
+  </Card>
+  <Card title="Records" href="/docs/administration/audit-log">
+    The audit log, key safety, logs, usage and cost centers.
+  </Card>
+</Cards>
+
+## What admins can and can't see
+
+Platform roles give authority over the installation, not over people's private work:
+
+- **Personal workspaces** stay private. Admins and Auditors see their cost and usage **totals** in reports, never their keys or requests.
+- **Teams and Projects**: admins and Auditors see their configuration, members and cost totals. Admin › Logs shows their requests' metadata. Their keys and request details inside the workspace's own pages need a membership, like anyone else.
+- **Making a key** in a Team or Project needs a real membership, even for a Platform Admin.
+
+Auditors see every Admin page read-only: no buttons that change anything, and the API refuses changes.

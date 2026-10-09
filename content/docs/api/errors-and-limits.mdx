@@ -1,0 +1,61 @@
+---
+title: Errors and limits
+description: Error codes and HTTP statuses of the inference API, which ones to retry, and the size limits.
+---
+
+Errors use the OpenAI shape, or Anthropic's on `/v1/messages`:
+
+```json
+{"error": {"message": "Budget for this API key would be exceeded in its current period", "type": "insufficient_quota", "code": "budget_exceeded", "param": null}}
+```
+
+Messages are fixed strings. They never contain provider error text, amounts, identities or how much budget is left.
+
+## Codes
+
+| HTTP | `code` | Meaning | Retry |
+|---|---|---|---|
+| 400 | `invalid_request_error` | A field or value outside the supported subset, or malformed input. | No: fix the request |
+| 400 | `upstream_rejected` | The provider refused the request (validation, moderation, unknown model). | No |
+| 400 | `unsupported_capability` | Images, audio, rerank, System One, realtime, files, batches and videos: no route can serve this request. | No |
+| 401 | | Missing, repeated or invalid key, or a disabled, revoked or expired one. | No |
+| 404 | `model_not_found` | No such model, or not available to this key. | No |
+| 404 | `not_found` | A file, batch or video id that doesn't exist or belongs to another workspace. | No |
+| 413 | `payload_too_large`, `file_too_large`, `storage_quota_exceeded` | The body, file or workspace storage is over its limit. | No |
+| 429 | `rate_limit_error` | A per-minute or at-once limit, or the provider's rate limit. | Yes, later |
+| 429 | `job_limit_exceeded` | A "jobs at once" limit (batches, videos). | Yes, when a job ends |
+| 429 | `token_reservation_exceeds_limit` | The model's input plus output ceiling is larger than a tokens-per-minute limit. | No |
+| 429 | `budget_exceeded` | A budget would be exceeded in its current window. | No |
+| 429 | `unresolved_usage` | Unknown, unbounded costs block budgeted requests. | No |
+| 501 | `unsupported_capability` | Chat Completions, Responses, Messages and embeddings: no route supports the requested features. | No |
+| 502 | `upstream_unavailable`, `invalid_upstream_response` | The provider failed or answered with something invalid. | Maybe |
+| 503 | `provider_configuration_error` | Configuration problem: a missing credential, an unpriced meter, or a request without an output maximum on a priced model. | No |
+| 503 | `accounting_unavailable` | The gateway couldn't record the request. | Maybe |
+| 504 | `timeout_error` | The request deadline passed (120 seconds unless the operator changed it). | Maybe |
+
+Budget denials use the type `insufficient_quota`; `token_reservation_exceeds_limit` and `job_limit_exceeded` use `rate_limit_error`. On `/v1/messages` every 429 has Anthropic's `rate_limit_error` type, and the message says which case applies.
+
+### Don't retry what can't succeed
+
+`budget_exceeded`, `unresolved_usage` and `token_reservation_exceeds_limit` responses carry `x-should-retry: false`. The official OpenAI and Anthropic SDKs honour it and don't retry. Errors from the Files API, except 503s, carry it too.
+
+### Which scope refused
+
+A limit denial names the scope kind: this API key, this workspace, or the installation. When several refuse at once, the narrowest is reported (key, then workspace, then installation), and budget denials come before rate limits. The installation's budget always reports `budget_exceeded`, even if another workspace's unknown usage is the cause.
+
+## Size limits
+
+Unless the operator changed them:
+
+| What | Limit |
+|---|---|
+| JSON request body | 2 MiB |
+| Image generation, rerank, System One, speech request body | 2 MiB each |
+| Transcription upload | 25 MiB file, 26 MiB request |
+| Files API upload | 200 MiB |
+| Batch input | 50,000 lines, 4 MiB each |
+| Provider response | 4 MiB (images: 20 MiB) |
+| Embeddings | 128 inputs, 1 MiB of text in total |
+| Request deadline | 120 seconds |
+
+The operator's settings are in [Configuration](/docs/self-hosting/configuration).

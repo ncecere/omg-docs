@@ -1,0 +1,74 @@
+---
+title: Identity setup
+description: Configure OpenID Connect sign-in, the groups claim, the first Platform Admin, signing-key refresh and SCIM.
+---
+
+The dashboard signs people in with **OpenID Connect** (authorization code with PKCE). There are no local passwords and no development login.
+
+## Register a client
+
+In your identity provider, create a web application client:
+
+- **Redirect URI**: `https://ai.example.edu/api/v1/auth/callback`, your public URL plus `/api/v1/auth/callback`.
+- **Grant**: authorization code, with S256 PKCE. A public or a confidential client both work.
+- **Scopes**: the gateway asks for `openid email profile`.
+- **ID token claims**: `email`, `email_verified: true`, and a **groups** claim that is a list of strings (an empty list when no groups match). An optional `name` is shown as the person's display name.
+
+Then set:
+
+```sh
+GATEWAY_PUBLIC_URL=https://ai.example.edu
+GATEWAY_OIDC_ISSUER=https://login.example.edu
+GATEWAY_OIDC_CLIENT_ID=ai-gateway
+GATEWAY_OIDC_CLIENT_SECRET=…          # confidential clients only
+GATEWAY_OIDC_GROUPS_CLAIM=groups      # the default
+```
+
+- The issuer must be exact, including any path, as published in its discovery document.
+- Everything must use HTTPS. Only `GATEWAY_ENV=development` allows plain HTTP, and only on loopback addresses.
+- If the issuer can't be reached at startup, the gateway doesn't start.
+- **Admin › Settings › Sign-in** shows the configuration in use and the callback URL to register (never the secret).
+
+## The first Platform Admin
+
+Signing in doesn't grant access: a person needs a platform role. Make the first admin with:
+
+```sh
+open-model-gateway provision-user --email morgan.lee@example.edu --platform-admin
+```
+
+It runs with the migrator's database access. It gives the email the Admin role and allows one first sign-in with that **verified** email to link to the account. Then map groups in [Admin › SSO groups](/docs/administration/sso-groups) for everyone else. Without `--platform-admin`, the command grants the User role.
+
+## How sign-in works
+
+- People are identified by the issuer and subject, not their email. Changing an email at the identity provider doesn't move anyone to another account.
+- Group claims are read at every sign-in, from the signature-checked ID token. A missing or malformed groups claim refuses sign-in without removing anything.
+- Sessions last 12 hours and are stored as hashes. The `omg_session` cookie is `HttpOnly` and `SameSite=Lax`; `omg_csrf` is `SameSite=Strict`. Every change in the dashboard must also send a matching `Origin` and CSRF header.
+- The gateway doesn't call the userinfo endpoint and doesn't keep the identity provider's access or refresh tokens.
+- Signing out ends the gateway session only, not the identity provider's.
+
+## Signing keys
+
+The identity provider's signing keys (JWKS) are fetched at startup and cached:
+
+- for the time its `Cache-Control: max-age` says, between 5 minutes and 24 hours (one hour if it doesn't say);
+- a token signed with an unknown key triggers one refetch, at most once a minute, shared by concurrent sign-ins;
+- if fetching fails, the last good keys are used for up to 6 hours past their expiry, then sign-in fails with `503` until a fetch works;
+- only asymmetric algorithms are accepted (RS, PS, ES and EdDSA). `none` and HMAC are always refused.
+
+**Settings › Sign-in** shows how many keys are cached, when they were fetched and whether they are current.
+
+## SCIM
+
+To let your identity provider push deactivations and group changes, choose a variable name for the token and give it a long random value:
+
+```sh
+GATEWAY_SCIM_TOKEN_ENV=IDP_SCIM_TOKEN
+IDP_SCIM_TOKEN=$(openssl rand -hex 32)
+```
+
+The token must be 32 to 1,024 printable characters without spaces. The gateway keeps only its hash; to rotate it, change the value and restart. SCIM needs OIDC. Give the identity provider `https://ai.example.edu/scim/v2` and the token as a bearer header. Without `GATEWAY_SCIM_TOKEN_ENV`, every `/scim` path returns `404`. See [SCIM provisioning](/docs/administration/scim).
+
+## At the edge
+
+Rate-limit `/api/v1/auth/*` and `/scim` at your proxy, and keep callback query strings, cookies and `Authorization` headers out of logs.

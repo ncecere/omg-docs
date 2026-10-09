@@ -1,0 +1,81 @@
+---
+title: Pricing
+description: Price lines and meters, prompt-size tiers, image variants, token ceilings, batch prices and importing OpenRouter prices.
+---
+
+Every route has its own prices. The gateway uses them to hold the most a request could cost before sending it, to enforce budgets, and to estimate what it cost afterwards. Prices are your estimates of what the provider charges, not invoices.
+
+<Screenshot slot="admin-price-editor" />
+
+## Price versions are immutable
+
+Publishing a price creates a new **version**. Old versions are never changed, and every request keeps the version it was admitted with, so a new price never reprices past requests. **Price history** on the model's page lists every version.
+
+In **Admin › Models**, the table view's **Priced routes** column flags enabled routes without a price, and the **Unpriced only** filter lists them (the setup checklist's "Price routes" link opens it). An enabled route without a price still serves requests when no budget applies to them, but their cost is recorded as unknown.
+
+## Price lines
+
+A price is a set of **lines**, each a rate for one **meter**, written the way providers publish them:
+
+| Meter | Unit |
+|---|---|
+| Input tokens, output tokens | per million tokens |
+| Cache read tokens; cache write tokens (default, 5-minute, 1-hour) | per million tokens |
+| Audio input tokens, cached audio tokens, audio output tokens | per million tokens (realtime only) |
+| Output images | per image, optionally per size variant |
+| Input characters | per million characters |
+| Audio input, audio output | per second, minute or hour |
+| Video output | per second, minute or hour, per resolution |
+| Search units | per search |
+| Requests | per request |
+
+Each line is one of:
+
+- **Priced**: a rate in US dollars, stored as exact integer micro-dollars. `0` means free, and shows as "Free".
+- **Not applicable**: this meter can't happen on this route. If the provider reports usage on it anyway, the request is flagged, not valued at zero.
+- **Not priced** (no line): unknown. A request that could use an unpriced meter has an unknown cost and can't run under a budget.
+
+**Mark all free** sets every meter to free, for example for a self-hosted model you don't charge for.
+
+### Prompt-size tiers
+
+A line can apply only when the prompt is larger than a threshold: **Applies when prompt exceeds (tokens)**. The threshold is strict ("272000" means more than 272K tokens), and the highest exceeded tier wins.
+
+### Image variants
+
+Output-image lines can be per **variant**, the size the provider reports, such as `1024x1024` or `1K`. **Add resolution tier** adds one. A line without a variant is the default for other sizes.
+
+## Token ceilings
+
+Every price also has two **ceilings**:
+
+- **Hard upstream input token ceiling**: the most input a request may have, including cached tokens. Set it to the real limit of the model on that route.
+- **Hard upstream output token ceiling**: the most output a request may ask for.
+
+Before sending a request, the gateway holds the input ceiling's worth of input plus the request's own output maximum, at the highest applicable rates. That hold counts against budgets and against tokens-per-minute limits. So:
+
+- Keep both ceilings within your tokens-per-minute limits, or requests are refused with `token_reservation_exceeds_limit`. The model shows **Needs attention** when that would happen.
+- Requests must send an output maximum no higher than the output ceiling; see [Calling the API](/docs/using/calling-the-api#always-set-an-output-maximum).
+- Embeddings and rerank hold no output. Text-to-speech and per-second speech-to-text prices can set the input ceiling to 0 when every input-token meter is not applicable.
+- For meters that aren't tokens, the hold needs a bound too. Some come from the request itself: one request, the number of images asked for, the characters to speak, the measured length of an uploaded audio file. Others, such as search units, need a maximum set in the price, or the cost is unbounded and budgeted requests are refused.
+
+## Batch prices
+
+A price can also carry **Batch prices**: the rates a provider publishes for its batch API, such as OpenAI Batch or Anthropic Message Batches. They must cover exactly the same meters as the standard lines.
+
+- They apply only to **native** batches on that route. Gateway-run batch lines and ordinary requests always use the standard lines.
+- The gateway never works them out for you (no automatic 50% discount). Without batch prices, native batches are charged standard prices and show **No batch price**.
+
+## Import an OpenRouter price
+
+On an OpenRouter route, **Import current OpenRouter price** fills the form with a draft from OpenRouter's public model catalog, read by the gateway without any key. Nothing is published until you choose **Publish price**.
+
+- When recent requests on the route reported their cost, the import picks the OpenRouter provider endpoint whose prices match it; otherwise the cheapest available endpoint, flagged for review.
+- Lines that need a decision are marked **Needs review**, such as per-image and audio prices. Rerank prices aren't in the catalog and are left for you.
+- The draft's ceilings are conservative (at most 8,192 input and 1,024 output tokens), so imported routes fit default limits. **Use imported ceilings** replaces ceilings you already entered.
+
+## Cost evidence and reconciliation
+
+Some providers report their own cost (OpenRouter's `usage.cost`). The gateway records it as evidence beside its estimate, never as the charge.
+
+When a request's usage is unknown (the provider didn't report it, or the connection dropped), its hold stays in place and counts against budgets. A Platform Admin who has the actual usage from the provider can resolve it with an evidence reference, through the management API's reconciliation endpoint. Resolving keeps every earlier observation; it never deletes history. See [Management API](/docs/api/management-api).

@@ -1,0 +1,53 @@
+---
+title: Usage and costs
+description: Spend, requests, tokens and storage over time, broken down by model, key and member, with what is still on hold.
+---
+
+**Usage & costs** answers "what did we use, and what did it cost?" for the selected workspace, over a period you choose.
+
+<Screenshot slot="usage-overview" />
+
+## Who sees what
+
+The same rules as [Logs](/docs/using/logs): members see their own keys' activity, workspace owners and admins see the whole workspace, and a personal workspace is its owner's alone. Platform Admins and Auditors also see personal workspaces' **totals** in Admin, never their keys or requests.
+
+## Choose a period
+
+Periods are UTC calendar days, from 1 to 93 days, and the default is the current month. The end date is the last day included. Each figure is compared with the same length of time just before.
+
+## Overview
+
+- **Spend**: the settled cost estimate for the period, with the amount still **on hold** and the number of attempts whose cost is unresolved shown beside it.
+- **Requests** (with the number of upstream attempts) and **Tokens** (input and output).
+- **Cache hit rate**: cached input as a share of all input, for requests whose provider reports both.
+- **Cost per 1M tokens**: settled cost divided by the tokens of settled requests.
+- A chart of each day, and the top models, API keys and members (members only for workspace admins) by spend.
+- For admins, an **Accounting** section: how much of the period is settled, pending or unknown, and which requests need attention.
+
+Filter by model, API key, member, status or cost, and every figure follows.
+
+## Explore
+
+**Explore** builds a breakdown: pick a measure (spend, requests, tokens or cache hit rate), group it by model, key, member, provider, cost center or day, and optionally by a second dimension. The top groups are shown with their share of the total, an "other" row for the rest, and a daily series. Grouping by member needs workspace-wide visibility. The table can be exported as CSV.
+
+<Screenshot slot="usage-explore" />
+
+## Cost records
+
+**Cost records** lists individual attempts with their tokens, cost or hold, price version and accounting state, and exports them as CSV, one page of up to 1,000 rows at a time. Unknown values are empty cells, never zeros.
+
+## Storage
+
+Workspace admins and personal owners also see how much the workspace kept in the [file store](/docs/using/files): GB-days by purpose, day by day, and the current use against the workspace's storage quota. Storage is **Not charged**: it is measured but has no price.
+
+## How costs work
+
+- **Configured estimates.** A Platform Admin sets each route's prices. The gateway multiplies what the provider reports by those prices. It is not the provider's invoice, and a provider's own discounts, credits or rounding aren't included.
+- **Exact amounts.** Money is counted in whole micro-dollars (millionths of a US dollar), each part rounded up, with no floating point. A request's cost is settled once, with the price version it was admitted under.
+- **Holds.** Before sending a request, the gateway holds the most it could cost. When usage comes back, the hold becomes the actual estimate. If usage never comes back (a dropped connection, a provider error), the hold stays, marked unknown, until an administrator resolves it with evidence. Holds count against budgets.
+- **Unknown is never free.** A missing price or missing usage stays unknown. Totals that include unknown costs are lower bounds.
+- **Failovers cost more than once.** If a request fell back to another route, each attempt is its own charge.
+
+## When a budget runs out
+
+When a request would push any applicable budget past its limit, the gateway refuses it before sending it, with `429 budget_exceeded`. The message says whether the key's, the workspace's or the installation's budget is the reason, but never how much is left of a budget you can't see. Budgets reset at the start of their next UTC day, ISO week or month; lifetime budgets don't reset. Raising a budget doesn't reset what was already spent. See [Errors and limits](/docs/api/errors-and-limits).

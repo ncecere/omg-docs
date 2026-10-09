@@ -1,0 +1,58 @@
+---
+title: Audio
+description: Speech to text with POST /v1/audio/transcriptions and text to speech with POST /v1/audio/speech, on OpenAI and OpenRouter.
+---
+
+## Transcriptions
+
+```sh
+curl https://ai.example.edu/v1/audio/transcriptions \
+  -H "Authorization: Bearer $OMG_API_KEY" \
+  -F model=example/transcribe -F file=@lecture.mp3 -F response_format=json
+```
+
+A `multipart/form-data` request, as the OpenAI SDKs send it.
+
+| Field | Supported |
+|---|---|
+| `file` | Exactly one, with a filename ending in `flac`, `mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `ogg`, `wav` or `webm`, whose content matches. Up to 25 MiB. The filename is never sent upstream. |
+| `model` | Required. |
+| `language` | 2 or 3 lowercase letters. |
+| `prompt` | Up to 4,096 bytes. Not on OpenRouter, which ignores it. |
+| `response_format` | `json` (default) or `text`. |
+| `temperature` | 0 to 1. |
+| `stream` | Absent or `false`. |
+
+Refused with `unsupported_capability`: `verbose_json`, `srt`, `vtt`, `diarized_json`, timestamp granularities, `include`, chunking and streaming.
+
+The response is `{"text": "…", "usage": …}` (or plain text with `response_format=text`). `usage` is the provider's, either tokens or seconds, and is left out if nothing was reported. Transcripts are never logged or stored.
+
+### Duration and cost
+
+The gateway measures WAV, MP3, Ogg and FLAC files itself before sending them, and holds the cost of that duration plus one second. MP4, M4A and WebM aren't measured, so their cost is bounded only by the price's per-request maximum; without one, they can't run under a budget.
+
+## Speech
+
+```json
+{"model": "example/voice", "input": "Welcome to the library.", "voice": "alloy", "response_format": "mp3"}
+```
+
+| Field | Supported |
+|---|---|
+| `model`, `input` | Required. `input` up to 4,096 characters (Unicode characters, not bytes). |
+| `voice` | 1 to 64 of letters, digits and `. _ : -`. Voices depend on the model. |
+| `response_format` | `mp3` (default), `wav`, `opus`, `pcm`. OpenRouter supports `mp3` and `pcm` only. |
+| `speed` | 0.25 to 4. |
+
+Refused: `aac`, `flac`, `instructions` and `stream_format: "sse"`.
+
+The response is the audio itself, streamed as it arrives, with `Content-Type` `audio/mpeg`, `audio/wav`, `audio/opus` or `audio/pcm`. If the provider fails after audio has started, the transfer is cut off rather than ended cleanly. Output is limited to 64 MiB. Closing the connection cancels the provider's request; the attempt keeps its hold, because the provider may still charge.
+
+Speech is valued from the exact number of input characters. Providers don't report usage on this route.
+
+## Providers
+
+| Connection | Transcriptions | Speech |
+|---|---|---|
+| OpenAI | Native, multipart | Native: `mp3`, `wav`, `opus`, `pcm` |
+| OpenRouter | Sent as base64 audio; no `prompt` | `mp3`, `pcm` |

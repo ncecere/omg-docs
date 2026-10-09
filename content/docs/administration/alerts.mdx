@@ -1,0 +1,48 @@
+---
+title: Alerts
+description: Installation-wide alert rules for budgets, spend spikes, error rates, failing connections and batches, their history and email delivery.
+---
+
+**Admin › Settings › Alerts** holds installation-wide rules (**Rules**) and every incident they raised (**History**). Platform Admins edit; Auditors read. Each rule opens on its own page with **Cancel** and **Save** in the header.
+
+<Screenshot slot="admin-alerts" />
+
+Alerts notify; they never block a request. Budgets are enforced on their own.
+
+## Rule kinds
+
+| Kind | Fires when |
+|---|---|
+| **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50, 80 and 100 by default). Watch any layers: installation, type default, override, workspace and key. Team and Project workspaces are checked one by one; personal workspaces are not. |
+| **Spend spike** | Settled spend in the last hour is at least a multiple of the hourly average over the previous 7 days (a factor from 1.1× to 1,000×), and above a minimum amount. |
+| **Error rate** | Failed requests reach a percentage of finished ones in a window of 5 to 1,440 minutes, with at least a minimum number of requests. |
+| **Failing connection** | For every enabled connection, or one you choose: its last N attempts all failed upstream, or its upstream error rate in the window crosses the threshold. Rejected or cancelled requests don't count. |
+| **Batch failed** | A Team or Project batch ended failed or expired. One incident per batch, closed after 24 hours. |
+| **Batch stalled** | A Team or Project batch has made no progress for a chosen time (5 to 1,440 minutes). Time spent legitimately [waiting for capacity](/docs/administration/batch-scheduling#what-people-see) doesn't count. |
+
+Workspace admins can make the same kinds of rule (except failing connections and the installation layer) for their own Team or Project; see [Alerts and notifications](/docs/using/alerts-and-notifications).
+
+<Screenshot slot="admin-alert-rule" />
+
+## Recipients
+
+Each rule notifies any of: the workspace's admins (workspace rules), the **Platform Admins**, and up to 10 email addresses. In the dashboard, installation incidents appear in the Notifications of every Platform Admin and Auditor.
+
+## Built-in alerts
+
+- **Personal budgets**: every personal workspace alerts its owner at 80% and 100%. Nobody else sees these.
+- **SCIM tried to remove the last Platform Admin**: opened when SCIM is refused for that reason, for Platform Admins and Auditors, and emailed to Platform Admins. It clears when a second active Platform Admin exists.
+
+## How evaluation works
+
+- The gateway evaluates rules every 60 seconds unless the operator changed the interval. Only one replica evaluates at a time.
+- Each rule has at most one open incident per subject. A budget alert that reaches a higher threshold supersedes the open one; a new window, a raised budget or a revoked key clears it.
+- Spend is settled cost plus holds, as budgets count it. Requests with unknown costs are left out and flagged, so the alert says spend may be higher. Spend spikes use settled cost only.
+- Turning a rule off, deleting it, or disabling its workspace closes its incidents without email. Deleted rules keep their history.
+- At most 50 rules per scope.
+
+## Email
+
+When an SMTP relay is set up in [Settings › Email](/docs/administration/settings#email), incidents are emailed when they fire and when they clear. Each delivery's outcome is kept with the incident: sent, partly sent, failed (with a reason such as authentication or connection), not configured, or no recipients. Email is sent once, with no retries; a failed email never stops evaluation.
+
+Incidents and emails contain a generated summary, the scope, the rule and the time, with a link to Notifications when the public URL is configured. They never contain prompts, responses, key names or who made a request.

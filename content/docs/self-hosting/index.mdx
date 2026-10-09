@@ -1,0 +1,48 @@
+---
+title: Self-hosting
+description: What it takes to run Open Model Gateway, and how the pieces fit together.
+---
+
+Open Model Gateway is one Rust service and a PostgreSQL database. These pages are for the operators who install and run it.
+
+```text
+TLS reverse proxy (your choice)
+    └─ open-model-gateway  (one container, port 8080)
+       ├─ dashboard          the built React app, served by Rust
+       ├─ /api/v1/*          management API (browser sessions)
+       ├─ /v1/*              inference API (API keys)
+       ├─ /scim/v2/*         SCIM (optional)
+       └─ /health/*          liveness and readiness
+            ├─ PostgreSQL 17      identity, configuration, accounting
+            ├─ file store         local disk or S3-compatible (optional)
+            └─ providers          cloud APIs and approved self-hosted servers
+```
+
+## What you need
+
+- A container runtime, or a Linux host to run the binary.
+- **PostgreSQL 17**, with three roles: a cluster administrator, a **migrator** that owns the schema, and a restricted **runtime** role for the gateway.
+- An **OpenID Connect** identity provider for dashboard sign-in, with a registered client and a signed groups claim.
+- **HTTPS** in front of the gateway, with a stable public hostname.
+- Optionally: S3-compatible object storage (or a local directory) for files and batches, an SMTP relay, Prometheus.
+
+No Node.js, Redis or message queue is needed at run time.
+
+## Pages
+
+<Cards>
+  <Card title="Container and Compose" href="/docs/self-hosting/container">The image, its entrypoint, and a Compose layout with HTTPS.</Card>
+  <Card title="Configuration" href="/docs/self-hosting/configuration">Every environment variable, with defaults.</Card>
+  <Card title="Database and migrations" href="/docs/self-hosting/database-and-migrations">Roles, grants and explicit migrations.</Card>
+  <Card title="Identity setup" href="/docs/self-hosting/identity">OIDC, the first admin, signing keys and SCIM.</Card>
+  <Card title="Provider credentials" href="/docs/self-hosting/provider-credentials">Secret references, allowlists, AWS identities and local endpoints.</Card>
+  <Card title="File storage" href="/docs/self-hosting/file-storage">Encrypted storage on S3, MinIO, RustFS or local disk.</Card>
+  <Card title="Metrics and monitoring" href="/docs/self-hosting/metrics-and-monitoring">Health checks, Prometheus metrics, alert rules and a dashboard.</Card>
+  <Card title="Backups and restore" href="/docs/self-hosting/backups-and-restore">Checksummed dumps, guarded restores and drills.</Card>
+  <Card title="Upgrades" href="/docs/self-hosting/upgrades">Forward-only migrations and the upgrade procedure.</Card>
+  <Card title="Security" href="/docs/self-hosting/security">What the gateway protects, and what is still yours to do.</Card>
+</Cards>
+
+<Callout type="warn" title="Pre-1.0">
+  The repository includes a single-host staging setup and operations runbooks, tested locally. Live identity-provider and provider acceptance, production load testing, off-host recovery and an independent security review are still open. Pilot with a small group, a private network and low budgets first.
+</Callout>

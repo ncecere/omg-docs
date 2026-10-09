@@ -1,0 +1,45 @@
+---
+title: SSO groups
+description: Map identity-provider groups to platform roles and to Team or Project memberships.
+---
+
+**Admin › SSO groups** maps groups from your identity provider to access in the gateway. When someone signs in, the gateway reads the groups in their signed ID token and gives them whatever those groups map to.
+
+<Screenshot slot="admin-sso-groups" />
+
+## Create a mapping
+
+**Create SSO group mapping** asks for:
+
+| Field | Meaning |
+|---|---|
+| **OIDC issuer** | Your identity provider's issuer, as configured on the server. |
+| **Verified group-claim value** | The group exactly as it appears in the token's groups claim, for example `ai-gateway-users`. |
+| **Mapping target** | **Platform role** or **Team or Project membership**. |
+| **Platform role** | For a platform target: Platform user, Platform auditor or Platform admin. |
+| **Team or project** and **Membership role** | For a membership target: the shared workspace, and **Member** or **Admin**. Groups can't make owners. |
+
+Example mappings for Example University:
+
+| Group | Gives |
+|---|---|
+| `ai-gateway-users` | Platform user |
+| `ai-gateway-audit` | Platform auditor |
+| `ai-gateway-admins` | Platform admin |
+| `chem-teaching-staff` | Member of the Team "Chemistry Teaching" |
+
+## How it works
+
+- **At sign-in.** The groups claim is read from the signature-checked ID token each time someone signs in. New matches add grants; grants from groups the person has left are removed.
+- **Separate from manual access.** A grant from a group is recorded as such. Removing it never touches a manual grant or membership for the same person, and a manual grant doesn't stop a group grant from being removed.
+- **Missing or malformed claims fail safe.** An empty list (`[]`) is a valid "no groups". A missing or malformed claim refuses the sign-in without removing anything.
+- **Editing or deleting a mapping** removes the grants it made, at once. New grants from a changed mapping arrive when people next sign in (or at the next SCIM change to that group).
+- The last Platform Admin's grant is protected: a change that would remove it is refused.
+
+<Callout type="warn" title="Without SCIM, removals wait for sign-in">
+  Group changes reach the gateway when the person signs in. Someone removed from a group who never signs in again keeps their access until they do. Use [SCIM](/docs/administration/scim) to push changes as they happen, or suspend people by hand.
+</Callout>
+
+## The groups claim
+
+The claim's name is set by the operator (`GATEWAY_OIDC_GROUPS_CLAIM`, `groups` by default). It must be a list of strings in the ID token. **Settings › Sign-in** shows the claim name and the number of enabled mappings. See [Identity setup](/docs/self-hosting/identity).

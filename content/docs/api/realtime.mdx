@@ -1,0 +1,56 @@
+---
+title: Realtime
+description: GET /v1/realtime, a WebSocket proxy for OpenAI's Realtime (GA) interface with an event allowlist and per-response budgets.
+---
+
+```http
+GET /v1/realtime?model=example%2Fvoice
+Upgrade: websocket
+Authorization: Bearer omg_...
+```
+
+Served on **OpenAI** routes. The guide is [Realtime audio](/docs/using/realtime); this page lists the rules.
+
+## Connecting
+
+- Authenticate with `Authorization: Bearer` **or** the subprotocol `openai-insecure-api-key.<key>`, not both. The server answers with the `realtime` subprotocol only.
+- The query has `model` once, and nothing else.
+- Before the upgrade, failures are ordinary JSON errors: `401`, `404 model_not_found`, `400 unsupported_capability`, `429` for budgets and limits, `503` for configuration problems.
+- `X-Session-Id` and `X-Title` headers label the session in Logs.
+
+Refused with `400 unsupported_capability`: the beta interface (`OpenAI-Beta: realtime=v1`), other subprotocols, `POST /v1/realtime/client_secrets` and `POST /v1/realtime/calls`.
+
+## Client events
+
+Text frames of JSON only (binary frames close the socket with 1003).
+
+| Event | Rules |
+|---|---|
+| `session.update` | `session.type: "realtime"`. Allowed: `instructions`, `output_modalities` (one of `text`, `audio`), `max_output_tokens` (up to the window), input audio format, noise reduction and turn detection (none, or voice detection with `create_response: false` and no idle timeout), `transcription: null`, output audio format, voice and speed, function `tools`, `tool_choice`, `truncation`. |
+| `input_audio_buffer.append`, `.commit`, `.clear`; `output_audio_buffer.clear` | Forwarded. |
+| `conversation.item.create` | `message` items (input and output text and audio), `function_call`, `function_call_output`. No `input_image`. |
+| `conversation.item.delete`, `.retrieve`, `.truncate` | Forwarded. |
+| `response.create` | Allowed: `instructions`, `output_modalities`, `max_output_tokens` (1 to the window; the gateway adds one if missing), `metadata` (up to 16 pairs), function `tools`, `tool_choice`, output audio format and voice, `conversation: "auto"`. One response at a time. |
+| `response.cancel` | Forwarded. |
+
+Anything else gets an `error` event (`unsupported_event`, `unsupported_capability` or `invalid_request_error`, with your `event_id`) and close 1008.
+
+## Server events
+
+Forwarded as received, with the model shown as the gateway name, except: `rate_limits.updated` isn't forwarded (it describes the gateway's provider account); upstream `error` events are rebuilt with a generic message; input transcription events end the session, because that work can't be accounted for.
+
+## Limits
+
+| Setting | Default |
+|---|---|
+| Session length | 900 seconds |
+| Idle time (no frames either way) | 120 seconds |
+| Output tokens per response | 4,096, and no more than the price's output ceiling |
+| Client message size | 1 MiB |
+| Client events per second | 50 (bursts up to 100) |
+
+A session holds one of the gateway's concurrent-request slots for its whole life. Upstream failures close with 1011.
+
+## Accounting
+
+One session is one request and one hold. Each `response.create` reserves a window sized from the session's conversation so far, and each `response.done` settles it. Realtime prices must be price lines (they need audio-token meters). See [Realtime audio](/docs/using/realtime#budgets).

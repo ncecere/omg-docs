@@ -1,0 +1,19 @@
+{
+  "title": "Self-hosting",
+  "description": "Installing and operating Open Model Gateway",
+  "root": true,
+  "pages": [
+    "index",
+    "container",
+    "configuration",
+    "database-and-migrations",
+    "identity",
+    "provider-credentials",
+    "file-storage",
+    "---Operating---",
+    "metrics-and-monitoring",
+    "backups-and-restore",
+    "upgrades",
+    "security"
+  ]
+}

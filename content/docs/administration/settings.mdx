@@ -1,0 +1,85 @@
+---
+title: Settings
+description: Installation settings in Admin, for general settings, defaults and limits, data and privacy (including file storage), email, alerts and sign-in.
+---
+
+**Admin › Settings** holds installation-wide settings. Platform Admins change them; Auditors read them. Every change is written to the [audit log](/docs/administration/audit-log), with typed details only, never addresses, URLs or credentials.
+
+| Page | Holds |
+|---|---|
+| **General** | Name, support URL, logo URL, maximum lifetime of people's keys |
+| **Defaults & limits** | The installation ceiling and the Personal, Team and Project defaults; see [Limits and budgets](/docs/administration/limits-and-budgets) |
+| **Data & privacy** | OpenRouter data collection, request log retention, prompt storage, and the file store |
+| **Email** | The SMTP relay for invitations and alerts |
+| **Alerts** | Installation alert rules and history; see [Alerts](/docs/administration/alerts) |
+| **Sign-in** | Read-only identity configuration, signing-key status and SCIM status |
+
+## General
+
+<Screenshot slot="admin-settings-general" />
+
+- **Display name**: 1 to 120 characters, shown as the installation's name in the sidebar.
+- **Support URL** and **logo URL**: optional `https://` addresses shown to signed-in users. The gateway never fetches them.
+- **Maximum key lifetime**: 1 to 365 days (365 by default) for keys people create or rotate for themselves. Existing keys keep their expiry. Service-account keys can always last up to 365 days.
+- **Time zone**: UTC, fixed. Budget windows, reports and dates all use UTC.
+
+## Data & privacy
+
+<Screenshot slot="admin-settings-privacy" />
+
+| Setting | Values |
+|---|---|
+| **OpenRouter data collection** | **Deny** (default) or **Allow**, sent with every OpenRouter request. Deny excludes OpenRouter providers that may train on prompts, including all `:free` variants. |
+| **Request log retention** | Keep (default), or 30 to 3,650 days. After it, finished requests' error codes, timings and session and app labels are cleared, hourly. Usage, costs, prices, the ledger and the audit log are never deleted. |
+| **Prompt and response storage** | **Never stored.** A fact, not a setting. |
+
+The operator can fix either setting with an environment variable (`GATEWAY_OPENROUTER_DATA_COLLECTION`, `GATEWAY_EXECUTION_DETAIL_RETENTION_DAYS`). It then shows as locked and can't be changed here.
+
+### Storage
+
+The **Storage** card covers the gateway's encrypted [file store](/docs/self-hosting/file-storage). Where it is and how it is encrypted come from the server environment and are shown read-only: the backend (**Off**, **Local disk**, **Amazon S3** or **S3-compatible**), the bucket and endpoint host (marked HTTP if it isn't HTTPS), the active encryption key id and the number of older keys, and the last health check.
+
+Below it, one row per kind of file, with whether it is **Allowed**, how long to **Keep for**, and how much is **Stored**:
+
+| Kind | Allow | Retention |
+|---|---|---|
+| **Batch files** (batch inputs and results) | Off by default | 7 days by default |
+| **Video outputs** | Off by default | 7 days by default |
+| **User files** (Files API uploads other than batch) | Off by default | 30 days by default |
+| **Exports** | Follows the store | 1 day by default |
+| **Branding** | Follows the store | Never expires |
+
+- Retention is 1 to 365 days, and applies to existing files too: shortening it expires older files at once.
+- Turning on a kind needs a configured store and a passing health check, which runs when you save.
+- Turning a kind off stops new files; existing ones stay until their retention ends.
+- **Test storage** writes, reads and deletes a small object, and records the result (up to 5 tests a minute per admin).
+
+## Email
+
+<Screenshot slot="admin-settings-email" />
+
+An SMTP relay sends invitation codes and alert emails. Without one, workspace admins send invite codes themselves, and alerts appear in the dashboard only. Turning **Send email** off clears the relay settings.
+
+| Field | Notes |
+|---|---|
+| **Host** and **port** | Your relay, for example `smtp.example.edu` and `587`. |
+| **Security** | STARTTLS (required, never optional; usually port 587) or implicit TLS (usually 465). Unencrypted is allowed only for a relay on the same machine. |
+| **Username** and **Password reference** | Leave both empty if the relay doesn't need sign-in. The password is a reference such as `env:SMTP_PASSWORD`, to a variable the operator has allowed in `GATEWAY_SECRET_ENV_ALLOWLIST`. It is never stored or shown. |
+| **From address** and **From name** | For example `ai-gateway@example.edu`, "Example University AI Gateway". |
+
+The status reads **Not configured**, **Credential unavailable** (the variable is unset or no longer allowed) or **Ready**. **Send test email** sends a fixed message to your own verified address and reports a category on failure (credential, address, connection, TLS, authentication, rejected, timeout). It is limited to 2 a minute per admin and 20 an hour for the installation.
+
+Each message uses its own connection, with no retries. Message bodies and recipients are never logged. Invitation emails contain the code, not a link with the code; they point people to `/invitations/accept` when the public URL is configured.
+
+## Sign-in
+
+<Screenshot slot="admin-settings-sign-in" />
+
+Read-only, from the server's environment (a change needs a restart): whether single sign-on is configured, the issuer, client id, client type (confidential or public), groups claim, public URL, the **callback URL** to register with your identity provider, and the number of enabled SSO group mappings. The client secret is never shown.
+
+It also shows live status:
+
+- **Signing keys**: how many of the identity provider's keys are cached, when they were last fetched, and whether they are current, a cached copy (fetching is failing) or unavailable.
+- **Provisioning (SCIM)**: on or off, the base URL to copy, user and group counts and the last SCIM change. See [SCIM](/docs/administration/scim).
+
+SSO group mappings themselves are on [Admin › SSO groups](/docs/administration/sso-groups).
