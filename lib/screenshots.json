@@ -1,1 +1,222 @@
-{}
+{
+  "admin-add-model": {
+    "src": "/images/admin-add-model.webp",
+    "width": 1440,
+    "height": 1500
+  },
+  "admin-alert-rule": {
+    "src": "/images/admin-alert-rule.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-alerts": {
+    "src": "/images/admin-alerts.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-audit": {
+    "src": "/images/admin-audit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-batch-scheduling": {
+    "src": "/images/admin-batch-scheduling.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-catalogs": {
+    "src": "/images/admin-catalogs.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-connection-bedrock": {
+    "src": "/images/admin-connection-bedrock.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-connections": {
+    "src": "/images/admin-connections.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-key-safety": {
+    "src": "/images/admin-key-safety.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-limits": {
+    "src": "/images/admin-limits.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-logs": {
+    "src": "/images/admin-logs.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-model-detail": {
+    "src": "/images/admin-model-detail.webp",
+    "width": 1440,
+    "height": 2140
+  },
+  "admin-models": {
+    "src": "/images/admin-models.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-overview": {
+    "src": "/images/admin-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-price-editor": {
+    "src": "/images/admin-price-editor.webp",
+    "width": 1440,
+    "height": 1600
+  },
+  "admin-settings-email": {
+    "src": "/images/admin-settings-email.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-settings-general": {
+    "src": "/images/admin-settings-general.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-settings-privacy": {
+    "src": "/images/admin-settings-privacy.webp",
+    "width": 1440,
+    "height": 1700
+  },
+  "admin-settings-sign-in": {
+    "src": "/images/admin-settings-sign-in.webp",
+    "width": 1440,
+    "height": 1300
+  },
+  "admin-sso-groups": {
+    "src": "/images/admin-sso-groups.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-team-detail": {
+    "src": "/images/admin-team-detail.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-usage": {
+    "src": "/images/admin-usage.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-user-detail": {
+    "src": "/images/admin-user-detail.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-users": {
+    "src": "/images/admin-users.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "batch-detail": {
+    "src": "/images/batch-detail.webp",
+    "width": 1440,
+    "height": 1200
+  },
+  "files": {
+    "src": "/images/files.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "home": {
+    "src": "/images/home.webp",
+    "width": 1440,
+    "height": 1500
+  },
+  "key-create": {
+    "src": "/images/key-create.webp",
+    "width": 1440,
+    "height": 1400
+  },
+  "key-created": {
+    "src": "/images/key-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "key-detail": {
+    "src": "/images/key-detail.webp",
+    "width": 1440,
+    "height": 1380
+  },
+  "logs-requests": {
+    "src": "/images/logs-requests.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "logs-sessions": {
+    "src": "/images/logs-sessions.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "model-compare": {
+    "src": "/images/model-compare.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "notifications": {
+    "src": "/images/notifications.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "phone-home": {
+    "src": "/images/phone-home.webp",
+    "width": 1170,
+    "height": 2532
+  },
+  "request-detail": {
+    "src": "/images/request-detail.webp",
+    "width": 1440,
+    "height": 1660
+  },
+  "sign-in": {
+    "src": "/images/sign-in.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "usage-explore": {
+    "src": "/images/usage-explore.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "usage-overview": {
+    "src": "/images/usage-overview.webp",
+    "width": 1440,
+    "height": 2160
+  },
+  "workspace-alerts": {
+    "src": "/images/workspace-alerts.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "workspace-limits": {
+    "src": "/images/workspace-limits.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "workspace-members": {
+    "src": "/images/workspace-members.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "workspace-models": {
+    "src": "/images/workspace-models.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "workspace-switcher": {
+    "src": "/images/workspace-switcher.webp",
+    "width": 1440,
+    "height": 900
+  }
+}

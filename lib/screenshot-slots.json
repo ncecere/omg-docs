@@ -39,7 +39,7 @@
     "files": [
       "key-detail"
     ],
-    "alt": "An API key's page: spending over the last 30 days, its details, and a Safety card listing the finding \"No budget\"."
+    "alt": "An API key's page: its details, spending today, this week and this month, spending over the last 30 days, and a Safety card listing the findings \"Expiry too long\" and \"No budget\"."
   },
   "workspace-models": {
     "files": [
@@ -159,7 +159,7 @@
     "files": [
       "admin-models"
     ],
-    "alt": "Admin Models: models of several types with their routes, price and readiness, one needing attention and one unpriced."
+    "alt": "Admin Models: models of several types with their price, readiness and connection, one needing attention and one not serving."
   },
   "admin-add-model": {
     "files": [
@@ -183,7 +183,7 @@
     "files": [
       "admin-catalogs"
     ],
-    "alt": "Admin Catalogs: three catalogs with their models and who gets them, and the defaults matrix for Personal, Team and Project workspaces."
+    "alt": "Admin Catalogs: three catalogs with their models and who gets them: the Personal, Team and Project defaults and workspaces that chose a catalog themselves."
   },
   "admin-batch-scheduling": {
     "files": [
@@ -201,7 +201,7 @@
     "files": [
       "admin-usage"
     ],
-    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, requests, tokens and cost center, and personal workspaces as totals."
+    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, the amount on hold, requests and attempts with unknown cost; personal workspaces appear as totals only."
   },
   "admin-logs": {
     "files": [
@@ -225,7 +225,7 @@
     "files": [
       "admin-key-safety"
     ],
-    "alt": "Key safety: tiles counting keys by severity and a personal-keys count, and rows of Team and Project keys with findings such as Holder left and No budget."
+    "alt": "Key safety: tiles counting keys by severity and a personal-keys count, and rows of Team and Project keys with findings such as Expiry too long, Unused and All models."
   },
   "admin-audit": {
     "files": [
@@ -237,7 +237,7 @@
     "files": [
       "admin-settings-general"
     ],
-    "alt": "General settings: the installation's display name, support URL, logo URL and maximum key lifetime."
+    "alt": "General settings: the installation's display name, support URL, logo and maximum key lifetime."
   },
   "admin-settings-privacy": {
     "files": [
@@ -249,7 +249,7 @@
     "files": [
       "admin-settings-email"
     ],
-    "alt": "Email settings: an SMTP relay with STARTTLS, a password reference, the From address, and a Ready status with a successful test."
+    "alt": "Email settings: an SMTP relay with STARTTLS, a username and password reference, the From address, and a Ready status that has not been tested yet."
   },
   "admin-settings-sign-in": {
     "files": [
@@ -261,7 +261,7 @@
     "files": [
       "phone-home"
     ],
-    "alt": "Home on a phone: the menu button and Priya Shah's models, usage and keys stacked in one column.",
+    "alt": "Home on a phone: the menu button and Priya Shah's workspaces and models stacked in one column.",
     "phone": true
   }
 }

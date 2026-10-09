@@ -13,20 +13,16 @@ The repository's `Dockerfile` builds everything into one small image:
 
 ### Release images
 
-{/* verify after release-prep */}
 From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-model-gateway`, under three tags:
 
-{/* verify after release-prep */}
 | Tag | Points to |
 |---|---|
 | `vX.Y.Z`, such as `v0.3.0` | That release. |
 | `vX.Y`, such as `v0.3` | The newest patch release of that minor version. |
 | `latest-release` | The newest release. |
 
-{/* verify after release-prep */}
-Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature before you deploy, then pin the image by its digest:
+Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with cosign v3 or newer (cosign v2 doesn't read the signature format and reports "no signatures found"), then pin the image by its digest:
 
-{/* verify after release-prep */}
 ```sh
 cosign verify ghcr.io/ncecere/open-model-gateway:v0.3.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -40,7 +36,7 @@ The tags move; a digest doesn't. Promote the digest you tested, and roll back to
 ```sh
 git clone https://github.com/ncecere/open-model-gateway.git
 cd open-model-gateway
-git checkout v0.3.0        # the release you want, once it is tagged
+git checkout v0.3.0        # the release you want
 docker build -t open-model-gateway:v0.3.0 .
 ```
 

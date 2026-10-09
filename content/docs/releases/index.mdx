@@ -19,8 +19,6 @@ The full history is in the repository's [commits](https://github.com/ncecere/ope
 
 ## How releases are published
 
-{/* verify after release-prep: the second and third items (signed release images, docs/releases/ and the build_info version). */}
-
 - Each release is a Git tag, `vX.Y.Z`, on the main branch.
 - From v0.3.0, each release publishes a signed container image to `ghcr.io/ncecere/open-model-gateway`, tagged `vX.Y.Z`, `vX.Y` (the newest patch of that minor version) and `latest-release` (the newest release). Images are signed with cosign keyless signing; check the signature and deploy by digest. See [Container and Compose](/docs/self-hosting/container#release-images).
 - Each release's notes are also in the repository, in `docs/releases/` (for example `docs/releases/v0.3.0.md`), and the binary reports its release as the `version` of `gateway_build_info`.
