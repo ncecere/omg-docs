@@ -5,6 +5,7 @@
   "pages": [
     "index",
     "container",
+    "kubernetes",
     "configuration",
     "database-and-migrations",
     "identity",
@@ -12,6 +13,7 @@
     "file-storage",
     "---Operating---",
     "metrics-and-monitoring",
+    "scaling",
     "backups-and-restore",
     "upgrades",
     "security"

@@ -41,7 +41,17 @@ Labels are deliberately few: route templates (not raw paths), provider kinds and
 | `gateway_upstream_time_to_first_token_seconds` | histogram | `provider`, `model` |
 | `gateway_inference_tokens_total` | counter | `provider`, `model`, `direction` |
 | `gateway_settlements_total` | counter | `outcome` (`settled`, `unknown`, `held`) |
-| `gateway_admission_denials_total` | counter | `code`, `scope` |
+| `gateway_admission_seconds` / `gateway_settlement_seconds` | histogram | `phase`, `outcome`. Time spent in each phase of admission and settlement, including lock waits; see [Scaling](/docs/self-hosting/scaling#metrics-and-monitoring). |
+| `gateway_scope_lock_wait_seconds` | histogram | `lock` (`authority`, `rows`), `path` (`admission`, `settlement`). Time waiting for a workspace's or key's own scope locks; a rising `rows` tail means one scope is approaching its ceiling. |
+| `gateway_scope_lock_waiting` | gauge | `path`. Governance transactions on this replica waiting for a scope lock right now. |
+| `gateway_lock_deadlock_retries_total` | counter | `path`. Should stay at 0; a rise means a hand-written session changed scopes out of canonical order. |
+| `gateway_cache_lookups_total` | counter | `cache`, `result` (`hit`, `miss`, `bypass`) |
+| `gateway_config_changes_total` / `gateway_config_poll_failures_total` / `gateway_config_listener_up` | counter / counter / gauge | Per-replica configuration cache freshness. |
+| `gateway_work_leases_held` / `gateway_work_lease_terms_total` / `gateway_background_runs_total` | gauge / counter / counter | Which replica holds each singleton background job's lease, and its outcomes. |
+| `gateway_history_partition_months_ahead` | gauge | `table`. Future monthly partitions still available; an alert fires below 2. |
+| `gateway_usage_rollup_hours_total` | counter | Hourly usage rollups computed. |
+| `gateway_history_verify_findings` | gauge | Findings from the hourly `history_verify` job; should stay at 0. |
+| `gateway_admission_denials_total` | counter | `code`, `scope` (`installation` no longer occurs: installation-wide limits were removed in v0.4.0) |
 | `gateway_reservations_held` | gauge | `state` (`pending`, `unknown`) |
 | `gateway_alert_evaluations_total` | counter | `result` |
 | `gateway_alert_rule_failures_total` | counter | |
@@ -71,7 +81,7 @@ The repository's `deploy/monitoring/` has:
 
 - **Held settlements**: the gateway couldn't record a result. Holds are kept, never refunded as zero. Fix the database first; expired holds become unknown, then review unknown usage.
 - **Unknown reservations**: they keep budget holds and can block budgeted requests (`unresolved_usage`). Resolve them with evidence; never delete reservations.
-- **Capacity or pool saturation**: requests beyond `GATEWAY_MAX_CONCURRENT_REQUESTS` get `429`. Admission is serialised per installation, so more connections or replicas don't raise its ceiling; measure before tuning.
+- **Capacity or pool saturation**: requests beyond `GATEWAY_MAX_CONCURRENT_REQUESTS` get `429`. From v0.4.0, admission locks a workspace's and a key's own rows rather than one installation-wide row, so adding replicas raises overall capacity; one workspace or key still tops out on its own rows by design. See [Scaling](/docs/self-hosting/scaling).
 - **Upstream failures**: check the provider and the connection's credential. Routes that keep failing are skipped for their cooldown.
 
 ## Logs

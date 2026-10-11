@@ -7,30 +7,33 @@ Open Model Gateway enforces limits in layers. Every layer that applies is checke
 
 <Screenshot slot="admin-limits" />
 
+<Callout title="No installation-wide limits">
+  From v0.4.0, there is no installation-wide budget or rate limit: limits exist only on workspace-type defaults, platform overrides, workspace caps and keys. To watch total spend without blocking anything, add an **Installation spend** alert instead; see [Alerts](/docs/administration/alerts#installation-spend) and [Upgrades](/docs/self-hosting/upgrades#to-v040).
+</Callout>
+
 ## The layers
 
 | Layer | Set by | Applies to |
 |---|---|---|
-| **Installation ceiling** | Platform Admins | All workspaces together: one shared ceiling. |
 | **Personal / Team / Project default** | Platform Admins | Each workspace of that type, separately. |
 | **Platform override** | Platform Admins, on a Team's or Project's page | One workspace, **instead of** its type default. |
 | **Workspace** | The workspace's owners and admins | One Team or Project, tighten only. |
 | **Key** | Whoever creates or manages the key | One key and its rotations, tighten only. |
 
-Type defaults apply to **each** workspace: a Team default of 2,000 requests per minute gives every Team without an override 2,000 requests per minute, not 2,000 shared between them. The installation ceiling is the one that is shared.
+Type defaults apply to **each** workspace: a Team default of 2,000 requests per minute gives every Team without an override 2,000 requests per minute, not 2,000 shared between them. Nothing is shared across workspaces — workspaces may use more in total than any single reference amount you watch with an installation spend alert.
 
 An override **replaces** the type default completely, including any field you leave blank. To go back, reset the override.
 
 ## What each layer can limit
 
-| Limit | Installation | Type default / override | Workspace | Key |
-|---|---|---|---|---|
-| Requests per minute | ✓ | ✓ | ✓ | ✓ |
-| Tokens per minute | ✓ | ✓ | ✓ | ✓ |
-| Requests at once | ✓ | ✓ | ✓ | ✓ |
-| Jobs at once | ✓ | ✓ (2 by default) | ✓ | ✓ |
-| Storage | | ✓ (1 GiB by default) | ✓ | |
-| Budgets: day, week, month, lifetime | ✓ | ✓ | ✓ | ✓ |
+| Limit | Type default / override | Workspace | Key |
+|---|---|---|---|
+| Requests per minute | ✓ | ✓ | ✓ |
+| Tokens per minute | ✓ | ✓ | ✓ |
+| Requests at once | ✓ | ✓ | ✓ |
+| Jobs at once | ✓ (2 by default) | ✓ | ✓ |
+| Storage | ✓ (1 GiB by default) | ✓ | |
+| Budgets: day, week, month, lifetime | ✓ | ✓ | ✓ |
 
 - **Per-minute limits** use fixed UTC minutes.
 - **Requests at once** counts requests in flight.
@@ -43,9 +46,9 @@ An override **replaces** the type default completely, including any field you le
 - **Every applicable limit applies.** A request must fit all of them.
 - **Blank means inherit.** A layer without a limit doesn't remove its parent's.
 - **Lower layers only tighten.** A workspace or key limit can't be above its parent's for the same thing (a key's daily budget is compared with daily budgets), and once saved it can be lowered but not raised or removed. Different periods are independent.
-- **Child limits don't reserve anything.** A Team limited to 500 requests per minute doesn't set aside 500 of the installation's capacity.
+- **Child limits don't reserve anything.** A Team limited to 500 requests per minute doesn't set aside part of any other workspace's allowance.
 - **Raising a limit never resets spend.** Past requests stay in the window they were admitted in.
-- **Personal workspaces** take their limits from the Personal default, an override and the installation. Their owners can still limit each key.
+- **Personal workspaces** take their limits from the Personal default and an override. Their owners can still limit each key.
 
 ## How budgets are checked
 
@@ -65,12 +68,12 @@ A budget's "used" amount is the settled cost of requests admitted in its window,
 | `budget_exceeded` | A budget would be exceeded in its current window. | No (`x-should-retry: false`) |
 | `unresolved_usage` | Unknown, unbounded costs block budgeted requests. | No (`x-should-retry: false`) |
 
-The message names the scope (API key, workspace or installation) but never an amount or how much is left. When several layers refuse at once, the narrowest scope is reported. The installation's ceiling always reports `budget_exceeded`, so it never reveals another workspace's activity.
+The message names the scope (API key or workspace) but never an amount or how much is left. When several layers refuse at once, the narrowest scope is reported.
 
-## Installation budgets
+## Watching total spend
 
-**Overview** and Admin's **Usage & costs** show each installation budget with its window, settled amount, amount on hold and whether it is exhausted. Use them as a backstop on total spend, on top of workspace budgets.
+There is no installation-wide budget to exhaust. To be notified when total spend across every workspace (personal ones included, as totals) reaches a reference amount you choose, add an **Installation spend** alert (`spend_threshold`) in [Alerts](/docs/administration/alerts#installation-spend). It only notifies: it never blocks a request, so it isn't a layer in the tables above.
 
 ## Alerts
 
-Limits block; alerts warn. Add [budget threshold alerts](/docs/administration/alerts) so people hear before a budget runs out.
+Limits block; alerts warn. Add [budget threshold alerts](/docs/administration/alerts) so people hear before a workspace's or key's budget runs out, and an admission-ceiling alert to learn when one workspace or key is nearing the request rate a single scope can sustain; see [Scaling](/docs/self-hosting/scaling#per-workspace-and-key-ceiling).

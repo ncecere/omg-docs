@@ -43,7 +43,7 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 
 ### Which scope refused
 
-A limit denial names the scope kind: this API key, this workspace, or the installation. When several refuse at once, the narrowest is reported (key, then workspace, then installation), and budget denials come before rate limits. The installation's budget always reports `budget_exceeded`, even if another workspace's unknown usage is the cause.
+A limit denial names the scope kind: this API key or this workspace (there is no installation-wide budget or rate limit to refuse from v0.4.0). When several refuse at once, the narrowest is reported (key, then workspace), and budget denials come before rate limits.
 
 Before v0.3.2, a budgeted request on a price that couldn't bound it was reported as `429 budget_exceeded`. It is now `503 price_unbounded`, because the cause is the price's configuration, not anyone's spending. Without any budget, such a request still runs, and its cost may be recorded as unknown.
 
@@ -55,12 +55,13 @@ The dashboard's [management API](/docs/api/management-api) uses a different shap
 {"error": {"code": "400", "reason": "price_meters_incomplete", "missing_meters": ["search_units", "requests"], "message": "…"}}
 ```
 
-Two reasons concern model setup:
+Three reasons concern this release:
 
 | HTTP | `reason` | When |
 |---|---|---|
 | 400 | `route_unsupported_capability` | From v0.3.2. Creating a route, enabling one, or changing a model's protocols would leave an enabled route on a connection whose profile can't serve the model. The message names the profile, the model's type and what the profile serves. See [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable). |
 | 400 | `price_meters_incomplete` | From v0.3.2. A published price leaves out a meter the route can use. `missing_meters` lists them. See [Pricing](/docs/administration/pricing#every-meter-must-be-stated). |
+| 410 | `installation_limits_removed` | From v0.4.0. `GET`/`PUT /platform/installation/policy` no longer exists: there is no installation-wide budget or rate limit. Use workspace-type defaults, platform overrides or key limits, and an [Installation spend alert](/docs/administration/alerts#installation-spend) to watch total spend. See [Limits and budgets](/docs/administration/limits-and-budgets). |
 
 ## Size limits
 

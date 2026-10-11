@@ -1,0 +1,57 @@
+---
+title: v0.4.0
+description: Replicas finally add capacity, a beta Kubernetes Helm chart, monthly history partitions and archival, an admission-ceiling alert, and installation-wide budgets and limits are removed.
+---
+
+Released 2026-10-10. Migrations `0024` to `0036`.
+
+This release is about scale. Every request used to lock one installation-wide row; that lock is gone, so replicas now add capacity. One workspace or one API key still serializes its own requests on its own budget rows (by design, to keep its budgets exact), so it tops out at a few hundred requests per second — a new **Admission ceiling** alert tells Platform Admins when that happens. The Kubernetes [Helm chart](/docs/self-hosting/kubernetes) is new and **beta**. There are three breaking changes below; read them before you upgrade.
+
+## Replicas finally help
+
+Admission and settlement no longer serialize on one installation-wide row. They now lock a workspace's and a key's own rows instead, so requests from different workspaces run in parallel; a workspace's own requests still serialize on its own totals, which is what keeps its budgets exact. Each replica also caches key metadata, candidate routes and prices, and learns about changes within about a second through PostgreSQL — a revoked key or a tightened budget is still refused on every replica immediately, because admission always re-checks live under its locks. See [Scaling](/docs/self-hosting/scaling).
+
+## Request history stops slowing down
+
+Request history is now partitioned by month, so old months don't slow down or bloat current ones. New months are created automatically ahead of time; an alert fires if they aren't. Long usage ranges and the spend-spike alert read exact hourly rollups instead of scanning raw history. Operators can archive a closed month — a checksummed export, then detach — once it's past retention with no pending or unknown cost. See [Scaling](/docs/self-hosting/scaling#history-partitions-and-archival).
+
+## Installation-wide budgets and limits are removed
+
+There is no longer an installation-wide budget or rate limit. Limits now exist only on workspace-type defaults, platform overrides, tighten-only workspace caps and keys — all still hard limits, exactly as before. To watch total spend without blocking anything, add the new non-blocking **Installation spend** alert instead. See [Limits and budgets](/docs/administration/limits-and-budgets) and [Alerts](/docs/administration/alerts#installation-spend).
+
+## See when one workspace or key nears its ceiling
+
+Because a workspace (or key) still serializes its own admissions, it caps out at a few hundred requests per second on typical hardware however many replicas you run. The new **Admission ceiling** alert names the Team or Project (or says "a personal workspace") whose request rate or lock-wait time crosses your threshold — visible to Platform Admins only. See [Alerts](/docs/administration/alerts#admission-ceiling).
+
+## Helm chart (beta)
+
+A new Helm chart deploys the gateway to Kubernetes: a hardened Deployment, an explicit migration job that never runs automatically, an optional CloudNativePG-managed PostgreSQL cluster and connection pooler, default-deny network policy, and a load-test profile. It's marked **beta**: validated with template rendering, schema checks and a real dry run against a live database operator, but not yet on sustained production load. See [Kubernetes](/docs/self-hosting/kubernetes).
+
+## Breaking changes
+
+- **Installation-wide budgets and rate limits are removed** (migration `0026`). `GET`/`PUT /platform/installation/policy` now return `410 installation_limits_removed`. Any installation budget alert rule you had becomes a non-blocking Installation spend rule, keeping its thresholds and recipients. Workspaces may now use more in total than a former installation ceiling allowed — move any shared ceiling you relied on into type defaults, overrides or keys before upgrading. See [Limits and budgets](/docs/administration/limits-and-budgets).
+- **Reminder: budgeted requests on an unbounded price return `503 price_unbounded`, not `429 budget_exceeded`.** This shipped in v0.3.2 and nothing changes here; it's repeated because the admission path it runs through is rewritten this release.
+- **Workspaces, API keys, routes and cost centers can no longer be deleted, truncated, or have their id changed, by any role.** The product has never performed these operations — it disables, revokes and archives instead — so this changes nothing for normal use. It will break hand-written operator SQL that deleted or re-keyed these rows directly.
+
+Also worth knowing, not strictly breaking: new ids for requests, attempts, ledger entries and audit events are UUIDv7 (time-ordered) instead of UUIDv4 — `x-request-id` values change shape, not format.
+
+## Upgrade guide
+
+Migrations `0024` through `0036`, with new grants to reapply and a `budget verify`/`history verify` check at the end. For a large installation, run `partitions prepare` before your maintenance window to build new indexes online, ahead of the drain. Eight new environment variables, all optional with unchanged defaults. See [Upgrades](/docs/self-hosting/upgrades#to-v040) for the full procedure, and [Configuration](/docs/self-hosting/configuration#scaling) for the new variables.
+
+## Also in this release
+
+- Metrics for admission/settlement phase timing, per-replica caches, background work leases, and per-scope lock waits; see [Scaling](/docs/self-hosting/scaling#metrics-and-monitoring).
+- New CLI commands: `partitions ensure|status|prepare`, `rollups run --once`, `archive partition`/`archive verify`, `history verify`.
+- Creating keys, invitations and sign-in sessions now fails with an error instead of panicking if the OS random number generator fails.
+- `pg_restore` of a database with any reservations works again (it previously failed on databases with reservations; only the restore path was affected).
+
+## Known limitations
+
+- The Helm chart is beta: not yet run against sustained production load or validated on a non-homelab cluster.
+- `GATEWAY_ADMISSION_MODE=global` is a one-release rollback to the pre-v0.4.0 admission protocol. A future release may remove it.
+- One workspace or one API key still tops out at a few hundred admissions per second on typical hardware (its own totals rows serialize it, by design, to keep budgets exact).
+
+## Upgrading
+
+See [Upgrades](/docs/self-hosting/upgrades#to-v040) for the full procedure.

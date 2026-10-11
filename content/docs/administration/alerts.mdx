@@ -1,6 +1,6 @@
 ---
 title: Alerts
-description: Installation-wide alert rules for budgets, spend spikes, error rates, failing connections and batches, their history and email delivery.
+description: Installation-wide alert rules for budgets, installation spend, an admission ceiling, spend spikes, error rates, failing connections and batches, their history and email delivery.
 ---
 
 **Admin › Settings › Alerts** holds installation-wide rules (**Rules**) and every incident they raised (**History**). Platform Admins edit; Auditors read. Each rule opens on its own page with **Cancel** and **Save** in the header.
@@ -13,20 +13,34 @@ Alerts notify; they never block a request. Budgets are enforced on their own.
 
 | Kind | Fires when |
 |---|---|
-| **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50, 80 and 100 by default). Watch any layers: installation, type default, override, workspace and key. Team and Project workspaces are checked one by one; personal workspaces are not. |
+| **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50, 80 and 100 by default). Watch any of the type default, override, workspace and key layers (there is no installation layer; see [Installation spend](#installation-spend) below). Team and Project workspaces are checked one by one; personal workspaces are not. |
+| **Installation spend** | Total spend across the whole installation (every workspace, personal ones included, as totals) in the current window reaches one of up to five percentages of a reference amount you choose. It only notifies: there is no installation budget, so nothing is ever denied. Installation only. See [Installation spend](#installation-spend). |
 | **Spend spike** | Settled spend in the last hour is at least a multiple of the hourly average over the previous 7 days (a factor from 1.1× to 1,000×), and above a minimum amount. |
 | **Error rate** | Failed requests reach a percentage of finished ones in a window of 5 to 1,440 minutes, with at least a minimum number of requests. |
 | **Failing connection** | For every enabled connection, or one you choose: its last N attempts all failed upstream, or its upstream error rate in the window crosses the threshold. Rejected or cancelled requests don't count. |
 | **Batch failed** | A Team or Project batch ended failed or expired. One incident per batch, closed after 24 hours. |
 | **Batch stalled** | A Team or Project batch has made no progress for a chosen time (5 to 1,440 minutes). Time spent legitimately [waiting for capacity](/docs/administration/batch-scheduling#what-people-see) doesn't count. |
+| **Admission ceiling** | One workspace or one API key is nearing the request rate a single scope can sustain: admissions stayed at or above a rate you choose in every minute of a 5–10 minute window, or at least 100 admissions were made and 5% or more waited at least a chosen time for their scope locks. Installation only; see [Scaling](/docs/self-hosting/scaling#per-workspace-and-key-ceiling). |
 
-Workspace admins can make the same kinds of rule (except failing connections and the installation layer) for their own Team or Project; see [Alerts and notifications](/docs/using/alerts-and-notifications).
+Workspace admins can make the same kinds of rule (except failing connections, installation spend and admission ceiling, which are installation only) for their own Team or Project; see [Alerts and notifications](/docs/using/alerts-and-notifications).
 
 <Screenshot slot="admin-alert-rule" />
 
 ## Recipients
 
 Each rule notifies any of: the workspace's admins (workspace rules), the **Platform Admins**, and up to 10 email addresses. In the dashboard, installation incidents appear in the Notifications of every Platform Admin and Auditor.
+
+## Installation spend
+
+From v0.4.0, there is no installation-wide budget to exhaust (see [Limits and budgets](/docs/administration/limits-and-budgets)). **Installation spend** (`spend_threshold`) is a non-blocking replacement: pick a period (day, week, month or lifetime) and a reference amount, and it notifies at up to five percentages of it, the same way a budget threshold alert would, but it never refuses a request. Upgrading from v0.3.x converts any installation-layer budget threshold rule you had into one of these automatically, keeping its thresholds and recipients; see [Upgrades](/docs/self-hosting/upgrades#to-v040).
+
+<Screenshot slot="admin-alert-spend" />
+
+## Admission ceiling
+
+Because a workspace (and a key lineage) still serializes its own admissions on its own budget rows — by design, to keep its budgets exact — it tops out at a few hundred requests per second however many gateway replicas you run; see [Scaling](/docs/self-hosting/scaling). The **Admission ceiling** rule tells Platform Admins when that's happening, naming the Team or Project (or "a personal workspace", with no identity) that's hot. Auditors see the same incident without the workspace name, and it can only email Platform Admins. See [Scaling](/docs/self-hosting/scaling#per-workspace-and-key-ceiling).
+
+<Screenshot slot="admin-alert-ceiling" />
 
 ## Built-in alerts
 

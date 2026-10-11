@@ -67,11 +67,12 @@ A **catalog** is a named list of approved models, such as "Approved cloud" or "S
 
 Limits are set in **layers**, and every layer that applies is enforced:
 
-1. **Installation**: optional ceilings shared by all workspaces together.
-2. **Workspace type default**: per workspace, for each Personal, Team and Project workspace.
-3. **Platform override**: replaces the type default for one workspace.
-4. **Workspace**: a Team or Project admin may tighten (never loosen) their own limits.
-5. **Key**: each key may be tightened further.
+1. **Workspace type default**: per workspace, for each Personal, Team and Project workspace.
+2. **Platform override**: replaces the type default for one workspace.
+3. **Workspace**: a Team or Project admin may tighten (never loosen) their own limits.
+4. **Key**: each key may be tightened further.
+
+There is no installation-wide limit: workspaces may use more in total than any single reference amount you watch. An optional, non-blocking **Installation spend** alert notifies on total spend across every workspace; it never denies a request.
 
 Each layer can set requests per minute, tokens per minute, requests at once, **jobs at once** (batch and video jobs) and up to one **budget** per period: day, ISO week, month and lifetime, all in UTC. Workspace layers also set a **storage** quota for files. A missing limit in a lower layer inherits; it never removes a higher one. Raising a limit never resets what was already spent. See [Limits and budgets](/docs/administration/limits-and-budgets).
 

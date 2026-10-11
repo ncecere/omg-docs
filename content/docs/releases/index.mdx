@@ -5,6 +5,7 @@ description: Open Model Gateway's releases, what to expect before 1.0, and how r
 
 | Release | Date | In short |
 |---|---|---|
+| [v0.4.0](/docs/releases/v0-4-0) | 2026-10-10 | Replicas add capacity (scoped admission, per-replica caches), monthly history partitions and archival, a beta Kubernetes Helm chart, and an Admission ceiling alert. Installation-wide budgets and rate limits are removed. Migrations `0024` to `0036`. |
 | [v0.3.2](/docs/releases/v0-3-2) | 2026-10-09 | Routes a connection can't serve and prices that don't state every meter are refused when you configure them, `503 price_unbounded` instead of a misleading budget denial, `max_tokens` on Chat Completions, and dashboard fixes. No migrations. |
 | [v0.3.1](/docs/releases/v0-3-1) | 2026-10-09 | A distroless image with the binary as entrypoint and a built-in health check, rerank and System One on self-hosted servers, supply-chain scanning, retryable 503s for cooling-down routes, and dashboard fixes such as rounded money. No migrations. |
 | [v0.3.0](/docs/releases/v0-3-0) | 2026-10-09 | The Files API on an encrypted file store, storage quotas, batches for any model, "jobs at once" limits, the SCIM last-admin guard, realtime holds sized from the conversation, and batch scheduling for self-hosted models. Migrations `0018` to `0022`. |
@@ -22,7 +23,7 @@ The full history is in the repository's [commits](https://github.com/ncecere/ope
 ## How releases are published
 
 - Each release is a Git tag, `vX.Y.Z`, on the main branch.
-- From v0.3.0, each release publishes a signed container image to `ghcr.io/ncecere/open-model-gateway`, tagged `vX.Y.Z`, `vX.Y` (the newest patch of that minor version) and `latest-release` (the newest release). Images are signed with cosign keyless signing; check the signature and deploy by digest. From v0.3.1 the image is distroless, with no shell. See [Container and Compose](/docs/self-hosting/container#release-images).
+- From v0.3.0, each release publishes a signed container image to `ghcr.io/ncecere/open-model-gateway`, tagged `vX.Y.Z`, `vX.Y` (the newest patch of that minor version) and `latest-release` (the newest release). Images are signed with cosign keyless signing; check the signature (from v0.4.0 use **cosign v3.0 or newer**, since the signature is stored in its bundle format) and deploy by digest. From v0.3.1 the image is distroless, with no shell. See [Container and Compose](/docs/self-hosting/container#release-images).
 - Each release's notes are also in the repository, in `docs/releases/` (for example `docs/releases/v0.3.2.md`), and the binary reports its release as the `version` of `gateway_build_info`.
 - You can still build the image from the tag with the repository's `Dockerfile`. The manual publishing workflow pushes tested images of `main`, tagged with their full commit SHA, for staging.
 

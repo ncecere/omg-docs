@@ -52,6 +52,28 @@ Start the new release. Wait for `/health/ready` to show `schema: ok`, then check
 
 ## Release notes
 
+### To v0.4.0
+
+**Migrations `0024` to `0036`**, the largest range since v0.1.0. Read [the release](/docs/releases/v0-4-0) before you upgrade: there are three breaking changes. Procedure:
+
+1. **Back up** and verify it (`scripts/backup.py`). If you're upgrading from before `0033`, your existing backups are fine — only the *restore* path had a bug, and only for databases with reservations.
+2. **Stop every gateway replica.** Mixed-schema replicas aren't supported, and three migrations briefly freeze history writes.
+3. For a large installation, run `open-model-gateway partitions prepare` as the migrator **before** this maintenance window, so the heavy index builds happen online ahead of the drain.
+4. Run `open-model-gateway migrate` as the migrator. Every step is resumable: an interrupted `migrate` picks up where it stopped.
+5. **Reapply `deploy/staging/runtime-grants.sql`** (or let the Helm chart's migration job do it; see [Kubernetes](/docs/self-hosting/kubernetes#migration-job-and-runtime-grants)). This range adds several new grants — reapply the whole file even if some migrations add none.
+6. Run `deploy/staging/verify-privileges.sql` to confirm the runtime role has exactly the expected privileges.
+7. Run `open-model-gateway budget verify` (expect `mismatch_count: 0`, `rate_mismatch_count: 0`) and `open-model-gateway history verify` (expect `finding_count: 0`).
+8. Start the new replicas, wait for `/health/ready`, then check sign-in and one bounded request.
+
+- **Breaking: installation-wide budgets and rate limits are removed** (`0026`). Limits now exist only on workspace-type defaults, platform overrides, workspace caps and keys. `GET`/`PUT /platform/installation/policy` return `410 installation_limits_removed`. Any installation budget alert rule becomes a non-blocking **Installation spend** rule, keeping its thresholds and recipients. Move any shared ceiling you relied on into type defaults, overrides or keys before upgrading; workspaces may use more in total afterward.
+- **Breaking: a budgeted request on an unbounded price returns `503 price_unbounded`, not `429 budget_exceeded`.** Unchanged from v0.3.2, repeated here because the admission path it runs through is rewritten this release.
+- **Breaking: workspaces, keys, routes and cost centers can no longer be deleted, truncated or re-keyed, by any role** (`0034`). The product never did this — it disables, revokes and archives — so this mainly affects hand-written operator SQL, which now fails with a named check instead of a generic foreign-key error.
+- Eight new environment variables, all optional with unchanged defaults: see [Configuration](/docs/self-hosting/configuration#scaling).
+- New ids (requests, attempts, ledger entries, audit events) are UUIDv7 instead of UUIDv4: `x-request-id` values change shape, not format.
+- A Kubernetes Helm chart is new and **beta**; see [Kubernetes](/docs/self-hosting/kubernetes).
+
+See [Scaling](/docs/self-hosting/scaling) for what replicas, caches and partitions change in how the gateway runs.
+
 ### To v0.3.2
 
 - No migrations and no new runtime grants. Rolling back to v0.3.1 is a redeploy of its digest.

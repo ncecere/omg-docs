@@ -30,6 +30,8 @@ Owners and admins of a Team or Project manage rules in **Settings › Alerts**. 
 | Kind | Fires when |
 |---|---|
 | **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50%, 80% and 100% by default). Choose which layers to watch: the type default or override, the workspace's own budgets, and each key's. |
+
+Platform Admins have two more kinds, installation only: **Installation spend** (a non-blocking notification on total spend across every workspace) and **Admission ceiling** (one workspace or key nearing the request rate a single scope can sustain). See [Alerts](/docs/administration/alerts).
 | **Spend spike** | Spend in the last hour is at least a chosen multiple of the hourly average over the 7 days before, and above a minimum amount. |
 | **Error rate** | The share of failed requests in a window (5 to 1,440 minutes) reaches a percentage, with at least a minimum number of finished requests. |
 | **Batch failed** | A batch ended failed or expired. One alert per batch, closed 24 hours later. |

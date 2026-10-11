@@ -94,7 +94,7 @@ An enabled model is **Not serving** when no enabled route can serve it, and requ
 
 Ready models can show **Needs attention** when:
 
-- a route's input plus output token ceiling is larger than a tokens-per-minute limit of the installation or a workspace type that gets the model: those requests would be refused with `token_reservation_exceeds_limit`;
+- a route's input plus output token ceiling is larger than a tokens-per-minute limit of a workspace type that gets the model: those requests would be refused with `token_reservation_exceeds_limit`;
 - an OpenRouter route uses a `:free` variant while data collection is denied, so it can't be served;
 - some of its enabled routes are on connections that can't serve it (routes accepted before v0.3.2). Those routes fail every request; disable them.
 

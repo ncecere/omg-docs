@@ -221,6 +221,18 @@
     ],
     "alt": "An alert rule's page: a spend spike rule with its factor, minimum amount and recipients, with Cancel and Save."
   },
+  "admin-alert-spend": {
+    "files": [
+      "admin-alert-spend"
+    ],
+    "alt": "The Installation spend alert rule: a monthly $25.00 reference amount, alerts at 50, 80 and 100 percent, emailed to Platform Admins and a finance address. It notifies only and never blocks."
+  },
+  "admin-alert-ceiling": {
+    "files": [
+      "admin-alert-ceiling"
+    ],
+    "alt": "The Admission ceiling alert rule: the sustained per-workspace or per-key admission rate and lock-wait thresholds that notify Platform Admins."
+  },
   "admin-key-safety": {
     "files": [
       "admin-key-safety"

@@ -1,0 +1,53 @@
+---
+title: Scaling
+description: How replicas, per-replica caches, history partitions and the per-workspace/key admission ceiling work from v0.4.0, and the rollback mode.
+---
+
+Before v0.4.0, every request locked one installation-wide row, so admission and settlement were serialized across the whole installation regardless of how many replicas or database connections you ran. From v0.4.0, admission and settlement lock a workspace's and a key's own rows instead, so requests from different workspaces run in parallel and more replicas add real capacity.
+
+<Callout title="No capacity numbers here">
+  The project's own measurements for this work come from a laptop load-test stack, not a capacity promise for your hardware. Measure in your own environment before you rely on a number.
+</Callout>
+
+## Scoped admission
+
+Admission and settlement take a fixed, deadlock-free sequence of locks: a workspace type, a workspace, a user and a key lineage, then that workspace's and key's own budget and rate-counter rows. A revocation or a tightened limit still takes its scope lock exclusively, so it's live immediately for new work; already-admitted requests may finish. A hand-written session that changes several scopes out of canonical order could, in principle, be aborted as a deadlock victim — the gateway retries that automatically, at most twice, never repeating upstream work.
+
+`GATEWAY_ADMISSION_MODE=global` restores the pre-v0.4.0 protocol (the installation row lock) for one release, as an operational rollback if you need it. It needs no schema change either way. A future release may remove it — don't build permanent automation around it.
+
+## Per-replica caches and live revocation
+
+Each replica caches what it reads before admission: key metadata (never the secret), candidate routes, routing configuration and immutable prices. It learns about changes within about a second through PostgreSQL `LISTEN`/`NOTIFY` (configured by `GATEWAY_LISTEN_DATABASE_URL`), or a one-second poll if the listener connection isn't available. Admission itself never trusts the cache: it always re-checks authorization, entitlement and the latest price live under its locks, so a revoked key or a tightened budget is refused on every replica immediately, with exactly the same error as before. `GATEWAY_CONFIG_CACHE=off` turns caching off entirely if you'd rather every read be live.
+
+Singleton background jobs (account cleanup, compaction, counter pruning, storage usage, alert evaluation, the file sweeper) now run on one replica at a time under a lease, instead of on every replica.
+
+## History partitions and archival
+
+Request history (executions, reservations, the cost ledger, audit events, storage usage) is partitioned by month, so old months stop slowing down or bloating current ones. Throughput no longer depends on how much history a database holds.
+
+- New months are created automatically ahead of time (`GATEWAY_PARTITIONS_AHEAD_MONTHS`, default 3); an alert and incident (`partitions_missing`) fire if they're running low. `open-model-gateway partitions status`/`ensure` let an operator check or create them manually.
+- Long usage ranges and the spend-spike alert read exact hourly rollups instead of scanning raw history (`GATEWAY_USAGE_ROLLUPS`); rollup-backed answers match a raw scan exactly.
+- Operators can archive a closed month — a checksummed export, then detach — once it's past retention (`GATEWAY_HISTORY_RETENTION_MONTHS`, default 25 months) with no pending or unknown cost: `open-model-gateway archive partition` and `archive verify`.
+- `open-model-gateway history verify` checks that history still references real, matching parents; `serve` runs the same check hourly and opens a critical incident (`history_orphans`) on any finding. Workspaces, keys, routes and cost centers can no longer be deleted, truncated or re-keyed by any role, which is what makes history checks safe without locking those rows on every request.
+
+Upgrading a large installation: run `open-model-gateway partitions prepare` as the migrator before your maintenance window, so the heavy index builds happen online ahead of the drain. See [Upgrades](/docs/self-hosting/upgrades#to-v040) and [Database and migrations](/docs/self-hosting/database-and-migrations).
+
+## Per-workspace and key ceiling
+
+Because a workspace's (and a key lineage's) own admissions still serialize on its own budget rows — by design, to keep its budgets exact — one workspace or one key tops out at a few hundred requests per second on typical hardware, however many replicas you run. Adding replicas or connections doesn't raise that ceiling: splitting the load across workspaces does.
+
+- **Metrics**: `gateway_scope_lock_wait_seconds{lock,path}` and `gateway_scope_lock_waiting{path}` show how long admissions and settlements wait on a workspace's or key's own locks and rows — with no workspace or key labels.
+- **Alert**: the **Admission ceiling** alert rule (installation only) fires when a workspace or key lineage's admission rate or lock-wait time crosses a threshold you choose, over a 5–10 minute window. It names the Team or Project for Platform Admins only (Auditors see the incident without the name), and a personal workspace only as "a personal workspace" — never a key. See [Alerts](/docs/administration/alerts#admission-ceiling).
+- **What to do:** move an independent workload (a service account, batch-like traffic) to its own workspace or project. If one key is the hot one, issue separate keys for separate workloads — they share the workspace's own rows, so the workspace's ceiling still applies across them.
+
+## Connection sizing
+
+Each replica opens up to `GATEWAY_DATABASE_MAX_CONNECTIONS` connections (default 10). From v0.4.0, each replica admits on up to half its pool and settles on up to three tenths of it (previously a quarter each, since the installation lock serialized them regardless of pool size). Size PostgreSQL's `max_connections`, and any connection pooler in front of it, for every replica's pool plus the migrator and backup sessions — and one extra session per replica if `GATEWAY_LISTEN_DATABASE_URL` points through a session-mode pooler rather than directly at PostgreSQL. See [Configuration](/docs/self-hosting/configuration#scaling) for the full list of new environment variables, and [Kubernetes](/docs/self-hosting/kubernetes#pgbouncer-caveats) for PgBouncer-specific caveats, including why `LISTEN` needs a direct connection.
+
+## An optional reporting replica
+
+`GATEWAY_REPORTING_DATABASE_URL` points reports, usage and request logs at a read-only replica instead of the primary — never admission, settlement or write authorization. If the replica falls more than `GATEWAY_REPORTING_MAX_LAG_SECONDS` (default 30) behind, reads fall back to the primary automatically.
+
+## Metrics and monitoring
+
+New in v0.4.0: `gateway_admission_seconds`/`gateway_settlement_seconds` (phase timing, including lock waits), `gateway_scope_lock_wait_seconds`/`gateway_scope_lock_waiting` (the per-workspace/key ceiling, above), `gateway_cache_lookups_total` and the `gateway_config_*` family (per-replica cache freshness), `gateway_work_leases_held`/`gateway_work_lease_terms_total`/`gateway_background_runs_total` (which replica holds each singleton job's lease), `gateway_history_partition_months_ahead`, `gateway_usage_rollup_hours_total`, `gateway_history_verify_findings`, and `gateway_lock_deadlock_retries_total`. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring).

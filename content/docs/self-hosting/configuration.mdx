@@ -34,6 +34,21 @@ The error names the variable and the reason, such as `secret configuration: OPEN
 | `GATEWAY_METRICS_ADDR` | unset (off) | Separate Prometheus listener, such as `127.0.0.1:9464`. Must differ from `GATEWAY_LISTEN`. |
 | `RUST_LOG` | `open_model_gateway=info` | Log filter. Logs are JSON on standard error. |
 
+## Scaling
+
+New in v0.4.0; none of these change an existing default. See [Scaling](/docs/self-hosting/scaling) for what each one is for.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_ADMISSION_MODE` | `scoped` | `global` restores the pre-v0.4.0 installation-row admission protocol, as a one-release rollback. Any other value fails startup. |
+| `GATEWAY_CONFIG_CACHE` | `on` | `off` turns off per-replica caches of pre-admission reads (no `LISTEN` connection, no version poll). Admission always re-checks live either way. |
+| `GATEWAY_LISTEN_DATABASE_URL` | `DATABASE_URL` | The one session connection per replica that `LISTEN`s for configuration changes. Point it at PostgreSQL directly (never a transaction-mode PgBouncer). |
+| `GATEWAY_REPORTING_DATABASE_URL` | unset | An optional read-only reporting replica (or pooler) for reports, usage and logs only, never for admission or settlement. |
+| `GATEWAY_REPORTING_MAX_LAG_SECONDS` | `30` | A reporting replica replaying WAL further behind than this is skipped in favour of the primary. |
+| `GATEWAY_PARTITIONS_AHEAD_MONTHS` | `3` (2–12) | Future month partitions `serve` keeps created ahead of time. |
+| `GATEWAY_USAGE_ROLLUPS` | `auto` | `off` answers every usage read from raw history instead of the hourly rollups (same results, slower). |
+| `GATEWAY_HISTORY_RETENTION_MONTHS` | `25` (1–1200) | Months `archive partition` keeps hot before an operator can detach them; `--retention-months` overrides it per call. |
+
 ## Sign-in
 
 | Variable | Default | Meaning |

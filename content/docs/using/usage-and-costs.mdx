@@ -51,4 +51,4 @@ Workspace admins and personal owners also see how much the workspace kept in the
 
 ## When a budget runs out
 
-When a request would push any applicable budget past its limit, the gateway refuses it before sending it, with `429 budget_exceeded`. The message says whether the key's, the workspace's or the installation's budget is the reason, but never how much is left of a budget you can't see. Budgets reset at the start of their next UTC day, ISO week or month; lifetime budgets don't reset. Raising a budget doesn't reset what was already spent. See [Errors and limits](/docs/api/errors-and-limits).
+When a request would push any applicable budget past its limit, the gateway refuses it before sending it, with `429 budget_exceeded`. The message says whether the key's or the workspace's budget is the reason (there is no installation-wide budget), but never how much is left of a budget you can't see. Budgets reset at the start of their next UTC day, ISO week or month; lifetime budgets don't reset. Raising a budget doesn't reset what was already spent. See [Errors and limits](/docs/api/errors-and-limits).

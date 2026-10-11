@@ -34,9 +34,9 @@ Before changing anything, `migrate` runs read-only checks. It accepts only an em
 
 `open-model-gateway schema-version` prints the migrations compiled into a binary, as JSON, without touching a database. Backup tooling uses it to check that a backup matches a release.
 
-## Migrations in v0.3.0
+## Migrations through v0.4.0
 
-v0.3.1 and v0.3.2 add none: their schema is the same as v0.3.0's.
+v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds `0024` to `0036`, the largest range since v0.1.0, for scale-out (see [Scaling](/docs/self-hosting/scaling)) and the removal of installation-wide limits.
 
 | Migration | Adds |
 |---|---|
@@ -47,13 +47,22 @@ v0.3.1 and v0.3.2 add none: their schema is the same as v0.3.0's.
 | `0020_files_api` | The Files API, the storage quota and hourly storage usage |
 | `0021_batch_engine` | Batch lines and result segments, batch price lists |
 | `0022_batch_scheduling` | Per-route batch scheduling, completion windows, and each batch line's route |
+| `0024`, `0025` | Maintained per-minute rate counters and an unknown-cost split in budget totals |
+| `0026_remove_installation_limits` | **Breaking.** Removes the installation-wide budget and rate limits; converts installation budget alert rules to the non-blocking Installation spend kind. See [Limits and budgets](/docs/administration/limits-and-budgets) and [Upgrades](/docs/self-hosting/upgrades#to-v040). |
+| `0027_scoped_admission` | Admission and settlement lock a workspace's and key's own rows instead of one installation row |
+| `0028`, `0029` | Per-replica configuration caches with `LISTEN`/`NOTIFY`, and leased singleton background jobs |
+| `0030` to `0033` | Monthly history partitions, hourly usage rollups, and operator archival of closed months |
+| `0034_history_parent_checks` | Replaces locking foreign keys from history to its parents with non-locking checks; those parents can no longer be deleted, truncated or re-keyed by any role |
+| `0035_counter_autovacuum` | Tighter autovacuum settings on reservation partitions |
+| `0036` | The admission-ceiling alert's lock-wait counters |
 
-There is no `0012`.
+There is no `0012` or `0023`.
 
 ## Sizing
 
 - Each replica opens up to `GATEWAY_DATABASE_MAX_CONNECTIONS` connections (10 by default). Size PostgreSQL's `max_connections` for every replica, plus migrator and backup sessions.
-- Admission, settlement and configuration changes take an installation-wide lock, so the throughput of admitted requests is shared by all replicas. In the project's load test on a laptop, that ceiling was roughly 115 to 150 requests per second; adding replicas or connections doesn't raise it. Measure in your own environment.
+- From v0.4.0, admission and settlement lock a workspace's and a key's own rows, not one installation-wide row, so replicas of different workspaces run in parallel and more replicas add capacity. One workspace or one key still serializes its own requests on its own rows, by design, to keep its budgets exact, so it tops out at a few hundred requests per second however many replicas you run; an **Admission ceiling** alert can tell you when that's happening. See [Scaling](/docs/self-hosting/scaling) for replica sizing, connection budgets and the rollback mode.
+- Request history is partitioned by month, with old months archivable, so history size no longer affects throughput. See [Scaling](/docs/self-hosting/scaling#history-partitions-and-archival).
 - Budget checks read maintained totals, so their cost doesn't grow with history. `open-model-gateway budget verify` compares those totals with a full scan (read-only; run it off-peak on large installations).
 
 ## Network
@@ -73,3 +82,7 @@ Don't expose PostgreSQL to the internet. If the database is on another host, use
 | `alerts evaluate --once` | Evaluate every alert rule once and send pending email. |
 | `files verify [--limit N]` | Compare file metadata with the store (read-only). |
 | `files sweep --once [--limit N]` | Delete expired and abandoned file objects once. `serve` sweeps every minute. |
+| `history verify [--since]` | Check that history rows reference real, matching parents (read-only). `serve` runs this hourly too. See [Scaling](/docs/self-hosting/scaling#history-partitions-and-archival). |
+| `partitions status` / `ensure --ahead N` / `prepare` | Read coverage of future monthly partitions; create missing ones; build new partition keys online before an upgrade. |
+| `rollups run --once` | Backfill hourly usage rollups faster than the per-minute background job. |
+| `archive partition <history\|audit\|storage> <YYYY-MM>` / `archive verify` | Export and detach a closed month past retention (schema owner only); check an export's checksums. |

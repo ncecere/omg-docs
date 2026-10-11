@@ -1,0 +1,67 @@
+---
+title: Kubernetes
+description: A beta Helm chart for Kubernetes, an optional CloudNativePG-managed database, the migration job, PgBouncer caveats and scaling.
+---
+
+From v0.4.0, `deploy/helm/open-model-gateway/` in the repository is a Helm chart for Kubernetes. It packages the same distroless image, explicit migration step and runtime-role boundary as the [Compose](/docs/self-hosting/container) and operations guidance elsewhere in these docs, adapted for a cluster with [CloudNativePG](https://cloudnative-pg.io/) (CNPG) and an ingress controller.
+
+<Callout type="warn" title="Beta until validated on a production-like cluster">
+  As of v0.4.0 the chart has passed `helm lint`/`helm template` across four profiles, `kubeconform` schema validation, a real `kubectl apply --dry-run=server` against a live CloudNativePG operator, and a `kind` smoke test (install, migration, readiness, an idempotent upgrade, pod deletion under the PodDisruptionBudget, primary-pod-kill recovery). It has not been run under sustained production load or on a non-homelab cluster. Treat field names as stable, but review every rendered manifest before a real rollout.
+</Callout>
+
+## Prerequisites
+
+- Kubernetes 1.29 or newer.
+- An ingress controller, if you enable the chart's `ingress`.
+- CloudNativePG 1.22+ installed cluster-wide, if you use the chart's optional managed `Cluster`/`Pooler` — or an external PostgreSQL 17 otherwise.
+- A StorageClass for CNPG's volumes, if you use the managed database.
+- `prometheus-operator` CRDs, only if you enable `ServiceMonitor`/`PodMonitor` scraping.
+
+## Secrets are always references
+
+The chart never generates a credential. Every secret — the runtime and `LISTEN` database URLs, an optional reporting-replica URL, the migrator's database URL, OIDC client secret, provider API keys, and file-store encryption keys — is a reference to a Secret you create (or that the CNPG operator manages), by name and key. A missing reference fails the chart fast, instead of silently proceeding.
+
+## Choosing a database mode
+
+- **External** (default): point the chart's database secrets at your own PostgreSQL 17 — a managed HA cluster, Patroni, or a CNPG `Cluster` you manage outside the chart.
+- **Chart-managed CloudNativePG**: the chart can render a CNPG `Cluster` (synchronous replication, anti-affinity across nodes) and `Pooler` (PgBouncer, transaction mode) for you, using roles backed by Secrets you pre-create — the chart itself never writes a password into rendered YAML.
+
+### First install with a chart-managed database
+
+With a chart-managed CloudNativePG database, the `Cluster`/`Pooler` are plain templates but the migration job is a pre-install hook that runs *before* them — so on a genuinely fresh install there's nothing yet for it to connect to. Bootstrap in two steps: install once without running migrations so the database comes up, wait for the `Cluster` to become ready, then upgrade with migrations turned on. Every later upgrade that ships a migration only needs the second step.
+
+## Migration job and runtime grants
+
+The gateway never migrates or bootstraps itself in `serve`, in Kubernetes or anywhere else. Running migrations is an explicit, reviewed operator action on every upgrade that ships one: a Helm hook job that runs `open-model-gateway migrate`, then applies the same reviewed `runtime-grants.sql` this project uses everywhere, using the **migrator** credential only — never the runtime role, and never mounted into the gateway Deployment itself.
+
+## PgBouncer caveats
+
+If you put PgBouncer (or the chart's managed Pooler) in front of the database:
+
+- **Prepared statements** must be enabled (`max_prepared_statements` > 0) for the gateway's prepared-statement cache to work under transaction-mode pooling. Without it, admission and settlement queries fail.
+- **`LISTEN` does not work through transaction-mode pooling.** Point the `GATEWAY_LISTEN_DATABASE_URL` connection at PostgreSQL directly (or a session-mode pooler), never through the transaction pooler. Without a working listener, caches still catch up through a one-second poll — nothing is unsafe, just a little slower to notice a change.
+- **`migrate` must run directly against PostgreSQL**, never through a transaction-mode pool: it takes a session-level advisory lock.
+- An optional reporting replica is for reports, usage and logs only — never for admission, settlement or write authorization.
+
+See [Scaling](/docs/self-hosting/scaling) and [Configuration](/docs/self-hosting/configuration#scaling) for the environment variables involved.
+
+## Scaling and availability
+
+- Set the gateway's replica count (or let autoscaling do it) the same way you would any Deployment; see [Scaling](/docs/self-hosting/scaling) for what makes replicas add capacity from v0.4.0, and the per-workspace/key ceiling that doesn't go away with more replicas.
+- A PodDisruptionBudget and topology spread keep replicas available during voluntary disruption and rollout.
+- Scale the database tier (and its connection pooler) independently of the gateway; size pooler connections for the sum of replica pools that are actually busy, not their maximum.
+
+## Backups
+
+Keep running the project's checksummed, lineage-checked application-level backup (`scripts/backup.py`) against the database from outside the cluster, or as a scheduled job you add yourself. If you use the chart's managed CloudNativePG database, its own object-store backup is independent of that application-level dump and doesn't replace it.
+
+## Troubleshooting
+
+- **Readiness stays unready after an upgrade that shipped a migration:** check the migration job's logs — it may still be running, or migrations were never turned on for this upgrade.
+- **Admission or settlement errors referencing prepared statements:** the pooler's prepared-statement support isn't configured; see [PgBouncer caveats](#pgbouncer-caveats) above.
+- **A pod won't start over a `_FILE` secret:** a variable and its `_FILE` companion are both set — only one of each pair may be present.
+- **The managed `Cluster`/`Pooler` is rejected on apply:** usually a missing role Secret or a StorageClass that doesn't exist in your cluster.
+
+## Loadtest profile
+
+A `loadtest` chart profile adds a mock upstream and a one-shot load generator for your own capacity testing against your own cluster — useful for producing your own numbers, since the project's own measurements so far are from a laptop stack, not a claim about any Kubernetes cluster's capacity.
