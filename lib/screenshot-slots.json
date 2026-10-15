@@ -261,7 +261,7 @@
     "files": [
       "admin-legal-holds"
     ],
-    "alt": "Admin Legal holds: active holds with their reference code, the user or Team each applies to, when and by whom it was placed, an Active status and a Release button, with the Include released button above."
+    "alt": "Admin › Legal holds: two active holds with their reference codes, the person or workspace each applies to, when and by whom each was placed, an Active status and a Release action, with the Include released button above."
   },
   "admin-settings-general": {
     "files": [
