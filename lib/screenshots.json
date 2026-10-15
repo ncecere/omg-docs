@@ -27,7 +27,7 @@
   "admin-audit": {
     "src": "/images/admin-audit.webp",
     "width": 1440,
-    "height": 900
+    "height": 1400
   },
   "admin-batch-scheduling": {
     "src": "/images/admin-batch-scheduling.webp",
@@ -51,6 +51,11 @@
   },
   "admin-key-safety": {
     "src": "/images/admin-key-safety.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-legal-holds": {
+    "src": "/images/admin-legal-holds.webp",
     "width": 1440,
     "height": 900
   },
@@ -84,10 +89,15 @@
     "width": 1440,
     "height": 1600
   },
+  "admin-settings-audit-export": {
+    "src": "/images/admin-settings-audit-export.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-settings-email": {
     "src": "/images/admin-settings-email.webp",
     "width": 1440,
-    "height": 900
+    "height": 1200
   },
   "admin-settings-general": {
     "src": "/images/admin-settings-general.webp",
@@ -124,6 +134,11 @@
     "width": 1440,
     "height": 900
   },
+  "admin-user-detail-actions": {
+    "src": "/images/admin-user-detail-actions.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-users": {
     "src": "/images/admin-users.webp",
     "width": 1440,
@@ -142,7 +157,7 @@
   "home": {
     "src": "/images/home.webp",
     "width": 1440,
-    "height": 1500
+    "height": 1320
   },
   "key-create": {
     "src": "/images/key-create.webp",
@@ -217,15 +232,30 @@
   "workspace-members": {
     "src": "/images/workspace-members.webp",
     "width": 1440,
-    "height": 900
+    "height": 1200
   },
   "workspace-models": {
     "src": "/images/workspace-models.webp",
     "width": 1440,
     "height": 900
   },
+  "workspace-settings-visibility": {
+    "src": "/images/workspace-settings-visibility.webp",
+    "width": 1440,
+    "height": 900
+  },
   "workspace-switcher": {
     "src": "/images/workspace-switcher.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "your-data": {
+    "src": "/images/your-data.webp",
+    "width": 1440,
+    "height": 1000
+  },
+  "your-sessions": {
+    "src": "/images/your-sessions.webp",
     "width": 1440,
     "height": 900
   }

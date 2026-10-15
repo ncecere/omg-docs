@@ -99,7 +99,7 @@
     "files": [
       "notifications"
     ],
-    "alt": "Notifications: a firing budget alert for a Team, a resolved error-rate alert and a personal budget alert, one of them unread."
+    "alt": "Notifications: a firing budget alert for a Team, a resolved error-rate alert and a personal budget alert, all unread."
   },
   "workspace-alerts": {
     "files": [
@@ -141,7 +141,7 @@
     "files": [
       "admin-user-detail-actions"
     ],
-    "alt": "A user's page in Admin with its menu open: Change email, Suspend, Sign out all sessions, Export user record, Place legal hold and Copy ID, beside an Overview showing 2 active sessions."
+    "alt": "A user's page in Admin with its menu open: Grant platform role, Change email, Sign out all sessions, Export user record, Place legal hold, Copy ID and Suspend, beside an Overview showing 3 active sessions."
   },
   "admin-sso-groups": {
     "files": [
@@ -207,7 +207,7 @@
     "files": [
       "admin-limits"
     ],
-    "alt": "Defaults and limits for Teams: rate limits, jobs at once, storage and a monthly budget, with tabs for the installation ceiling and each workspace type."
+    "alt": "Defaults and limits for Teams: rate limits, jobs at once, storage and a monthly budget, with tabs for the Personal, Team and Project defaults."
   },
   "admin-usage": {
     "files": [
@@ -225,7 +225,7 @@
     "files": [
       "admin-alerts"
     ],
-    "alt": "Installation alert rules: a budget threshold, a spend spike, a failing connection and a batch failed rule, two of them firing."
+    "alt": "Installation alert rules: an admission ceiling, a batch failed, a failing connection, an installation spend and a spend spike rule, two of them firing."
   },
   "admin-alert-rule": {
     "files": [
@@ -255,7 +255,7 @@
     "files": [
       "admin-audit"
     ],
-    "alt": "The Audit log: recent actions with time, actor, action and target, such as an uploaded file, a removed membership, SCIM user changes, an invitation and new alert rules."
+    "alt": "The Audit log: recent actions with time, actor, action and target, such as changed workspace limits, an uploaded file, placed and released legal holds, a removed membership, SCIM user changes, an invitation and new alert rules."
   },
   "admin-legal-holds": {
     "files": [

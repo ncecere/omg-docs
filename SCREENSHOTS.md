@@ -1,6 +1,6 @@
 # Screenshot capture list
 
-Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. **No screenshots have been captured yet.**
+Every image in these docs has a named slot in `lib/screenshot-slots.json` (its alt text and the file names it may have) and is placed with `<Screenshot slot="…" />`. Until an image is imported, the page shows a marked placeholder. This file is the capture list for the screenshot session. All slots are captured from the fictional Example University instance on the released v0.6.0 image (`omg-assets/capture/`, `omg-assets/screenshots/MANIFEST.md`).
 
 ## Rules
 
@@ -15,7 +15,7 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
   - **Jordan Kim**, `jordan.kim@example.edu`, signs in with no platform role (denied)
 - **Configuration**: connections "University GPU cluster" (vLLM, `http://models.example.internal:8000/v1`, approved in `GATEWAY_LOCAL_UPSTREAMS`), OpenAI, Anthropic, Amazon Bedrock (`eu-west-1`), OpenRouter. Catalogs "Self-hosted", "Approved cloud", "Advanced cloud". Cost centers `CHEM` (Chemistry) and `GEOS` (Geosciences). SSO groups `ai-gateway-users`, `ai-gateway-audit`, `ai-gateway-admins`, `chem-teaching-staff`. File store on MinIO.
 - **Size**: PNG, **1440×900** (device scale factor 1), light theme unless the state says otherwise. Phone slots: **390×844** CSS pixels (scale 3 is fine; the import script keeps width ≤ 1600 px).
-- **Version**: Open Model Gateway **v0.3.0** (main until tagged). Pin the clock in the seed so timestamps don't churn.
+- **Version**: Open Model Gateway **v0.6.0** (the released image, by digest). Pin the clock in the seed so timestamps don't churn.
 - **Secrets**: any key shown once must be replaced with a fake value (`omg_0000…`) before capture.
 - **File name**: the slot name, `<slot>.png`, in the screenshots directory (`../omg-assets/screenshots` by default), then:
 
@@ -75,3 +75,11 @@ Every image in these docs has a named slot in `lib/screenshot-slots.json` (its a
 | 42 | `admin-settings-email.png` | 1440×900 | `/admin/settings/email` | Morgan Lee | `/docs/administration/settings` | Email: host smtp.example.edu, port 587, STARTTLS, password reference env:SMTP_PASSWORD, from ai-gateway@example.edu; status Ready, last test OK. |
 | 43 | `admin-settings-sign-in.png` | 1440×900 | `/admin/settings/sign-in` | Morgan Lee | `/docs/administration/settings` | Sign-in: issuer https://login.example.edu, client ai-gateway (confidential), groups claim, callback URL; signing keys current; SCIM on with base URL and counts. |
 | 44 | `phone-home.png` | 390×844 | `/home` | Priya Shah | `/docs/getting-started/quick-tour` | 390×844 viewport, Home with the sidebar closed. |
+| 45 | `admin-alert-spend.png` | 1440×900 | `/admin/alerts/<installation spend rule>` | Morgan Lee | `/docs/administration/alerts` | The Installation spend rule's page: Monthly (UTC), $25.00 reference ("Spent plus on hold, all workspaces"), alerts at 50, 80, 100%, Platform admins and finance-ai@example.edu; "Notifies only; never blocks". |
+| 46 | `admin-alert-ceiling.png` | 1440×900 | `/admin/alerts/<admission ceiling rule>` | Morgan Lee | `/docs/administration/alerts` | The Admission ceiling rule's page: 5-minute window, 200 requests per second, lock wait p95 250 ms, Platform admins only. |
+| 47 | `your-sessions.png` | 1440×900 | `/profile` | Priya Shah | `/docs/using/your-profile` | Your profile scrolled to Sessions: three sessions, Firefox on macOS (This browser), Chrome on Windows and Safari on iOS, signed in earlier from those devices; Sign out on the other two and Sign out others. No other sessions. |
+| 48 | `your-data.png` | 1440×1000 | `/profile` | Priya Shah | `/docs/using/your-profile` | Your profile scrolled to the bottom: the Your data card with From and To covering the last 30 days and Download your data (not clicked). |
+| 49 | `workspace-settings-visibility.png` | 1440×900 | `/workspaces/<Chemistry Teaching>/settings?tab=overview` | Priya Shah | `/docs/using/workspace-settings` | Settings › General: About this workspace (Team, Owner, cost center CHEM), Rename, and Files, batches and videos with Who sees them = Per user (the default). |
+| 50 | `admin-user-detail-actions.png` | 1440×900 | `/admin/users/<Sam Ortiz>` | Morgan Lee | `/docs/administration/people-and-roles` | Sam Ortiz's page with the More actions menu open: Grant platform role…, Change email…, Sign out all sessions…, Export user record, Place legal hold…, Copy ID, Suspend…. Sam is active, so Remove personal data now… isn't offered. |
+| 51 | `admin-legal-holds.png` | 1440×900 | `/admin/legal-holds` | Morgan Lee | `/docs/administration/data-controls` | Admin › Records › Legal holds: two active holds (LEGAL-2026-021 on the Project Genomics Pipeline, LEGAL-2026-014 on Casey Walker), placed by Morgan Lee, Release buttons, Include released; a third hold (LEGAL-2026-009) exists and is released. |
+| 52 | `admin-settings-audit-export.png` | 1440×900 | `/admin/settings/audit-export` | Morgan Lee | `/docs/administration/settings` | Settings › Audit export with a webhook receiver configured: HTTPS webhook, destination shown as siem.example.edu, Delivering, nothing waiting, last delivery and heartbeat, next sequence number, Send test delivery. |
