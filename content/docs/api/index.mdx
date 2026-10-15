@@ -47,7 +47,7 @@ Health checks (`GET /health/live`, `GET /health/ready`) need no key; see [Metric
 ## Streaming
 
 - Chat Completions streams token by token as server-sent events, ending with `data: [DONE]` only on success. An error mid-stream closes the stream without `[DONE]`.
-- Responses and Messages streams are accepted, but the gateway collects up to 4 MiB of the upstream response and then sends it as ordered events: not token by token yet.
+- Responses and Messages stream text as it is generated (from v0.5.0); tool calls arrive whole, after the text. Messages streams start with placeholder usage, and the real counts come in `message_delta`. See [Responses](/docs/api/responses#streaming) and [Messages](/docs/api/messages#streaming).
 - Closing the connection cancels the upstream request. The provider may still charge for work it did; the gateway keeps the hold until it knows.
 - There is never a failover after a stream has started.
 

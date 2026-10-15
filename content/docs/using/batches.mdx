@@ -38,6 +38,8 @@ batch = client.batches.retrieve(batch.id)
 print(batch.status, batch.request_counts)
 ```
 
+The input file must be one your key can see. In a Team or Project set to **Per user** (the default), that means a file uploaded with your own keys: another member's file answers `404`, as if it didn't exist. See [Who sees which batches](#who-sees-which-batches).
+
 The gateway checks the whole file before accepting the batch. If anything is wrong, nothing is created and the error lists up to 20 problems with their line numbers, such as `duplicate_custom_id`, `model_not_found` or `missing_max_tokens`.
 
 Statuses are `validating`, `in_progress`, `finalizing` and `cancelling`, then `completed`, `failed`, `cancelled` or `expired`.
@@ -63,7 +65,9 @@ Each line has your `custom_id` and either the response (`status_code`, `body`) o
 
 ## Cancel
 
-`client.batches.cancel(batch.id)`, or **Cancel** on the batch's page:
+`client.batches.cancel(batch.id)`, or **Cancel** on the batch's page. Only the person who created the batch, a workspace owner or admin, or a service-account key can cancel it; anyone else gets `403 batch_not_owned`.
+
+What happens next depends on how the batch runs:
 
 - **Gateway-run**: no new lines start, running lines finish, and the rest are listed in the error file as `batch_cancelled`.
 - **Native, not yet sent to the provider**: cancelled at once, at no cost.
@@ -86,11 +90,20 @@ When it is created, a batch holds the sum of what every line could cost, and che
 
 ## In the dashboard
 
-**Logs › Batches** lists the workspace's batches with their mode (Native or Gateway), status (including **Queued — waiting for capacity**), a progress bar, cost so far and creation time. Members see the batches they created; owners and admins see all of them. Open one for its page: status, **Cancel**, progress, completed and failed counts, cost so far, the files, and how many lines ended in each state.
+**Logs › Batches** lists the workspace's batches with their mode (Native or Gateway), status (including **Queued — waiting for capacity**), a progress bar, cost so far and creation time. Members see the batches they created, or all of them when the workspace is set to **Workspace-wide**; owners and admins see all of them. Open one for its page: status, **Cancel**, progress, completed and failed counts, cost so far, the files, and how many lines ended in each state.
 
 <Screenshot slot="batch-detail" />
 
 Workspace admins can add **Batch failed** and **Batch stalled** [alert rules](/docs/using/alerts-and-notifications).
+
+## Who sees which batches
+
+In a Team or Project, the workspace's [visibility setting](/docs/using/workspace-settings#who-sees-files-batches-and-videos) decides which batches a key sees, with their result files:
+
+- **Per user** (the default): a member's keys see only the batches created with their own keys. Another member's batch answers `404` and isn't listed.
+- **Workspace-wide**: every key sees every batch.
+
+Owners', admins' and service-account keys see every batch either way. In both modes, only the creator, an owner or admin, or a service-account key can cancel one. For shared automation, use a service-account key.
 
 ## Limits to know
 

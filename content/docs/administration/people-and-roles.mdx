@@ -1,6 +1,6 @@
 ---
 title: People and roles
-description: Platform roles, adding and suspending users, what happens when someone loses access, and the last-admin safeguard.
+description: Platform roles, adding and suspending users, signing people out, removing and exporting their data, what happens when someone loses access, and the last-admin safeguard.
 ---
 
 **Admin › Users** lists everyone who has used or been given access to the installation, with their effective platform role, status, last sign-in and number of shared workspaces. Filter by role (**Platform admin**, **Platform auditor**, **Platform user**, **No role**) and status (**Active**, **Suspended**). Someone who signed in without a platform role and was never granted one shows **No access**, with the name their identity provider sent.
@@ -32,13 +32,17 @@ A person can hold grants from both sources at once, and the users list shows the
 
 Open a user for:
 
-- **Overview**: profile and access, first and last sign-in, and their role grants with their source. **Grant platform role…** adds a manual role; a manual grant can be removed from its row.
+- **Overview**: profile and access, first and last sign-in, how many **Active sessions** they have, and their role grants with their source. **Grant platform role…** adds a manual role; a manual grant can be removed from its row. If the person is on legal hold, **Legal holds** shows how many, linked to Admin › Records › Legal holds.
 - **Shared workspaces**: the Teams and Projects they belong to, with their role and its source. Memberships are added on each workspace's **Members** page.
 - **Activity**: the audit log entries they performed (sign-in events can be hidden).
 
-No admin can see a user's personal keys, personal workspace or request details from here.
+No admin can see a user's personal keys, personal workspace or request details from here. The session count is a number only: never which devices or browsers.
 
 <Screenshot slot="admin-user-detail" />
+
+The page's menu holds the actions below. Platform Admins get all of them that apply to the person; Auditors get only **Export user record**.
+
+<Screenshot slot="admin-user-detail-actions" />
 
 ### Change email
 
@@ -48,13 +52,33 @@ No admin can see a user's personal keys, personal workspace or request details f
 
 **Suspend…** stops a user at once: their sessions end and their own keys are revoked. Their grants are kept. **Reactivate** restores access from the grants they still have. **Revoked keys and sessions never come back**: the user signs in again and makes new keys.
 
+Both are recorded in the [audit log](/docs/administration/audit-log) as their own actions: `user.suspended`, with the reason, and `user.reactivated`. Other profile changes are recorded as `user.updated`, which says whether the email or the sign-in link changed, never the values.
+
+### Sign out all sessions
+
+**Sign out all sessions…** ends every dashboard session the person has, without suspending them. They can sign in again at once, and their API keys keep working: use it when a device may be lost, not to remove access. It is offered only while they have a session, and not on your own page (sign yourself out from [Your profile](/docs/using/your-profile#sessions)). It is audited as `user.sessions_revoked`, with the count.
+
+### Remove personal data now
+
+For a **suspended** person, **Remove personal data now…** runs the account cleanup at once, instead of after the 30-day grace period. It can't be undone. It isn't offered while the person is active (suspend them first), after their data has been removed, or while they are on a [legal hold](/docs/administration/data-controls#legal-holds); the API refuses those cases with `409`.
+
+It removes the same as the cleanup below; see [Data controls](/docs/administration/data-controls#remove-personal-data-now) for the full list. It is audited as `user.personal_data_removed`, and the cleanup itself as `user.cleaned`.
+
+### Export user record
+
+**Export user record** downloads, as one JSON file, what admins can already see about the person: their profile, platform roles, Team and Project memberships, and the audit entries by or about them that Admin's audit log shows (the newest 10,000). It never contains their personal workspace, keys, sessions or requests. Platform Admins and Auditors can use it, up to 3 times an hour each; it is audited as `user.exported`. People download their own, fuller, record from [Your profile](/docs/using/your-profile#your-data).
+
+### Place legal hold
+
+**Place legal hold…** asks for a short reference code, such as a case or ticket number, and stops the gateway removing any of the person's data until the hold is released. See [Legal holds](/docs/administration/data-controls#legal-holds).
+
 ## When someone loses access
 
 When a person loses every platform role (for example, they leave the group that gave them access), at their next sign-in or SCIM update:
 
 1. Their access stops, their sessions end and the keys they hold are revoked.
 2. The account is kept for a **30-day grace period**. If a role comes back within it, they can sign in again, with fresh keys.
-3. After 30 days the gateway cleans up the account: it revokes remaining grants, disables the personal workspace and clears the email, keeping a record so that cost and audit history still point somewhere. If the person returns later, they get a new account.
+3. After 30 days the gateway cleans up the account: it revokes remaining grants, disables the personal workspace and clears the email, name and other copies of their personal data, keeping a pseudonymous record so that cost and audit history still point somewhere. If the person returns later, they get a new account. A [legal hold](/docs/administration/data-controls#legal-holds) on the person makes the cleanup wait; **Remove personal data now…** runs it early.
 
 Service-account keys in Teams and Projects don't depend on any person and are not affected.
 

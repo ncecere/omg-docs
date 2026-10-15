@@ -40,4 +40,11 @@ The Responses shape, with `store: false`. If the model stops at its output limit
 
 ## Streaming
 
-`"stream": true` works, including with the SDKs' `responses.stream` helper. The gateway reads the upstream stream as it arrives but sends it on as ordered events once up to 4 MiB of content has been collected, so text doesn't appear token by token yet. Text is sent before tool calls.
+`"stream": true` works, including with the SDKs' `responses.stream` helper. From v0.5.0, text streams as it is generated:
+
+1. `response.created` and `response.in_progress` are sent as soon as the upstream stream opens.
+2. Each piece of text is sent as a `response.output_text.delta` event, in the message item at output index 0, as the model generates it.
+3. Tool calls are collected and sent whole, after the message item, so parallel calls never interleave.
+4. `response.completed` (or `response.incomplete`) ends the stream, with the observed usage; counts that weren't reported are left out.
+
+The output is still limited to 4 MiB. An error before the end closes the stream with an error, never as a success. Before v0.5.0, the gateway sent everything at the end, once the response was complete.

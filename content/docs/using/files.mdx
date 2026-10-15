@@ -35,12 +35,21 @@ content = client.files.content(uploaded.id).read()
 client.files.delete(uploaded.id)
 ```
 
-- Any key of the workspace can list, read and delete the workspace's files. Another workspace's file id returns `404`.
+- A key sees only its own workspace's files: another workspace's file id returns `404`. In a Team or Project, which of the workspace's files a key sees depends on the workspace's setting (below).
 - Uploads stream straight to the store; files can be up to 200 MiB unless the operator changed the limit.
 - A file expires at the sooner of `expires_after` (if you set one) and the retention for its kind: 7 days for batch files and 30 days for user files unless a Platform Admin changed them. An expired file can't be read.
 - A batch makes its own copy of its input, so deleting the input file doesn't affect a batch that has started.
 
 The full endpoint list is in the [Files API reference](/docs/api/files).
+
+## Who sees which files
+
+In your personal workspace, all files are yours. In a Team or Project, the workspace's owners and admins choose [who sees files, batches and videos](/docs/using/workspace-settings#who-sees-files-batches-and-videos):
+
+- **Per user** (the default): your keys see only the files uploaded with your own keys or by you in the dashboard. Another member's file answers `404`, exactly like a file that doesn't exist, and isn't in your lists.
+- **Workspace-wide**: every key of the workspace sees every file.
+
+Owners', admins' and service-account keys see every file either way. Deleting a file is allowed only for the person who uploaded it, an owner or admin, or a service-account key; anyone else who can see it gets `403 file_not_owned`.
 
 ## The Files page
 
@@ -49,7 +58,7 @@ The full endpoint list is in the [Files API reference](/docs/api/files).
 <Screenshot slot="files" />
 
 - Owners and admins (and personal owners) see every file in the workspace and can delete any.
-- Members see, download and delete only the files they uploaded themselves, from the page or with their own keys.
+- Members see and download the files they uploaded themselves, from the page or with their own keys, or every file when the workspace is set to **Workspace-wide**. They can delete only their own.
 - Uploads and deletions in the dashboard are recorded in the workspace's audit log, with the purpose only.
 
 ## Storage quota

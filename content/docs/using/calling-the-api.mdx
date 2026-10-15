@@ -126,7 +126,7 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-Responses and Messages streams work with the SDKs' stream helpers, but the gateway currently sends their content in larger pieces after it has arrived, not token by token. See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
+Responses and Messages streams work with the SDKs' stream helpers and also send text as it is generated. Tool calls arrive whole, after the text. See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
 
 ### Embeddings
 
