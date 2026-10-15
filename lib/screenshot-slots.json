@@ -305,5 +305,11 @@
     ],
     "alt": "Home on a phone: the menu button and Priya Shah's workspaces and models stacked in one column.",
     "phone": true
+  },
+  "admin-settings-audit-export": {
+    "files": [
+      "admin-settings-audit-export"
+    ],
+    "alt": "Admin › Settings › Audit export: the transport (HTTPS webhook) and destination, status Delivering, no events waiting, the last delivery and heartbeat, the next sequence number, and the Send test delivery button."
   }
 }
