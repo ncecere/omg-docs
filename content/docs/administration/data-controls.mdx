@@ -1,0 +1,105 @@
+---
+title: "Data controls: export, removal, legal holds and retention"
+description: Exporting a person's data, removing it early, holding it for legal reasons, and how long Open Model Gateway keeps each kind of data.
+---
+
+Open Model Gateway keeps metadata about people and their requests, never prompts or responses. This page covers what you can do with that data: export it, remove a departed person's data early, stop all removal while a legal matter is open, and how long each kind is kept.
+
+## Exporting a person's data
+
+There are two exports, each one JSON file generated on demand and never stored. Both are recorded in the [audit log](/docs/administration/audit-log) and limited to 3 an hour for each person who downloads them, counted separately for the two kinds.
+
+### A person's own data
+
+Anyone signed in can download what the gateway holds about them from **Your profile › Your data**: see [Your profile](/docs/using/your-profile#your-data). The file contains:
+
+- their profile and platform roles;
+- their memberships, including their personal workspace;
+- their API keys' details (name, workspace, dates and status, never the secret);
+- their live dashboard sessions;
+- the request records of their keys, with estimated cost and the app and session labels their tools sent;
+- their own audit entries;
+- the list of files they uploaded.
+
+Requests and audit entries cover a date range they choose, up to 93 days (the last 30 by default). They include activity in workspaces the person has since left. Each list is capped (50,000 requests, 10,000 of anything else) and marked `truncated` when the cap is reached; a shorter range then gets the rest.
+
+The export never contains key secrets, prompts or responses, and never the contents of files: those are downloaded through the Files API while they exist. The `X-OMG-Export-SHA256` response header carries the file's SHA-256 checksum. It is audited as `subject.exported`. A replica builds at most two exports at once; beyond that the request fails with `503`, and you try again shortly.
+
+### An admin export
+
+**Export user record** on a person's page in Admin › Users downloads only what admins can already see: their profile, platform roles, Team and Project memberships, and the platform audit entries by or about them (the newest 10,000). Never their personal workspace, keys, sessions or requests. Platform Admins and Auditors can use it; it is audited as `user.exported`. See [People and roles](/docs/administration/people-and-roles#export-user-record).
+
+## Remove personal data now
+
+The gateway cleans up a person's account 30 days after they lose access (see [People and roles](/docs/administration/people-and-roles#when-someone-loses-access)). For a suspended person, a Platform Admin can run that cleanup at once with **Remove personal data now…** on their page. It can't be undone, and it is refused while the person is active, after their data has been removed, and while they are on a [legal hold](#legal-holds).
+
+**Removed:**
+
+- their email and display name, and the verified email on their sessions;
+- the attributes SCIM sent (user name, external id, given and family names) and their SCIM group memberships;
+- their address on old invitations and in alert rule recipients;
+- the names of files they uploaded.
+
+Their keys, platform role and workspace grants, sessions and pending invitations are revoked, and their personal workspace is disabled.
+
+Only copies under the person's current address are found: an address an admin or SCIM changed earlier isn't. Inside a Team or Project on legal hold, invitations, alert recipients and file names stay.
+
+**Kept:**
+
+- the names they gave their API keys (revoke the keys or ask them to rename them first, if that matters);
+- the user id, as the pseudonymous reference that costs, prices, requests and the audit log point to (none of that history is rewritten);
+- the link to their identity provider account, so the account can't silently link again;
+- request metadata, which follows [request log retention](/docs/administration/settings#data--privacy);
+- file contents, until the files expire.
+
+## Legal holds
+
+A legal hold stops the gateway removing any data of one person, Team or Project while a legal matter is open.
+
+<Screenshot slot="admin-legal-holds" />
+
+### Place a hold
+
+Platform Admins place a hold with **Place legal hold…**, in the menu of a person's page (Admin › Users) or of a Team's or Project's page in Admin. It asks for a **Reference**: a short code such as a case or ticket number, up to 64 characters of letters, digits and `. _ : / # -`, starting with a letter or digit. It is never free text: don't put names or descriptions in it.
+
+- A personal workspace is held through its owner: hold the person.
+- A person whose data was already removed can't be held.
+- Each target can have only one active hold with the same reference. References are compared without case.
+
+### What a hold stops
+
+While a hold is active, nothing of that scope is removed by the gateway itself:
+
+- a held person's 30-day account cleanup waits, and **Remove personal data now…** is refused;
+- request log retention skips their requests (by workspace, by the person a key was issued to, or by a personal workspace's owner);
+- stored files don't expire;
+- an operator's archiving of a month that contains held requests or audit events is refused.
+
+### What it doesn't do
+
+- **It grants no access.** Admins still can't see a person's personal workspace, keys or requests.
+- **It doesn't stop deliberate deletes.** Members and workspace admins can still delete files, and a batch still removes its own intermediate files.
+- **It doesn't lock the account.** SCIM or an admin can still change a held person's email, and ended sessions are still pruned after 30 days.
+- **Backups are outside it.** Keep the backups you need yourself.
+
+### Release a hold
+
+**Admin › Records › Legal holds** lists active holds with their reference, what they apply to (a user or a workspace), when and by whom they were placed, and their status. **Include released** shows released holds too. Platform Admins release a hold with **Release**; normal cleanup, retention, expiry and archiving then resume, unless another hold still covers the same data.
+
+Holds are released, never deleted: a released hold stays listed under **Include released**, with its release time, and never changes again. Placing and releasing are audited as `legal_hold.placed` and `legal_hold.released`. Platform Auditors can see the list but not place or release holds.
+
+## What is kept, and for how long
+
+| Data | Kept | Removed by | Under a legal hold |
+|---|---|---|---|
+| Request records: model, tokens, cost, times, workspace, key | As long as the database keeps their month | An operator archiving whole months past the configured history retention | Archiving a month with held records is refused |
+| Request details: error code, latency, session and app labels | Until [request log retention](/docs/administration/settings#data--privacy), if set | Compaction, hourly | Kept |
+| Prices, holds and the cost ledger | Never removed by the gateway | Only with their history month | As above |
+| Audit log | Until an operator archives its month; the gateway never removes it | An operator archiving audit months. An off-host copy can be kept with [audit export](/docs/self-hosting/audit-export) | Archiving a month with held events is refused |
+| Stored files | Per kind of file ([Storage](/docs/administration/settings#storage)) | Expiry; members and workspace admins can also delete them | Expiry waits; deliberate deletes don't |
+| A departed person's identity | 30 days after access ends | The account cleanup, or **Remove personal data now…** | Kept |
+| Ended dashboard sessions; expired sign-in attempts | 30 days; until they expire | Maintenance | Still removed: they hold a browser label and times, not activity |
+| Prompts and responses | Never stored | — | — |
+| Backups | Your schedule | Your operator | Outside the gateway: hold backups yourself |
+
+Nothing here ever removes money: costs, holds and the ledger stay exact for as long as their month exists. How operators archive months and prune backups is in [Database and migrations](/docs/self-hosting/database-and-migrations) and [Backups and restore](/docs/self-hosting/backups-and-restore).

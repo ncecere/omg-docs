@@ -32,13 +32,29 @@ The gateway owns `/v1/files`. Files are stored, encrypted, in the gateway's [fil
 
 ## Rules
 
-- **Scope**: every key of the workspace can list, read and delete its files. Another workspace's id returns `404`.
+- **Scope**: a key sees only its own workspace's files. Another workspace's id returns `404`. Within a Team or Project, see [Visibility](#visibility).
 - **Size**: up to 200 MiB per file unless the operator changed it (`413 file_too_large`).
 - **Quota**: the workspace's storage limit is checked as the upload streams (`413 storage_quota_exceeded`, type `insufficient_quota`).
 - **Expiry**: `expires_at` is the sooner of `expires_after` and the purpose's retention set in Admin (7 days for batch files and 30 days for user files by default). Expired files can't be read.
 - **Filename**: only the last path segment is kept, without control characters, up to 255 characters.
 - **Failures leave nothing**: a refused, failed or interrupted upload is deleted and frees its quota.
 - **Contents** never appear in logs, audit or metrics.
+
+## Visibility
+
+Teams and Projects choose who sees files, batches and video jobs, with the workspace's `object_visibility` setting (Workspace › Settings › General; see [Workspace settings](/docs/using/workspace-settings#who-sees-files-batches-and-videos)):
+
+| Caller | `member`: Per user (the default) | `workspace`: Workspace-wide |
+|---|---|---|
+| Service-account key | Every file | Every file |
+| Key of a workspace owner or admin | Every file | Every file |
+| Key of a regular member | Files uploaded with keys issued to that member | Every file |
+
+- A file the key can't see answers `404 not_found`, exactly like a missing one, by id, in lists (filtered before `limit`) and as a batch's `input_file_id`.
+- `DELETE` needs the uploader (any of their keys), a workspace owner's or admin's key, or a service-account key, in both modes. Another caller who can see the file gets `403` with type `permission_error` and code `file_not_owned`.
+- A rotated key keeps access to its holder's files. Personal workspaces are owner-private, so the setting doesn't apply.
+
+Before v0.6.0, every key of a shared workspace could read and delete every file in it.
 
 ## Errors
 
@@ -48,7 +64,8 @@ The gateway owns `/v1/files`. Files are stored, encrypted, in the gateway's [fil
 | 403 | `file_purpose_disabled` | The purpose's kind (Batch files or User files) isn't allowed in Admin. |
 | 413 | `storage_quota_exceeded`, `file_too_large` | Over the workspace quota or the size limit. |
 | 400 | `invalid_request_error`, `unsupported_capability` | A bad form, purpose, `expires_after` or content. |
-| 404 | `not_found` | Unknown, expired, deleted or another workspace's file. |
+| 403 | `file_not_owned` | Deleting a file you can see but didn't upload, without being an owner, admin or service account. |
+| 404 | `not_found` | Unknown, expired or deleted, another workspace's, or one this key can't see. |
 | 503 | `file_storage_unavailable` | The store or database failed. |
 
 Except for 503s, errors carry `x-should-retry: false`.

@@ -1,13 +1,13 @@
 ---
 title: Workspace settings
-description: Members and invitations, service accounts, limits, access, alerts and the audit log of a Team, Project or personal workspace.
+description: Members and invitations, who sees files, batches and videos, service accounts, limits, access, alerts and the audit log of a Team, Project or personal workspace.
 ---
 
 **Settings** in a workspace holds its members, limits and access. Which tabs you see depends on your role and the kind of workspace.
 
 | Tab | Team or Project | Personal |
 |---|---|---|
-| **General** | Type, your role, cost center; owners and admins can rename it | — (always called "Personal") |
+| **General** | Type, your role, cost center; owners and admins can rename it and choose [who sees files, batches and videos](#who-sees-files-batches-and-videos) | — (always called "Personal") |
 | **Members** | Members and invitations | — |
 | **Service accounts** | Owners and admins | — |
 | **Limits** | Owners and admins tighten; members read | Read only: set by Platform Admins |
@@ -30,6 +30,23 @@ Shared workspaces have three roles:
 To add someone, search by email under **Add member** and pick a role. Only people with a platform role who aren't already members appear. A membership can come from two places, shown on each row: given here by hand (**manual**), or from an [SSO group](/docs/administration/sso-groups). **Set manual role…** changes the manual one; **Remove manual access…** removes it, which also revokes their keys here unless an SSO group still gives them access.
 
 Members of one Team get nothing in another Team or in any Project.
+
+## Who sees files, batches and videos
+
+In a Team or Project, **General** has a setting for who sees the [files](/docs/using/files), [batches](/docs/using/batches) and video jobs created in the workspace. Owners and admins change it under **Files, batches and videos** › **Who sees them**; members see the current value.
+
+<Screenshot slot="workspace-settings-visibility" />
+
+| Setting | A member sees |
+|---|---|
+| **Per user** (the default) | Only what was created with their own keys or uploaded by them, with their keys and in the dashboard. |
+| **Workspace-wide** | Everything in the workspace, with any key. |
+
+- **In both modes**, owners, admins and service-account keys see everything.
+- **Deleting a file, deleting a video or cancelling a batch** is allowed only for the person who created it, an owner or admin, or a service-account key, whatever the setting. Others get `403`.
+- **What you can't see doesn't exist for you**: its id answers `404`, it is left out of lists, and it can't be used as a batch's input file.
+
+For an application that works on everyone's files and batches, use a [service account](#service-accounts) key rather than switching the workspace to **Workspace-wide**, unless members really should see each other's objects. Changes are recorded in the workspace's audit log.
 
 ### Invitations
 

@@ -3,7 +3,7 @@ title: Management API
 description: The session-authenticated API behind the dashboard, its conventions, and where each area is described.
 ---
 
-Everything the dashboard does goes through the management API under `/api/v1`. It exists for the dashboard: it authenticates with **browser sessions only**, and API keys can't use it.
+Everything the Open Model Gateway dashboard does goes through the management API under `/api/v1`. It exists for the dashboard: it authenticates with **browser sessions only**, and API keys can't use it.
 
 <Callout title="Not for scripts yet">
   There are no machine credentials for the management API, and its routes may change between releases before 1.0. Automating administration (an operator CLI, declarative configuration) is a possible future feature, not something available now.
@@ -11,10 +11,11 @@ Everything the dashboard does goes through the management API under `/api/v1`. I
 
 ## Conventions
 
-- **Sessions**: sign-in creates a twelve-hour session in an `HttpOnly` cookie. Every request rechecks the person's live role and memberships.
+- **Sessions**: sign-in creates a session in an `HttpOnly` cookie. It ends 12 hours after sign-in or after 2 hours without activity, whichever comes first, unless the operator changed them. Every request rechecks the person's live role and memberships. Sign-in itself is rate-limited (see [Errors and limits](/docs/api/errors-and-limits#sign-in-limits)).
 - **Changes** (anything but `GET` and `HEAD`) must send an `Origin` header that exactly matches the gateway's public URL and an `X-CSRF-Token` header equal to the `omg_csrf` cookie. No CORS is enabled.
 - **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`. `code` is always the HTTP status as a string; `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment`, `exceeds_parent_budget`, `route_unsupported_capability` or `price_meters_incomplete` (which adds `missing_meters`). Match on `reason`, not `code`. See [Errors and limits](/docs/api/errors-and-limits#management-api-errors).
-- **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset`. Financial lists add `has_more`.
+- **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset`. Financial lists add `has_more`. Large lists are searched on the server with `q` rather than loaded whole (below).
+- **Slow reads**: lists of platform users, a user's detail, workspaces, and a workspace's members, keys and service accounts read from the same snapshots as reports. A statement that runs over 10 seconds is cancelled with `503` "The request took too long; narrow it and try again" (from v0.5.0).
 - **Money**: integer micro-dollar amounts as **strings**, such as `"1250000"` for $1.25. Unknown values are `null`, never 0.
 - **Dates**: UTC. Reports take `start_date` and `end_date` as `YYYY-MM-DD`, end excluded, 1 to 93 days.
 - **Privacy**: no response ever contains a credential, a secret reference, a plaintext key, a prompt or a response.
@@ -24,9 +25,10 @@ Everything the dashboard does goes through the management API under `/api/v1`. I
 | Area | Routes (under `/api/v1`) | Described in |
 |---|---|---|
 | Sign-in | `/auth/config`, `/auth/login`, `/auth/callback`, `/auth/logout` | [Identity setup](/docs/self-hosting/identity) |
-| You | `/me`, `/me/summary`, `/me/keys`, `/me/notifications` | [Quick tour](/docs/getting-started/quick-tour) |
-| People | `/platform/users`, `/platform/oidc/group-mappings` | [People and roles](/docs/administration/people-and-roles), [SSO groups](/docs/administration/sso-groups) |
-| Workspaces | `/platform/workspaces`, `/workspaces/{ws}`, `…/members`, `…/invitations`, `…/service-accounts`, `/invitations/accept` | [Teams and Projects](/docs/administration/teams-and-projects), [Workspace settings](/docs/using/workspace-settings) |
+| You | `/me`, `/me/summary`, `/me/models`, `/me/keys`, `/me/notifications`, `/me/sessions`, `/me/export` | [Quick tour](/docs/getting-started/quick-tour), [Your profile](/docs/using/your-profile) |
+| People | `/platform/users`, `…/sessions/revoke`, `…/export`, `…/remove-personal-data`, `/platform/oidc/group-mappings` | [People and roles](/docs/administration/people-and-roles), [SSO groups](/docs/administration/sso-groups) |
+| Legal holds | `/platform/legal-holds`, `…/{id}/release` | [Data controls](/docs/administration/data-controls#legal-holds) |
+| Workspaces | `/platform/workspaces`, `/workspaces/{ws}`, `…/members`, `…/member-candidates`, `…/invitations`, `…/service-accounts`, `/invitations/accept` | [Teams and Projects](/docs/administration/teams-and-projects), [Workspace settings](/docs/using/workspace-settings) |
 | Keys | `/workspaces/{ws}/keys`, `…/keys/{key}/rotate`, `…/stats`, `…/access`, `…/key-safety`, `/platform/key-safety` | [API keys](/docs/using/api-keys), [Key safety](/docs/administration/key-safety) |
 | Models | `/platform/providers`, `/platform/models`, `/platform/deployments`, `/platform/model-setup`, `…/routing`, `…/prices`, `…/price-suggestion` | [Connections](/docs/administration/connections), [Models and routes](/docs/administration/models-and-routes), [Pricing](/docs/administration/pricing) |
 | Catalogs | `/platform/catalogs`, `/platform/catalog-defaults`, `/platform/workspaces/{ws}/catalogs`, `/workspaces/{ws}/models`, `…/catalog` | [Catalogs](/docs/administration/catalogs) |
@@ -36,8 +38,45 @@ Everything the dashboard does goes through the management API under `/api/v1`. I
 | Reconciliation | `POST /workspaces/{ws}/costs/{execution}/reconcile` | [Pricing](/docs/administration/pricing#cost-evidence-and-reconciliation) |
 | Files and batches | `/workspaces/{ws}/files`, `/workspaces/{ws}/batches`, `/platform/batches` | [Files](/docs/using/files), [Batches](/docs/using/batches) |
 | Alerts | `/platform/alerts/…`, `/workspaces/{ws}/alerts/…` | [Alerts](/docs/administration/alerts) |
-| Settings | `/platform/settings/general`, `…/privacy`, `…/email`, `…/storage`, `…/sign-in` | [Settings](/docs/administration/settings) |
+| Settings | `/platform/settings/general`, `…/privacy`, `…/email`, `…/storage`, `…/audit-export`, `…/sign-in` | [Settings](/docs/administration/settings) |
 | Audit | `/platform/audit`, `/workspaces/{ws}/audit` | [Audit log](/docs/administration/audit-log) |
+
+## Added in v0.5.0 and v0.6.0
+
+All under `/api/v1`.
+
+### Your sessions and your data
+
+| Route | Does |
+|---|---|
+| `GET /me/sessions` | Your live dashboard sessions, current one first: `{data: [{id, client, created_at, last_seen_at, expires_at, current}]}`. `id` is a handle, never the token; `client` is a browser and OS family, or `null`. No IP address. |
+| `DELETE /me/sessions/{id}` | Signs one of your sessions out, including the current one: `{revoked: 1}`. Someone else's, an unknown or an ended session is `404`. |
+| `POST /me/sessions/revoke-others` | Signs out all your other sessions: `{revoked: n}`. |
+| `GET /me/export?from=YYYY-MM-DD&to=YYYY-MM-DD` | Your data as one JSON file (format `omg.subject-export.v1`), with requests and audit entries for up to 93 days, ending today or earlier (default the last 30). `X-OMG-Export-SHA256` is its checksum. 3 an hour (`429` beyond), `400` for a bad range, `503` when exports are busy. |
+| `GET /me/models?limit=6` | The models added in your workspaces, for Home: `models` (up to `limit`, 1 to 50) with a serving route, `usable_count`, `not_serving`, `not_serving_count` and `workspaces_without_models`. |
+| `GET /me/summary?totals_only=true` | Only your totals, without the per-workspace breakdown, which grows with the number of workspaces. |
+
+### People, data and holds (Platform Admins and Auditors)
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /platform/users/{id}` | Admin, Auditor | Now also `active_sessions` (a count) and `legal_holds` (active holds, a count). |
+| `POST /platform/users/{id}/sessions/revoke` | Admin | Signs the person out everywhere: `{revoked: n}`. `404` for an unknown or cleaned-up user. |
+| `GET /platform/users/{id}/export` | Admin, Auditor | The person's record as admins see it: profile, platform roles, Team and Project memberships, platform audit entries. 3 an hour per caller. |
+| `POST /platform/users/{id}/remove-personal-data` | Admin | Runs the account cleanup now. `409` while the person is active, already cleaned up, or on legal hold. |
+| `GET /platform/legal-holds[?state=all]` | Admin, Auditor | Active holds, or all of them with `state=all`. |
+| `POST /platform/legal-holds` | Admin | `{user_id, reference}` or `{workspace_id, reference}`; returns `201` with the hold's `id`. `400` for a bad reference or a personal workspace, `409` for a duplicate active hold or a person whose data was removed. |
+| `POST /platform/legal-holds/{id}/release` | Admin | Releases a hold; `409` if it was already released. |
+| `GET /platform/settings/audit-export` | Admin, Auditor | The audit export's status, including `transport` (`webhook`, `syslog`, `otlp` or `null`) and `next_seq`. |
+| `POST /platform/settings/audit-export/test` | Admin | One test delivery: `{ok, error}`. `409` when export isn't set up; 2 a minute per admin and 20 an hour. |
+
+### Workspaces and search
+
+- `GET` and `PATCH /workspaces/{ws}` carry `object_visibility` on Teams and Projects: `member` (Per user, the default) or `workspace` (Workspace-wide). Owners and admins change it; any other value is `400`, and a personal workspace is `409 reason:"personal_workspace_visibility_fixed"`. See [Files](/docs/api/files#visibility).
+- `q` (up to 200 characters, case-insensitive) searches member lists (`GET /workspaces/{ws}/members`, `GET /platform/workspaces/{ws}/members`) by email and display name, the key list (`GET /workspaces/{ws}/keys`) by key name, and `GET /platform/models` by API or display name.
+- `GET /platform/workspaces/{ws}/member-candidates?q=` is the member picker for Platform Admins, as `GET /workspaces/{ws}/member-candidates?q=` is for workspace admins: up to 20 active people with a platform role who aren't members yet, matched on email.
+- `GET /platform/models` also takes `not_in_catalog=<catalog id>` and `not_direct_in=<workspace id>`, to leave out models already in a catalog or assigned to a workspace.
+- Audit rows name their actor, workspace and target (`actor_name`, `workspace_name`, `target_name`), and key rows their holder (`issued_to_name`), so the dashboard needn't load every user or workspace.
 
 The complete route list, with bodies and responses, is in the repository's [`docs/management-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/management-api.md) and [`docs/governance-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/governance-api.md).
 

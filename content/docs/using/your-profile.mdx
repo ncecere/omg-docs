@@ -1,0 +1,59 @@
+---
+title: Your profile
+description: Your identity and workspaces, where you're signed in, signing sessions out, how long a session lasts, and downloading your data.
+---
+
+**Your profile** is in the account menu at the bottom of the sidebar. It shows what Open Model Gateway knows about you:
+
+- **Identity**: your name (if your identity provider sends one), email, platform role and the installation's name.
+- **Your workspaces**: each workspace you belong to, with your role in it.
+- **Sessions**: where you're signed in to the dashboard.
+- **Your data**: a download of everything the gateway holds about you.
+
+## Sessions
+
+**Sessions** lists every place you're signed in to the dashboard, with the device, when it signed in and when it was last active. The browser you're using is marked **This browser**.
+
+<Screenshot slot="your-sessions" />
+
+- The device is a browser and operating system family, such as "Firefox on macOS", or "Unknown browser" when neither is recognised. The gateway stores no IP address and no full browser identification.
+- Last activity is recorded at most every 5 minutes, so it can be a few minutes behind.
+- **Sign out** on a row ends that session at once: whoever uses it has to sign in again.
+- **Sign out others** ends every session except this browser's.
+- To end this browser's session, use **Sign out** in the account menu.
+
+Signing sessions out never affects your API keys: they keep working. If you think someone else has your key, [rotate or revoke it](/docs/using/api-keys).
+
+A Platform Admin can also sign you out everywhere, for example when a device is lost. They see how many sessions you have, never which devices.
+
+## How long a session lasts
+
+A dashboard session ends at whichever comes first:
+
+- **2 hours without activity**, and
+- **12 hours after you signed in**,
+
+unless your installation's operator chose other limits. Because activity is recorded at most every 5 minutes, a session can end up to 5 minutes before the idle limit. When a session has ended, you sign in again with single sign-on. Your API keys don't depend on dashboard sessions and aren't affected.
+
+## Your data
+
+**Your data** downloads, as one JSON file, what the gateway holds about you:
+
+- your profile and platform roles;
+- your memberships, including your personal workspace;
+- your API keys' details: names, workspaces, dates and status, never the secrets;
+- your live dashboard sessions;
+- the requests made with your keys, with their estimated cost and the app and session labels your tools sent;
+- your own audit log entries;
+- the list of files you uploaded.
+
+<Screenshot slot="your-data" />
+
+Choose **From** and **To** dates for the requests and audit entries: up to 93 days, ending today or earlier (the last 30 days to start with). Then choose **Download your data**.
+
+- Activity in workspaces you have since left is included, because it is your own.
+- The file never contains key secrets, prompts or responses (the gateway doesn't store those), or the contents of your files. Download files you need through the [Files API](/docs/using/files) while they exist.
+- Very long lists are cut off and marked `truncated`; choose a shorter range to get the rest.
+- You can download your data 3 times an hour. Each download is recorded in the audit log.
+
+If you need a record of what admins can see about you, or something removed, ask a Platform Admin; see [Data controls](/docs/administration/data-controls).

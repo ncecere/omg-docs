@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: Installation settings in Admin, for general settings, defaults and limits, data and privacy (including file storage), email, alerts and sign-in.
+description: Installation settings in Admin, for general settings, defaults and limits, data and privacy (including file storage), email, alerts, audit export and sign-in.
 ---
 
 **Admin › Settings** holds installation-wide settings. Platform Admins change them; Auditors read them. Every change is written to the [audit log](/docs/administration/audit-log), with typed details only, never addresses, URLs or credentials.
@@ -12,6 +12,7 @@ description: Installation settings in Admin, for general settings, defaults and 
 | **Data & privacy** | OpenRouter data collection, request log retention, prompt storage, and the file store |
 | **Email** | The SMTP relay for invitations and alerts |
 | **Alerts** | Installation rules and history, including **Installation spend** (a non-blocking notification on total spend) and **Admission ceiling**; see [Alerts](/docs/administration/alerts) |
+| **Audit export** | Read-only status of the audit log's stream to your SIEM, and a test delivery |
 | **Sign-in** | Read-only identity configuration, signing-key status and SCIM status |
 
 ## General
@@ -30,10 +31,12 @@ description: Installation settings in Admin, for general settings, defaults and 
 | Setting | Values |
 |---|---|
 | **OpenRouter data collection** | **Deny** (default) or **Allow**, sent with every OpenRouter request. Deny excludes OpenRouter providers that may train on prompts, including all `:free` variants. |
-| **Request log retention** | Keep (default), or 30 to 3,650 days. After it, finished requests' error codes, timings and session and app labels are cleared, hourly. Usage, costs, prices, the ledger and the audit log are never deleted. |
+| **Request log retention** | Keep (default), or 30 to 3,650 days. After it, finished requests' error codes, timings and session and app labels are cleared, hourly. Usage, costs, prices, the ledger and the audit log are never deleted, and requests under a [legal hold](/docs/administration/data-controls#legal-holds) are skipped. |
 | **Prompt and response storage** | **Never stored.** A fact, not a setting. |
 
 The operator can fix either setting with an environment variable (`GATEWAY_OPENROUTER_DATA_COLLECTION`, `GATEWAY_EXECUTION_DETAIL_RETENTION_DAYS`). It then shows as locked and can't be changed here.
+
+How long every other kind of data is kept is in [Data controls](/docs/administration/data-controls#what-is-kept-and-for-how-long).
 
 ### Storage
 
@@ -62,14 +65,43 @@ An SMTP relay sends invitation codes and alert emails. Without one, workspace ad
 
 | Field | Notes |
 |---|---|
-| **Host** and **port** | Your relay, for example `smtp.example.edu` and `587`. |
+| **Host** and **port** | Your relay, for example `smtp.example.edu` and `587`. The operator must also approve the host on the server, in `GATEWAY_SMTP_HOST_ALLOWLIST`; otherwise nothing is sent to it. |
 | **Security** | STARTTLS (required, never optional; usually port 587) or implicit TLS (usually 465). Unencrypted is allowed only for a relay on the same machine. |
-| **Username** and **Password reference** | Leave both empty if the relay doesn't need sign-in. The password is a reference such as `env:SMTP_PASSWORD`, to a variable the operator has allowed in `GATEWAY_SECRET_ENV_ALLOWLIST`. It is never stored or shown. |
+| **Username** and **Password reference** | Leave both empty if the relay doesn't need sign-in. The password is a reference such as `env:SMTP_PASSWORD`, to a variable the operator has allowed in `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, the SMTP password's own allowlist. Provider credentials can't be used here. The password is never stored or shown. |
 | **From address** and **From name** | For example `ai-gateway@example.edu`, "Example University AI Gateway". |
 
-The status reads **Not configured**, **Credential unavailable** (the variable is unset or no longer allowed) or **Ready**. **Send test email** sends a fixed message to your own verified address and reports a category on failure (credential, address, connection, TLS, authentication, rejected, timeout). It is limited to 2 a minute per admin and 20 an hour for the installation.
+The status reads:
+
+| Status | Meaning |
+|---|---|
+| **Not set up** | No relay is configured. |
+| **Host not approved** | The host isn't on the operator's `GATEWAY_SMTP_HOST_ALLOWLIST` (`host_not_allowed` in the API). Nothing is sent, not even a test, and the password is never read. Ask the operator to add the host. |
+| **Password unavailable** | The password's variable is unset, or isn't on `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`. |
+| **Ready** | Email can be sent. |
+
+**Send test email** sends a fixed message to your own verified address and reports a category on failure (host not allowed, credential, address, connection, TLS, authentication, rejected, timeout). It is limited to 2 a minute per admin and 20 an hour for the installation.
 
 Each message uses its own connection, with no retries. Message bodies and recipients are never logged. Invitation emails contain the code, not a link with the code; they point people to `/invitations/accept` when the public URL is configured.
+
+## Audit export
+
+**Audit export** shows where the installation's [audit log](/docs/administration/audit-log#streaming-it-to-a-siem) is streamed for your SIEM. The operator sets the destination on the server, so nothing here can change or stop it. Until they do, the page says **Not set up**; events are exported from the moment it is set up, and earlier ones stay in the dashboard and backups. See [Audit export](/docs/self-hosting/audit-export).
+
+The **Status** card shows a badge (**Delivering**, **Retrying**, **Collector refusing events** or **Not set up**) and:
+
+| Field | Shows |
+|---|---|
+| **Transport** | **HTTPS webhook**, **Syslog over TLS** or **OpenTelemetry (OTLP)** |
+| **Destination** | The receiver's host |
+| **Exporting since** | When export was turned on |
+| **Waiting** | Events queued for delivery, and the oldest one's time |
+| **Last delivery**, **Last error** | When the receiver last accepted events, and the last failure with its reason, such as a failed connection, a TLS failure or a 4xx answer |
+| **Delivered** | Events delivered so far |
+| **Next sequence number** | The number the next exported event will carry. Every event has one, one higher than the last, so the receiver can spot missing events |
+| **Last heartbeat** | When the last heartbeat was sent. An export with nothing to send sends one every minute, so the receiver can tell a quiet installation from a broken stream |
+| **Format** | `omg.audit.v1` |
+
+While deliveries fail, events wait in the queue and are retried; none are dropped. Platform Admins can **Send test delivery**: one test delivery with no events, whose result appears as a message. Tests are limited to 2 a minute per admin and 20 an hour for the installation, and recorded as `audit_export.tested`. Auditors see the status only.
 
 ## Sign-in
 
@@ -81,5 +113,14 @@ It also shows live status:
 
 - **Signing keys**: how many of the identity provider's keys are cached, when they were last fetched, and whether they are current, a cached copy (fetching is failing) or unavailable.
 - **Provisioning (SCIM)**: on or off, the base URL to copy, user and group counts and the last SCIM change. See [SCIM](/docs/administration/scim).
+
+### Sessions and sign-in limits
+
+These come from the server's environment too, and aren't shown on this page:
+
+- **Dashboard sessions** end 12 hours after sign-in, or after 2 hours without activity, whichever comes first, unless the operator changed them (`GATEWAY_SESSION_LIFETIME`, `GATEWAY_SESSION_IDLE_TIMEOUT`). A shorter setting doesn't shorten sessions that already exist: to end them now, use **Sign out all sessions…** on a person's page (see [People and roles](/docs/administration/people-and-roles#sign-out-all-sessions)).
+- **Sign-in attempts** are limited per client address (60 a minute by default) and installation-wide; beyond that, sign-in answers `429` or `503` with `Retry-After`, and existing sessions keep working. Behind a reverse proxy, the operator must list it in `GATEWAY_TRUSTED_PROXIES`, or everyone shares the proxy's limit.
+
+See [Identity setup](/docs/self-hosting/identity).
 
 SSO group mappings themselves are on [Admin › SSO groups](/docs/administration/sso-groups).

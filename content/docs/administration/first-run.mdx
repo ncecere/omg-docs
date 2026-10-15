@@ -16,9 +16,10 @@ An operator has to do three things on the server (see [Self-hosting](/docs/self-
 
 ```sh
 open-model-gateway migrate
+open-model-gateway grants apply
 ```
 
-The gateway never creates or upgrades its database on its own.
+Both run as the database's migrator role: `grants apply` gives the gateway's runtime role exactly the access it needs, and is run again after every `migrate`. The gateway never creates or upgrades its database on its own. See [Database and migrations](/docs/self-hosting/database-and-migrations).
 
 </Step>
 <Step>
@@ -64,7 +65,7 @@ Below the checklist, **Platform at a glance** shows users with access, Teams, Pr
 ## Then
 
 1. In **Settings › General**, name the installation and set a support link and the maximum lifetime of people's keys.
-2. In **Settings › Email**, set up an SMTP relay so invitations and alerts are emailed. Send a test.
+2. In **Settings › Email**, set up an SMTP relay so invitations and alerts are emailed. The operator has to approve the relay host and the password's variable on the server first; see [Settings](/docs/administration/settings#email). Send a test.
 3. In **Settings › Data & privacy**, decide on request log retention and, if you will use batches or files, check the storage backend and allow the kinds of file you need.
 4. Make a key in your personal workspace and try a request with the [OpenAI SDK](/docs/using/calling-the-api).
 5. Grant a second Platform Admin. The last active Platform Admin can't be removed, so having two avoids getting stuck.

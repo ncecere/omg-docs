@@ -1,6 +1,6 @@
 ---
 title: Errors and limits
-description: Error codes and HTTP statuses of the inference API, which ones to retry, and the size limits.
+description: Error codes and HTTP statuses of the inference API, which ones to retry, sign-in rate limits, management API errors and the size limits.
 ---
 
 Errors use the OpenAI shape, or Anthropic's on `/v1/messages`:
@@ -19,8 +19,9 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 | 400 | `upstream_rejected` | The provider refused the request (validation, moderation, unknown model). | No |
 | 400 | `unsupported_capability` | Images, audio, rerank, System One, realtime, files, batches and videos: no route can serve this request. | No |
 | 401 | | Missing, repeated or invalid key, or a disabled, revoked or expired one. | No |
+| 403 | `file_not_owned`, `batch_not_owned`, `video_not_owned` | From v0.6.0. Deleting a file or video, or cancelling a batch, that this key can see but didn't create, in a Team or Project, without being an owner's or admin's key or a service-account key. Type `permission_error`. | No |
 | 404 | `model_not_found` | No such model, or not available to this key. (A model whose routes are only cooling down answers `503 model_temporarily_unavailable` instead, from v0.3.1.) | No |
-| 404 | `not_found` | A file, batch or video id that doesn't exist or belongs to another workspace. | No |
+| 404 | `not_found` | A file, batch or video id that doesn't exist, belongs to another workspace or, from v0.6.0, is hidden from this key by its Team's or Project's [visibility setting](/docs/api/files#visibility). Also for such a file used as `input_file_id`. | No |
 | 413 | `payload_too_large`, `file_too_large`, `storage_quota_exceeded` | The body, file or workspace storage is over its limit. | No |
 | 429 | `rate_limit_error` | A per-minute or at-once limit, or the provider's rate limit. | Yes, later |
 | 429 | `job_limit_exceeded` | A "jobs at once" limit (batches, videos). | Yes, when a job ends |
@@ -47,6 +48,17 @@ A limit denial names the scope kind: this API key or this workspace (there is no
 
 Before v0.3.2, a budgeted request on a price that couldn't bound it was reported as `429 budget_exceeded`. It is now `503 price_unbounded`, because the cause is the price's configuration, not anyone's spending. Without any budget, such a request still runs, and its cost may be recorded as unknown.
 
+## Sign-in limits
+
+From v0.6.0, dashboard sign-in (`/api/v1/auth/login` and `/api/v1/auth/callback`) is rate-limited. These limits never apply to API keys.
+
+| HTTP | When |
+|---|---|
+| 429 | Too many sign-in starts or callbacks from one client address: 60 a minute each, per gateway replica, unless the operator changed it. |
+| 503 | Too many sign-ins are pending across the installation at once (about 10,000). Existing sessions keep working. |
+
+Both carry `Retry-After` with the seconds to wait, store nothing and set no cookie. Behind a reverse proxy the operator must set `GATEWAY_TRUSTED_PROXIES`, or every user shares the proxy's limit; see [Identity setup](/docs/self-hosting/identity).
+
 ## Management API errors
 
 The dashboard's [management API](/docs/api/management-api) uses a different shape. `error.code` is the HTTP status as a string, and `error.reason`, when present, is the stable machine code:
@@ -55,12 +67,13 @@ The dashboard's [management API](/docs/api/management-api) uses a different shap
 {"error": {"code": "400", "reason": "price_meters_incomplete", "missing_meters": ["search_units", "requests"], "message": "…"}}
 ```
 
-Three reasons concern this release:
+Reasons added in recent releases:
 
 | HTTP | `reason` | When |
 |---|---|---|
 | 400 | `route_unsupported_capability` | From v0.3.2. Creating a route, enabling one, or changing a model's protocols would leave an enabled route on a connection whose profile can't serve the model. The message names the profile, the model's type and what the profile serves. See [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable). |
 | 400 | `price_meters_incomplete` | From v0.3.2. A published price leaves out a meter the route can use. `missing_meters` lists them. See [Pricing](/docs/administration/pricing#every-meter-must-be-stated). |
+| 409 | `personal_workspace_visibility_fixed` | From v0.6.0. Setting `object_visibility` on a personal workspace, which has no such setting. |
 | 410 | `installation_limits_removed` | From v0.4.0. `GET`/`PUT /platform/installation/policy` no longer exists: there is no installation-wide budget or rate limit. Use workspace-type defaults, platform overrides or key limits, and an [Installation spend alert](/docs/administration/alerts#installation-spend) to watch total spend. See [Limits and budgets](/docs/administration/limits-and-budgets). |
 
 ## Size limits

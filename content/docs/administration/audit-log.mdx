@@ -1,6 +1,6 @@
 ---
 title: Audit log
-description: Every administrative change and sign-in synchronisation, recorded in the same transaction as the change, without request content.
+description: Every administrative change and sign-in synchronisation, recorded in the same transaction as the change, without request content, and optionally streamed to a SIEM.
 ---
 
 **Admin › Audit log** lists the installation's administrative history, newest first. Platform Admins and Auditors read it; nobody can edit or delete it.
@@ -15,7 +15,9 @@ Examples of actions, by area:
 
 | Area | Actions |
 |---|---|
-| People | `user.provisioned`, `user.updated`, `identity.groups_synchronized`, `identity.rebound` |
+| People | `user.provisioned`, `user.updated` (whether the email or sign-in link changed, never the values), `user.suspended` (with the reason), `user.reactivated`, `user.cleaned`, `identity.groups_synchronized`, `identity.rebound` |
+| Sessions | `session.revoked` and `session.others_revoked` (someone signed out one or all of their other sessions, with the count), `user.sessions_revoked` (an admin signed a person out everywhere, with the count) |
+| Data controls | `subject.exported` (someone downloaded their own data), `user.exported` (an admin exported a person's record), `user.personal_data_removed`, `legal_hold.placed`, `legal_hold.released` |
 | Workspaces | `workspace.created`, `workspace.updated`, `workspace.manual_membership_set`, `workspace.manual_membership_revoked`, `invitation.created`, `invitation.accepted`, `invitation.revoked`, `service_account.created`, `service_account.updated` |
 | Keys | `key.created`, `key.rotated`, `key.disabled`, `key.enabled`, `key.revoked` |
 | Models | `provider.created`, `provider.updated`, `model.created`, `model.updated`, `deployment.created`, `price.created`, `routing.model_updated`, `routing.deployment_updated`, `model.granted`, `model.grant_revoked` |
@@ -24,6 +26,7 @@ Examples of actions, by area:
 | Spending | `cost_center.created`, `cost_center.updated`, `cost_center.archived`, `alert_rule.created`, `alert_rule.updated`, `alert_rule.deleted` |
 | Files and batches | `file.uploaded`, `file.deleted`, `batch.cancelled` |
 | Settings | `settings.general_updated`, `settings.privacy_updated`, `settings.email_updated`, `settings.email_test`, `settings.storage_updated`, `settings.storage_test` |
+| Audit export | `audit_export.enabled`, `audit_export.disabled` (the operator turned the export on or off, recorded even when changed directly in the database), `audit_export.tested` |
 | SCIM | `scim.user.created`, `scim.user.updated`, `scim.user.deactivated`, `scim.user.reactivated`, `scim.group.created`, `scim.group.updated`, `scim.group.deleted`, `scim.last_admin_protected` |
 
 Routes and prices, which have no name of their own, are shown as "*upstream model* on *connection*" and "Price v*N* for *upstream model* on *connection*".
@@ -38,4 +41,10 @@ The log can be narrowed to one person's actions, and sign-in side effects (group
 
 ## Keeping it
 
-The audit log is append-only for the running gateway: its database role can add entries and read them, never change or delete them. Account cleanup after the 30-day grace period keeps audit history. Back it up with the rest of the database; see [Backups and restore](/docs/self-hosting/backups-and-restore).
+The audit log is append-only for the running gateway: its database role can add entries and read them, never change or delete them. Account cleanup after the 30-day grace period, and **Remove personal data now…**, keep audit history. Back it up with the rest of the database; see [Backups and restore](/docs/self-hosting/backups-and-restore). How long it is kept, and how legal holds apply to it, is in [Data controls](/docs/administration/data-controls#what-is-kept-and-for-how-long).
+
+## Streaming it to a SIEM
+
+The operator can stream the audit log to your SIEM as it is written: to a signed HTTPS webhook, over syslog with TLS, or as OpenTelemetry (OTLP) logs, one destination at a time. It carries the same events as Admin's audit log, never personal-workspace events, prompts, responses or secrets. Delivery is at least once and in order; nothing is dropped while the receiver is down. Each event carries a sequence number that grows by one, and an idle export sends a heartbeat every minute, so the receiver can tell when events are missing or the stream has gone quiet.
+
+Only the operator sets or stops the destination, on the server. **Admin › Settings › Audit export** shows its status and sends a test; see [Settings](/docs/administration/settings#audit-export). Setting it up is in [Audit export](/docs/self-hosting/audit-export).

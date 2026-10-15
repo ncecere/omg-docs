@@ -1,6 +1,6 @@
 ---
 title: Teams and Projects
-description: Creating shared workspaces, their owners and members, per-workspace overrides for catalogs and limits, and cost centers.
+description: Creating shared workspaces, their owners and members, who sees their files, batches and videos, per-workspace overrides for catalogs and limits, cost centers and legal holds.
 ---
 
 Teams and Projects are the installation's shared workspaces. They work the same way; the two kinds exist so you can organise by both, for example a Team per department and a Project per grant. A Project never belongs to a Team, and membership of one gives nothing in the other.
@@ -9,7 +9,7 @@ Only Platform Admins create them, in **Admin › Teams** and **Admin › Project
 
 ## Create one
 
-Give it a **name** and an **initial owner**, who must already have a platform role. The owner can then add members, admins and service accounts on the workspace's **Members** page. People don't have to be members of anything to get their personal workspace.
+Give it a **name** and an **initial owner**, found by searching for their email, who must already have a platform role. The owner can then add members, admins and service accounts on the workspace's **Members** page. People don't have to be members of anything to get their personal workspace.
 
 <Screenshot slot="admin-team-detail" />
 
@@ -25,6 +25,21 @@ Give it a **name** and an **initial owner**, who must already have a platform ro
 | **General** | Name, cost center, and disabling the workspace. |
 
 A Platform Admin who isn't a member sees configuration here, not the workspace's keys or requests.
+
+The page's menu also has **Place legal hold…**, which stops the gateway removing any of the workspace's data until the hold is released; see [Legal holds](/docs/administration/data-controls#legal-holds).
+
+## Who sees files, batches and videos
+
+Each Team and Project has a setting for who sees the [files](/docs/using/files), [batches](/docs/using/batches) and video jobs created in it with API keys or in the dashboard:
+
+| Setting | A member's keys and dashboard see |
+|---|---|
+| **Per user** (the default) | Only the objects created with that member's own keys, or that they uploaded. |
+| **Workspace-wide** | Every object in the workspace. |
+
+In both modes, owners, admins and service-account keys see everything. Only the person who created an object, an owner or admin, or a service-account key can delete or cancel it; anyone else gets `403`. An object a key can't see answers `404`, exactly as if it didn't exist, including when it is named as a batch's `input_file_id`.
+
+The workspace's owners and admins choose the setting in **Workspace › Settings › General**, under **Files, batches and videos**; see [Workspace settings](/docs/using/workspace-settings#who-sees-files-batches-and-videos). It isn't set from Admin. Every Team and Project was **Per user** after the upgrade to v0.6.0: before it, any key in a shared workspace could read, delete or cancel every member's objects. For automation that works on everyone's objects, use a service-account key, or set the workspace to **Workspace-wide**. Personal workspaces have no setting: only their owner holds their keys.
 
 ## Overrides for one workspace
 

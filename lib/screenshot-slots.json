@@ -119,6 +119,12 @@
     ],
     "alt": "A Team's Limits tab: each limit inherited from the platform next to the Team's own tighter values, including a 512 MB storage limit and a daily budget that can only be lowered, and the effective limit."
   },
+  "workspace-settings-visibility": {
+    "files": [
+      "workspace-settings-visibility"
+    ],
+    "alt": "A Team's General settings: its type, role and cost center, and the Files, batches and videos panel with Who sees them set to Per user."
+  },
   "admin-users": {
     "files": [
       "admin-users"
@@ -130,6 +136,12 @@
       "admin-user-detail"
     ],
     "alt": "A user's page in Admin: profile and access, sign-in dates, and a Platform user role granted through an SSO group."
+  },
+  "admin-user-detail-actions": {
+    "files": [
+      "admin-user-detail-actions"
+    ],
+    "alt": "A user's page in Admin with its menu open: Change email, Suspend, Sign out all sessions, Export user record, Place legal hold and Copy ID, beside an Overview showing 2 active sessions."
   },
   "admin-sso-groups": {
     "files": [
@@ -245,6 +257,12 @@
     ],
     "alt": "The Audit log: recent actions with time, actor, action and target, such as an uploaded file, a removed membership, SCIM user changes, an invitation and new alert rules."
   },
+  "admin-legal-holds": {
+    "files": [
+      "admin-legal-holds"
+    ],
+    "alt": "Admin Legal holds: active holds with their reference code, the user or Team each applies to, when and by whom it was placed, an Active status and a Release button, with the Include released button above."
+  },
   "admin-settings-general": {
     "files": [
       "admin-settings-general"
@@ -268,6 +286,18 @@
       "admin-settings-sign-in"
     ],
     "alt": "Sign-in settings: the identity provider configuration and callback URL, signing-key status, and SCIM provisioning status with its base URL."
+  },
+  "your-sessions": {
+    "files": [
+      "your-sessions"
+    ],
+    "alt": "The Sessions card on Your profile: three sessions with their device (Firefox on macOS marked This browser, Safari on iOS, Chrome on Windows), when each signed in and was last active, Sign out on the other two, and Sign out others."
+  },
+  "your-data": {
+    "files": [
+      "your-data"
+    ],
+    "alt": "The Your data card on Your profile: From and To dates covering the last 30 days, and the Download your data button."
   },
   "phone-home": {
     "files": [

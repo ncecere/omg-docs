@@ -41,7 +41,16 @@ Refused: extended thinking, images and audio, cache-control settings, tool resul
 
 ## Streaming
 
-`"stream": true` works with the SDK's stream helpers. The gateway collects the upstream response (up to 4 MiB) before sending events, so `message_start` arrives after the model has finished, not token by token. Its `usage` has the observed input and cache counts and `output_tokens: 0`; the final `message_delta` carries the output count. Counts that weren't reported are left out. An error before completion sends only an `error` event.
+`"stream": true` works with the SDK's stream helpers. From v0.5.0, text streams as it is generated:
+
+1. `message_start` is sent as soon as the upstream stream opens, before any usage is known. Its `usage` is the placeholder `{"input_tokens": 0}`.
+2. Text is sent as `text_delta` events in content block 0 as it arrives.
+3. Tool calls are sent whole, as `tool_use` blocks, after the text.
+4. `message_delta` carries the observed usage: input tokens, cache counts and output tokens. The Anthropic SDKs apply it. `message_stop` follows.
+
+Read usage from `message_delta`, not `message_start`: a client that reads only `message_start` sees 0 input tokens. If the provider never reports input tokens, the placeholder 0 is all a client gets; the gateway itself records the count as unknown, not zero. Other counts that weren't reported are left out. The output is still limited to 4 MiB, and an error before completion sends only an `error` event.
+
+Before v0.5.0, the gateway collected the whole response first, and `message_start` carried the input and cache counts.
 
 ## Amazon Bedrock
 
