@@ -13,6 +13,7 @@
     "file-storage",
     "---Operating---",
     "metrics-and-monitoring",
+    "audit-export",
     "scaling",
     "backups-and-restore",
     "upgrades",

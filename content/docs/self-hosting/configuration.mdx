@@ -59,18 +59,88 @@ New in v0.4.0; none of these change an existing default. See [Scaling](/docs/sel
 | `GATEWAY_OIDC_GROUPS_CLAIM` | `groups` | The ID-token claim that lists groups. A dotted path reaches into nested claims. |
 | `GATEWAY_SCIM_TOKEN_ENV` | unset (SCIM off) | The **name** of the variable holding the SCIM bearer token (32 to 1,024 printable characters). Needs OIDC. |
 
+### Sign-in limits and sessions
+
+New in v0.6.0.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated addresses or CIDR networks of your reverse proxies, such as `10.42.0.0/16`. Only a request from one of them has its `X-Forwarded-For` believed. Used for sign-in rate limits only. |
+| `GATEWAY_LOGIN_RATE_PER_MINUTE` | `60` | Sign-in starts, and separately callbacks, allowed per client address per minute, per replica. 1 to 10,000. |
+| `GATEWAY_SESSION_LIFETIME` | `12h` | How long a dashboard session lasts after sign-in. `15m` to `7d`, written as a whole number with `m`, `h` or `d`, such as `30m`, `12h` or `7d`. |
+| `GATEWAY_SESSION_IDLE_TIMEOUT` | `2h` | How long a session lasts without activity. `off`, or `15m` up to the lifetime. With a lifetime under 2 hours and this unset, it equals the lifetime. |
+
+- An address in `GATEWAY_TRUSTED_PROXIES` with host bits set (`10.42.0.1/16`), a bad prefix, or an IPv4 network written in IPv6 form stops startup.
+- The two rate settings are read only when sign-in is configured. The session settings are checked even without OIDC, so a typo is never missed.
+- An empty value for any sign-in variable stops startup: unset it instead.
+
 See [Identity setup](/docs/self-hosting/identity).
 
 ## Credentials and network approvals
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GATEWAY_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of environment variables that connections and the email password may reference as `env:NAME`. Anything not listed is refused. |
+| `GATEWAY_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of environment variables that connections may reference as `env:NAME`. Anything not listed is refused. From v0.6.0 the email password has its own list ([below](#email)). |
 | `GATEWAY_LOCAL_UPSTREAMS` | unset | JSON list of approved self-hosted endpoints and their pinned IP addresses: `[{"endpoint":"http://models.example.internal:8000/v1","addresses":["10.10.1.20"]}]`. Up to 64 endpoints, 16 addresses each. |
 | `GATEWAY_AWS_PROFILE_ALLOWLIST` | empty | Comma-separated AWS profile names that Bedrock connections and the file store may use. |
 | `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST` | empty | Comma-separated HTTPS origins of Bedrock VPC endpoints that connections may use. |
 
 The provider keys themselves are ordinary variables with names of your choice, such as `OPENAI_API_KEY`, listed in the allowlist. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` can also come from files with `_FILE` ([secrets from files](#secrets-from-files)). See [Provider credentials](/docs/self-hosting/provider-credentials).
+
+## Outbound connections
+
+New in v0.6.0.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_EGRESS_PRIVATE_ALLOW` | unset (none) | Private networks the gateway may connect to, as comma-separated CIDRs or single addresses, such as `10.20.0.0/16,fd00:1::/32`. |
+
+Every outbound connection follows one address policy: metadata, link-local and reserved addresses are always refused, loopback is allowed only with `GATEWAY_ENV=development`, and private addresses (RFC 1918, `100.64.0.0/10`, IPv6 unique-local) only inside this list. Public addresses are allowed. Approved self-hosted model servers in `GATEWAY_LOCAL_UPSTREAMS` keep their own pinned approval and need no entry here.
+
+- The list is read before every command, `healthcheck` included. An invalid address or prefix, host bits set, or an IPv4 network written in IPv6 form stops them all.
+- List an identity provider, S3-compatible store or AWS private endpoint on a private network, or sign-in (at startup) and those requests fail with a message that names this variable.
+- Over Tailscale, list only the addresses you need, never all of `100.64.0.0/10`.
+
+See [Security](/docs/self-hosting/security#the-outbound-address-policy).
+
+## Email
+
+New in v0.6.0. The relay itself (host, port, TLS, username and password reference) is set in Admin › Settings › Email; these variables decide what that page may use.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_SMTP_HOST_ALLOWLIST` | empty | Comma-separated SMTP relay hosts, as exact names or IP literals. The relay chosen in the dashboard must be listed. Empty: no email can be sent. |
+| `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of variables the SMTP password reference (`env:NAME`) may read. |
+
+- Hosts are compared without regard to case, a trailing dot or IPv6 spelling. Entries are hosts, not ports.
+- An unlisted relay never gets a connection or the password. Settings › Email shows `host_not_allowed`.
+- A listed relay on the same machine (`localhost`, `127.0.0.1`, `::1`) is allowed outside development too.
+- Startup fails if a name is on both `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` and `GATEWAY_SECRET_ENV_ALLOWLIST`, or if the SMTP list names `DATABASE_URL`, `GATEWAY_OIDC_CLIENT_SECRET`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or anything starting with `AWS_` or `GATEWAY_`.
+
+## Audit export
+
+New in v0.6.0. Set one destination at most: a webhook, syslog over TLS or an OTLP collector. See [Audit export to a SIEM](/docs/self-hosting/audit-export).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_AUDIT_WEBHOOK_URL` | unset | HTTPS endpoint the audit log is posted to, or `off`. |
+| `GATEWAY_AUDIT_WEBHOOK_SECRET_ENV` | unset | The **name** of the variable holding the webhook signing secret, at least 32 bytes. Required with the webhook URL. |
+| `GATEWAY_AUDIT_SYSLOG_URL` | unset | `syslog+tls://host[:port]` (port 6514 by default), or `off`. |
+| `GATEWAY_AUDIT_SYSLOG_CA_FILE` | unset (public roots) | PEM file of the CA that signs the receiver's certificate. When set, only it is trusted. |
+| `GATEWAY_AUDIT_SYSLOG_CLIENT_CERT_FILE`, `GATEWAY_AUDIT_SYSLOG_CLIENT_KEY_FILE` | unset | PEM client certificate and private key for mutual TLS. Both or neither. |
+| `GATEWAY_AUDIT_OTLP_URL` | unset | An OpenTelemetry collector's full OTLP/HTTP logs endpoint, such as `https://collector.example.internal:4318/v1/logs`, or `off`. |
+| `GATEWAY_AUDIT_OTLP_HEADERS_ENV` | unset | The **name** of the variable holding headers for the collector, `Key=Value,Key2=Value2`. Optional; OTLP only. |
+
+Startup stops if:
+
+- two of the three URLs are set, including `off` in one and a destination in another;
+- a setting belongs to a transport that isn't in use, such as the webhook secret with only the syslog URL;
+- a URL isn't HTTPS (plain HTTP is allowed only to loopback in development), or contains credentials or a fragment;
+- the secret or headers variable is lower case, isn't set, is on `GATEWAY_SECRET_ENV_ALLOWLIST` or `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, is one of the four [secrets from files](#secrets-from-files), or starts with `AWS_` or `GATEWAY_`;
+- a syslog PEM file is missing, unreadable or over 1 MiB, or only one of the client certificate and key is set;
+- the OTLP headers are malformed: more than 16, an invalid name, `Content-Type`, `Host` or `Content-Length`, or a value with anything other than visible ASCII and spaces.
+
+Errors name the setting, never a secret, header or file content. `OTEL_*` variables are never read for the audit export.
 
 ## OpenRouter
 

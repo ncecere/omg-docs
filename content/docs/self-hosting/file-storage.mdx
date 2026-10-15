@@ -7,6 +7,8 @@ The gateway keeps the files it owns (Files API uploads, batch inputs and results
 
 Every object is encrypted by the gateway before the backend sees it, whatever the backend, and the database holds metadata only.
 
+From v0.6.0, files, batches and videos in a Team or Project are **per user** by default: a member's keys see only objects created with that member's keys, while service-account keys and workspace owners and admins see everything. A workspace admin can make them workspace-wide in Workspace › Settings › General. See [Workspace settings](/docs/using/workspace-settings).
+
 ## Choose a backend
 
 <Tabs items={['Amazon S3', 'MinIO', 'RustFS', 'Local disk']}>
@@ -55,7 +57,7 @@ GATEWAY_S3_SECRET_ACCESS_KEY_ENV=RUSTFS_GATEWAY_SECRET
 GATEWAY_FILE_ENCRYPTION_KEYS_ENV=GATEWAY_FILE_KEYS
 ```
 
-The `http://` allowlist entry is what approves plain HTTP; use it only inside a private network. Objects are still encrypted.
+The `http://` allowlist entry is what approves plain HTTP; use it only inside a private network. Objects are still encrypted. An in-cluster name like this one resolves to a private address, so it also needs `GATEWAY_EGRESS_PRIVATE_ALLOW` ([below](#private-endpoints)).
 
 </Tab>
 <Tab value="Local disk">
@@ -75,6 +77,14 @@ Other S3-compatible stores (Cloudflare R2 with region `auto`, Wasabi, Ceph RGW, 
 
 The S3 client uses one attempt per request, follows no redirects, ignores proxy variables and `AWS_ENDPOINT_URL*`, and avoids newer AWS-only checksum and session features that older S3-compatible servers reject.
 
+### Private endpoints
+
+From v0.6.0 the S3 client follows the [outbound address policy](/docs/self-hosting/security#the-outbound-address-policy):
+
+- A store on a private address (MinIO or RustFS on your network, an S3 VPC endpoint) needs its network in `GATEWAY_EGRESS_PRIVATE_ALLOW`, or its requests fail with a message naming that variable.
+- A store on loopback, such as a local sidecar, works only with `GATEWAY_ENV=development`.
+- An IP-literal `GATEWAY_S3_ENDPOINT` is checked at startup: a refused address stops the gateway instead of failing each request.
+
 ## Encryption keys
 
 `GATEWAY_FILE_ENCRYPTION_KEYS_ENV` names a variable whose value is a list of master keys:
@@ -93,11 +103,33 @@ GATEWAY_FILE_KEYS=k2027a:<new key>,k2026a:<old key>
 
 ### Rotate a key
 
-1. Generate a new key and put it **first**; keep the old one after it. Restart every replica.
-2. Run `open-model-gateway files verify`. Its `by_key_id` counts show how many live files still use the old key. Files expire with their retention (365 days at most; branding files never expire).
-3. Remove the old key only when its count reaches 0. Removing it earlier makes those files unreadable (`key_unavailable`).
+From v0.6.0, `files rekey` moves existing files to a new key, so you no longer wait for them to expire.
 
-If a master key leaks, add a new first key at once, then shorten retention and run `files sweep --once` to remove files under the old key before removing it.
+1. Generate a new key and put it **first**; keep the old one after it: `k2027a:<new>,k2026a:<old>`. Restart every replica. New files use the new key; old ones still decrypt.
+2. See how many files would move, then move them:
+
+   ```sh
+   open-model-gateway files rekey --from k2026a --to k2027a --dry-run
+   open-model-gateway files rekey --from k2026a --to k2027a
+   ```
+
+3. Run `open-model-gateway files verify`. `by_key_id` counts live files per key, `active_key_id` is the key new files use, and `retired_key_ids_in_use` lists the decrypt-only keys that live files still need.
+4. Remove the old key only when it's no longer in `retired_key_ids_in_use`, and no backup you keep needs it. Removing it earlier makes those files unreadable (`key_unavailable`, and `verify` lists it under `unknown_key_ids`).
+
+How `files rekey` works:
+
+- It re-wraps each file's data key under the new master key. The contents are copied back unchanged, never decrypted, so it costs one read and one write of each object (on S3, the request and transfer charges for the whole bucket).
+- Each object is replaced atomically, one file at a time. A copy that doesn't come out the same length is abandoned and the old object kept.
+- It is safe to interrupt and rerun, and safe while the gateway serves. Deleting a file waits while that file is being rewritten.
+- It prints a JSON report and exits non-zero while any file still uses the old key: `failed` (rerun), `skipped_deleting` (a delete was in progress; rerun in a few minutes) or `other_backend` (files recorded under another store; move or delete them first).
+- Files on legal hold are re-wrapped like any other. Unfinished uploads aren't; they are removed within a day.
+- On a versioned bucket, old object versions keep the old wrapped key until they expire.
+
+The same procedure works for local disk and S3-compatible stores.
+
+### If a key leaks
+
+Add a new first key at once. Re-wrapping doesn't help against someone who also copied the ciphertext: the data keys inside stay the same. Treat files under the old key as exposed, and expire or delete them (shorten retention and run `files sweep --once`) before removing the key. `files rekey` protects only against a copy of the ciphertext taken later.
 
 ## Retention and the sweeper
 
@@ -106,9 +138,10 @@ What may be stored, and for how long, is set in **Admin › Settings › Data & 
 ```sh
 open-model-gateway files sweep --once [--limit 1000]   # one sweep now
 open-model-gateway files verify [--limit 100000]       # read-only check; non-zero exit on problems
+open-model-gateway files rekey --from OLD --to NEW [--dry-run] [--limit N]   # key rotation
 ```
 
-`files verify` reports missing objects, size mismatches, files under another backend, key ids no longer configured, stale uploads and failed deletions. It doesn't list the bucket, so stray objects without a row aren't found: use a bucket lifecycle rule or inventory for those.
+`files verify` reports missing objects, size mismatches, files under another backend, key ids no longer configured, stale uploads and failed deletions, and, from v0.6.0, the active key and the retired keys still in use. It doesn't list the bucket, so stray objects without a row aren't found: use a bucket lifecycle rule or inventory for those.
 
 ## Test it
 

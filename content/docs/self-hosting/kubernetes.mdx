@@ -1,67 +1,159 @@
 ---
 title: Kubernetes
-description: A beta Helm chart for Kubernetes, an optional CloudNativePG-managed database, the migration job, PgBouncer caveats and scaling.
+description: A beta Helm chart for Kubernetes, an optional CloudNativePG-managed database, one-step installs, the migration job, outbound traffic, failover timing and PgBouncer caveats.
 ---
 
-From v0.4.0, `deploy/helm/open-model-gateway/` in the repository is a Helm chart for Kubernetes. It packages the same distroless image, explicit migration step and runtime-role boundary as the [Compose](/docs/self-hosting/container) and operations guidance elsewhere in these docs, adapted for a cluster with [CloudNativePG](https://cloudnative-pg.io/) (CNPG) and an ingress controller.
+From v0.4.0, `deploy/helm/open-model-gateway/` in the repository is a Helm chart for Kubernetes. It packages the same distroless image, explicit migration step and runtime-role boundary as the [Compose](/docs/self-hosting/container) and operations guidance elsewhere in these docs, adapted for a cluster with [CloudNativePG](https://cloudnative-pg.io/) (CNPG) and an ingress controller. The chart's version and default image tag follow the release: chart 0.6.0 defaults to `v0.6.0`.
 
-<Callout type="warn" title="Beta until validated on a production-like cluster">
-  As of v0.4.0 the chart has passed `helm lint`/`helm template` across four profiles, `kubeconform` schema validation, a real `kubectl apply --dry-run=server` against a live CloudNativePG operator, and a `kind` smoke test (install, migration, readiness, an idempotent upgrade, pod deletion under the PodDisruptionBudget, primary-pod-kill recovery). It has not been run under sustained production load or on a non-homelab cluster. Treat field names as stable, but review every rendered manifest before a real rollout.
+<Callout type="warn" title="Still beta">
+  The chart has passed `helm lint`/`helm template` across four profiles, `kubeconform` schema validation, a `kubectl apply --dry-run=server` against a live CloudNativePG operator and a `kind` smoke test. From v0.5.0 it has also run on a multi-node homelab cluster, with a CloudNativePG primary and a synchronous standby, through failovers, pooler restarts and pod kills. It has not run under sustained production load, and there is no certified capacity number yet. Treat field names as stable, but review every rendered manifest before a real rollout.
 </Callout>
 
 ## Prerequisites
 
 - Kubernetes 1.29 or newer.
-- An ingress controller, if you enable the chart's `ingress`.
-- CloudNativePG 1.22+ installed cluster-wide, if you use the chart's optional managed `Cluster`/`Pooler` — or an external PostgreSQL 17 otherwise.
+- An ingress controller, if you enable the chart's `ingress`. Set `gateway.trustedProxies` to the controller's addresses ([below](#gateway-values)).
+- CloudNativePG 1.22+ installed cluster-wide, if you use the chart's optional managed `Cluster`/`Pooler`, or an external PostgreSQL 17 otherwise.
 - A StorageClass for CNPG's volumes, if you use the managed database.
 - `prometheus-operator` CRDs, only if you enable `ServiceMonitor`/`PodMonitor` scraping.
 
 ## Secrets are always references
 
-The chart never generates a credential. Every secret — the runtime and `LISTEN` database URLs, an optional reporting-replica URL, the migrator's database URL, OIDC client secret, provider API keys, and file-store encryption keys — is a reference to a Secret you create (or that the CNPG operator manages), by name and key. A missing reference fails the chart fast, instead of silently proceeding.
+The chart never generates a credential. Every secret (the runtime and `LISTEN` database URLs, an optional reporting-replica URL, the migrator's database URL, OIDC client secret, provider API keys, and file-store encryption keys) is a reference to a Secret you create, or that the CNPG operator manages, by name and key. A missing reference fails the chart fast, instead of silently proceeding.
+
+Other secrets, such as an SMTP password or the audit export's signing secret, come in through `gateway.extraEnvFrom` from a Secret you create.
 
 ## Choosing a database mode
 
-- **External** (default): point the chart's database secrets at your own PostgreSQL 17 — a managed HA cluster, Patroni, or a CNPG `Cluster` you manage outside the chart.
-- **Chart-managed CloudNativePG**: the chart can render a CNPG `Cluster` (synchronous replication, anti-affinity across nodes) and `Pooler` (PgBouncer, transaction mode) for you, using roles backed by Secrets you pre-create — the chart itself never writes a password into rendered YAML.
+- **External** (default): point the chart's database secrets at your own PostgreSQL 17: a managed HA cluster, Patroni, or a CNPG `Cluster` you manage outside the chart.
+- **Chart-managed CloudNativePG**: the chart renders a CNPG `Cluster` (two instances, synchronous replication, anti-affinity across nodes) and `Pooler` (PgBouncer, transaction mode) for you, using roles backed by Secrets you pre-create. The chart never writes a password into rendered YAML.
 
-### First install with a chart-managed database
+For failover, replication and sizing, see the repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md) and [Database and migrations](/docs/self-hosting/database-and-migrations#highly-available-postgresql).
 
-With a chart-managed CloudNativePG database, the `Cluster`/`Pooler` are plain templates but the migration job is a pre-install hook that runs *before* them — so on a genuinely fresh install there's nothing yet for it to connect to. Bootstrap in two steps: install once without running migrations so the database comes up, wait for the `Cluster` to become ready, then upgrade with migrations turned on. Every later upgrade that ships a migration only needs the second step.
+## First install
 
-## Migration job and runtime grants
+From v0.5.0 a first install is one command, including the chart-managed CloudNativePG database, so it also works as a single Flux `HelmRelease`:
 
-The gateway never migrates or bootstraps itself in `serve`, in Kubernetes or anywhere else. Running migrations is an explicit, reviewed operator action on every upgrade that ships one: a Helm hook job that runs `open-model-gateway migrate`, then applies the same reviewed `runtime-grants.sql` this project uses everywhere, using the **migrator** credential only — never the runtime role, and never mounted into the gateway Deployment itself.
+```sh
+helm install omg deploy/helm/open-model-gateway -f values.yaml \
+  --set migrations.run=true --wait --timeout 10m
+```
+
+- On a first install the migration Job is a plain resource, not a hook, so it starts alongside the `Cluster` and `Pooler`. It waits for the database to accept connections, then migrates and applies the runtime grants.
+- Gateway pods have a `wait-for-schema` init container, so they wait for the schema instead of crash-looping. `--wait` finishes when they pass `/health/ready`.
+- On kind with CloudNativePG 1.30.1 this took about two minutes, with no restarts.
+
+Before v0.5.0 a chart-managed database needed two steps. That is no longer necessary.
+
+## Migration Job and runtime grants
+
+The gateway never migrates or bootstraps itself in `serve`, in Kubernetes or anywhere else. `migrations.run` is `false` by default: set `--set migrations.run=true` as an explicit, reviewed step on every upgrade that ships a migration. On upgrades the Job is a `pre-upgrade` hook, so the schema changes before any new gateway pod starts. Mixed-schema replicas aren't supported; see [Upgrades](/docs/self-hosting/upgrades).
+
+The Job uses the **migrator** Secret only, never mounted into the gateway Deployment, and runs three steps with the gateway image itself:
+
+1. `open-model-gateway wait-for-database`: waits until PostgreSQL accepts connections.
+2. `open-model-gateway migrate`.
+3. `open-model-gateway grants apply`: applies the reviewed `deploy/staging/runtime-grants.sql`, which is embedded in the binary.
+
+From v0.5.0 there is no second image to pin and no copy of the SQL to keep in sync.
+
+## Gateway values
+
+New values since v0.4.0. Each one sets the environment variable in brackets; empty means the gateway's default. See [Configuration](/docs/self-hosting/configuration).
+
+| Value | Sets | Notes |
+|---|---|---|
+| `gateway.trustedProxies` | `GATEWAY_TRUSTED_PROXIES` | A list, such as the cluster's pod network. Without it, every user shares the ingress controller's sign-in budget. |
+| `gateway.loginRatePerMinute` | `GATEWAY_LOGIN_RATE_PER_MINUTE` | Default 60. |
+| `gateway.sessionLifetime` | `GATEWAY_SESSION_LIFETIME` | Default `12h`. |
+| `gateway.sessionIdleTimeout` | `GATEWAY_SESSION_IDLE_TIMEOUT` | Default `2h`. |
+| `gateway.smtpHostAllowlist` | `GATEWAY_SMTP_HOST_ALLOWLIST` | A list. Your relay must be on it, or email isn't sent. |
+| `gateway.smtpSecretEnvAllowlist` | `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` | A list. Must not overlap `gateway.secretEnvAllowlist`, or the gateway won't start. |
+| `networkPolicy.egress.httpsCidrs` | | Outbound 443 only to these networks ([below](#outbound-traffic)). |
+| `networkPolicy.egress.httpsExceptCidrs` | | Outbound 443 anywhere except these. Not together with `httpsCidrs`. |
+| `cnpg.cluster.smartShutdownTimeout` | | Default 15 seconds ([below](#failover-timing)). |
+
+Set `GATEWAY_EGRESS_PRIVATE_ALLOW` and the audit export variables with `gateway.env`.
+
+### Removed values
+
+- `migrations.grants.image` (v0.5.0): the Job applies the grants with the gateway image.
+- `cnpg.cluster.backup.destinationPath` (v0.5.0): it was never rendered. Put `destinationPath` inside `cnpg.cluster.backup.barmanObjectStore`.
+- `loadtest.loadgen.requests` and `concurrency` (v0.5.0): replaced by `rate`, `duration`, `warmup`, `keys` and `extraArgs`.
+
+## Outbound traffic
+
+Two layers decide where gateway pods may connect, and they should agree.
+
+**The gateway.** From v0.6.0 the gateway refuses metadata, link-local and reserved addresses, allows loopback only in development, and allows private networks only from `GATEWAY_EGRESS_PRIVATE_ALLOW` ([The outbound address policy](/docs/self-hosting/security#the-outbound-address-policy)). Set it with `gateway.env`, for example `GATEWAY_EGRESS_PRIVATE_ALLOW: "10.42.0.0/16"` for an in-cluster identity provider or S3 store. The SMTP relay must also be on `gateway.smtpHostAllowlist`.
+
+**The NetworkPolicy.** It denies by default, then allows DNS, the database, TCP 443 and `networkPolicy.egress.extraEgress`. By default 443 goes anywhere, because a plain NetworkPolicy can't name hosts. From v0.6.0 you can narrow it:
+
+```yaml
+networkPolicy:
+  egress:
+    # Either 443 only to these networks (your providers' ranges, an egress proxy):
+    # httpsCidrs: ["203.0.113.0/24"]
+    # ... or 443 anywhere except these, as the gateway's own policy does. Not both.
+    httpsExceptCidrs: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"]
+    # SMTP isn't opened by default: add your relay's port.
+    extraEgress:
+      - to: [{ ipBlock: { cidr: 203.0.113.25/32 } }]
+        ports: [{ protocol: TCP, port: 587 }]
+```
+
+- The chart's NetworkPolicy has never opened SMTP or syslog ports. Add an `extraEgress` rule for your mail relay (587, 465 or 25), a syslog receiver (6514) or an OTLP collector (4318).
+- A private destination needs both: its network in `GATEWAY_EGRESS_PRIVATE_ALLOW` and, if `httpsCidrs` is set, in `httpsCidrs` or an `extraEgress` rule. With AWS PrivateLink, list the VPC range in both.
+- Instance metadata and EKS Pod Identity listen on port 80, which the default policy already blocks. The AWS SDK's credential lookup is outside the gateway's own policy, so with those credentials, add an `extraEgress` rule for that address on port 80. IRSA needs STS on 443 instead.
+- Over Tailscale, list only the tailnet addresses you need, never all of `100.64.0.0/10`.
+
+## Failover timing
+
+`cnpg.cluster.smartShutdownTimeout` (default 15 seconds, new in v0.5.0) is how long a stopping primary waits for clients before a fast shutdown. CloudNativePG's own default is 180 seconds. The pooler's connections and each replica's `LISTEN` session never close on their own, so with 180 seconds a failover kept writes down for about three minutes on the homelab cluster.
+
+With 15 seconds, at 60 requests a second with three gateway replicas and two database instances, the standby was promoted in 18 seconds. About 22 seconds later, writes stalled again while the old primary rejoined as the synchronous standby. That second outage is not yet explained (#149); until it is, run three database instances if writes must stay available through a failover.
+
+Requests interrupted by a failover keep their holds and are reconciled as unknown. Nothing is refunded or charged twice.
 
 ## PgBouncer caveats
 
 If you put PgBouncer (or the chart's managed Pooler) in front of the database:
 
 - **Prepared statements** must be enabled (`max_prepared_statements` > 0) for the gateway's prepared-statement cache to work under transaction-mode pooling. Without it, admission and settlement queries fail.
-- **`LISTEN` does not work through transaction-mode pooling.** Point the `GATEWAY_LISTEN_DATABASE_URL` connection at PostgreSQL directly (or a session-mode pooler), never through the transaction pooler. Without a working listener, caches still catch up through a one-second poll — nothing is unsafe, just a little slower to notice a change.
-- **`migrate` must run directly against PostgreSQL**, never through a transaction-mode pool: it takes a session-level advisory lock.
-- An optional reporting replica is for reports, usage and logs only — never for admission, settlement or write authorization.
+- **`LISTEN` does not work through transaction-mode pooling.** Point the `GATEWAY_LISTEN_DATABASE_URL` connection at PostgreSQL directly (or a session-mode pooler), never through the transaction pooler. Without a working listener, caches still catch up through a one-second poll.
+- **`migrate` and `grants apply` must run directly against PostgreSQL**, never through a transaction-mode pool: they take a session-level advisory lock.
+- An optional reporting replica is for reports, usage and logs only, never for admission, settlement or write authorization.
+
+Measured on the homelab cluster at 60 requests a second: restarting the Pooler failed 2 of 5,400 requests, and terminating every replica's `LISTEN` session failed none.
 
 See [Scaling](/docs/self-hosting/scaling) and [Configuration](/docs/self-hosting/configuration#scaling) for the environment variables involved.
 
 ## Scaling and availability
 
-- Set the gateway's replica count (or let autoscaling do it) the same way you would any Deployment; see [Scaling](/docs/self-hosting/scaling) for what makes replicas add capacity from v0.4.0, and the per-workspace/key ceiling that doesn't go away with more replicas.
+- Set the gateway's replica count (or let autoscaling do it) the same way you would any Deployment; see [Scaling](/docs/self-hosting/scaling) for what makes replicas add capacity, and the per-workspace and per-key ceiling that doesn't go away with more replicas.
 - A PodDisruptionBudget and topology spread keep replicas available during voluntary disruption and rollout.
 - Scale the database tier (and its connection pooler) independently of the gateway; size pooler connections for the sum of replica pools that are actually busy, not their maximum.
+- The chart's default database (2 CPU, 2 GiB) is too small for load. See [Scaling](/docs/self-hosting/scaling#measured-on-a-cluster).
+
+## Audit export
+
+Set the export's URL with `gateway.env` and its secret (or OTLP headers) through `gateway.extraEnvFrom` from a Secret; the `_ENV` setting names that variable. The chart has no volume option for syslog's PEM files: add the volume and mount with a patch, such as a Kustomize post-renderer. See [Audit export to a SIEM](/docs/self-hosting/audit-export#kubernetes).
 
 ## Backups
 
-Keep running the project's checksummed, lineage-checked application-level backup (`scripts/backup.py`) against the database from outside the cluster, or as a scheduled job you add yourself. If you use the chart's managed CloudNativePG database, its own object-store backup is independent of that application-level dump and doesn't replace it.
+Keep running the project's application-level backup (`scripts/backup.py`, encrypted and copied off the host) against the database, from outside the cluster or as a scheduled job you add yourself. The chart doesn't wrap it in a Job. If you use the chart's managed CloudNativePG database, `cnpg.cluster.backup.enabled` adds CNPG's own base backups and WAL archive to an object store; they complement the logical dump and don't replace it. See [Backups and restore](/docs/self-hosting/backups-and-restore).
 
 ## Troubleshooting
 
-- **Readiness stays unready after an upgrade that shipped a migration:** check the migration job's logs — it may still be running, or migrations were never turned on for this upgrade.
-- **Admission or settlement errors referencing prepared statements:** the pooler's prepared-statement support isn't configured; see [PgBouncer caveats](#pgbouncer-caveats) above.
-- **A pod won't start over a `_FILE` secret:** a variable and its `_FILE` companion are both set — only one of each pair may be present.
+- **Readiness stays unready after an upgrade that shipped a migration:** check the migration job's logs. It may still be running, or migrations were never turned on for this upgrade.
+- **Admission or settlement errors referencing prepared statements:** the pooler's prepared-statement support isn't configured; see [PgBouncer caveats](#pgbouncer-caveats).
+- **A pod won't start over a `_FILE` secret:** a variable and its `_FILE` companion are both set; only one of each pair may be present.
+- **The gateway refuses a destination** (`gateway_egress_denied_total`, a log naming `GATEWAY_EGRESS_PRIVATE_ALLOW`): the address is private or reserved. List its network if it's meant to be reached.
+- **Requests to a provider time out with `httpsCidrs` set:** 443 reaches only those networks. Add the provider's range or an egress proxy.
+- **Email never arrives, with `connection` errors:** SMTP isn't open in the NetworkPolicy. Add an `extraEgress` rule for the relay's port.
 - **The managed `Cluster`/`Pooler` is rejected on apply:** usually a missing role Secret or a StorageClass that doesn't exist in your cluster.
+- **`kind load docker-image` fails with "content digest … not found":** the published image is a multi-platform index with attestations. Let the kind node pull it from the registry, or `docker save --platform` a single-platform archive and `kind load image-archive` it.
 
 ## Loadtest profile
 
-A `loadtest` chart profile adds a mock upstream and a one-shot load generator for your own capacity testing against your own cluster — useful for producing your own numbers, since the project's own measurements so far are from a laptop stack, not a claim about any Kubernetes cluster's capacity.
+A `loadtest` chart profile adds a mock upstream and a load generator Job for your own capacity testing on your own cluster. From v0.5.0 the generator is open loop: `loadtest.loadgen.rate` requests a second for `duration` seconds, after `warmup`, spread over `keys` seeded keys, with more flags in `extraArgs`. With the chart-managed database it also checks settlement against the database after each run. The project's own cluster numbers are on [Scaling](/docs/self-hosting/scaling#measured-on-a-cluster); they are not a claim about your cluster.

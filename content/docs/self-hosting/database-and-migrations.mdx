@@ -1,6 +1,6 @@
 ---
 title: Database and migrations
-description: PostgreSQL 17, separate migrator and runtime roles with reviewed grants, and explicit, checked migrations.
+description: PostgreSQL 17, separate migrator and runtime roles with reviewed grants, explicit, checked migrations, and highly available PostgreSQL.
 ---
 
 Open Model Gateway keeps everything durable in **PostgreSQL 17**: identity, configuration, limits, reservations, the cost ledger and the audit log. Every replica shares the same database, which is how limits and budgets hold across replicas.
@@ -12,14 +12,32 @@ Use three database roles, never one:
 | Role | Used for |
 |---|---|
 | `gateway_bootstrap` | Cluster administration: creating roles, backups and restores. Never given to the gateway. |
-| `gateway_migrator` | Owns the database and schema. Runs `migrate`, `provision-user` and the grant script, as one-off jobs. |
+| `gateway_migrator` | Owns the database and schema. Runs `migrate`, `grants apply` and `provision-user`, as one-off jobs. |
 | `gateway_runtime` | The running gateway. Only the table and column privileges it needs; no schema changes, no ownership. |
 
-The repository's `deploy/staging/init-db.sql` creates the migrator and runtime roles on a new database, and `deploy/staging/runtime-grants.sql` grants the runtime role exactly what it needs. The grant script is an allowlist: tables it doesn't name are closed to the runtime role. It keeps prices, the cost ledger and the audit log insert-only for the runtime role, and stops it from making anyone a Platform Admin directly.
+The repository's `deploy/staging/init-db.sql` creates the migrator and runtime roles on a new database, and `deploy/staging/runtime-grants.sql` grants the runtime role exactly what it needs. The grant script is an allowlist: tables it doesn't name are closed to the runtime role. It keeps prices, the cost ledger and the audit log insert-only for the runtime role, and stops it from making anyone a Platform Admin directly. The runtime role must be named `gateway_runtime`, because the script grants to that name.
+
+From v0.5.0 the script is embedded in the binary:
+
+```sh
+open-model-gateway grants apply    # as the migrator: apply the runtime grants
+open-model-gateway grants verify   # as a role that can SET ROLE gateway_runtime: rollback-only probes
+```
 
 <Callout type="warn" title="Reapply grants after every migration">
-  Run `runtime-grants.sql` as the migrator after **every** `migrate`. New tables are closed to the runtime role until it runs, so a release whose grants weren't applied fails safely, but it fails. `deploy/staging/verify-privileges.sql` checks the result with rollback-only probes.
+  Run `grants apply` as the migrator after **every** `migrate`. New tables and columns are closed to the runtime role until it runs, so a release whose grants weren't applied fails safely, but it fails. Then run `grants verify`. Like `migrate`, `grants apply` takes a session-level lock, so connect directly to PostgreSQL, never through a transaction-mode pooler.
 </Callout>
+
+What v0.6.0 grants the runtime role, on top of v0.5.0:
+
+- `UPDATE` of `object_visibility` on workspaces (per-user files, batches and videos);
+- `DELETE` on browser sessions, `UPDATE` of their new activity and idle-expiry columns, and of the new sign-in times on users;
+- the audit export queue and its state, including `UPDATE` of an event's `seq` and of the export's `next_seq` (the audit log itself stays insert-only);
+- `SELECT`, `INSERT` and `UPDATE` of the release columns on legal holds (holds are released, never deleted);
+- `UPDATE` of `email` on workspace invitations, for personal-data cleanup;
+- `UPDATE` of `encryption_key_id` on stored files, for `files rekey`.
+
+v0.5.0 added no grants.
 
 ## Migrations are explicit
 
@@ -27,16 +45,16 @@ The gateway never changes its schema on its own. `serve` checks that the databas
 
 ```sh
 DATABASE_URL=postgres://gateway_migrator:…@db.example.internal/gateway open-model-gateway migrate
-psql "postgres://gateway_migrator:…@db.example.internal/gateway" -f deploy/staging/runtime-grants.sql
+DATABASE_URL=postgres://gateway_migrator:…@db.example.internal/gateway open-model-gateway grants apply
 ```
 
 Before changing anything, `migrate` runs read-only checks. It accepts only an empty database or one with a recognised prefix of this release's migrations, and refuses unrelated schemas, older pre-1.0 layouts and changed or dirty migration histories. Migrations only go forward; there are no down migrations. See [Upgrades](/docs/self-hosting/upgrades).
 
 `open-model-gateway schema-version` prints the migrations compiled into a binary, as JSON, without touching a database. Backup tooling uses it to check that a backup matches a release.
 
-## Migrations through v0.4.0
+## Migrations through v0.6.0
 
-v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds `0024` to `0036`, the largest range since v0.1.0, for scale-out (see [Scaling](/docs/self-hosting/scaling)) and the removal of installation-wide limits.
+v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds `0024` to `0036`, the largest range since v0.1.0, for scale-out (see [Scaling](/docs/self-hosting/scaling)) and the removal of installation-wide limits. v0.4.1 adds none, v0.5.0 adds `0037`, and v0.6.0 adds `0038` to `0048`.
 
 | Migration | Adds |
 |---|---|
@@ -55,8 +73,20 @@ v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds 
 | `0034_history_parent_checks` | Replaces locking foreign keys from history to its parents with non-locking checks; those parents can no longer be deleted, truncated or re-keyed by any role |
 | `0035_counter_autovacuum` | Tighter autovacuum settings on reservation partitions |
 | `0036` | The admission-ceiling alert's lock-wait counters |
+| `0037_user_lookup_indexes` | Two indexes for the dashboard's people and membership lookups (v0.5.0) |
+| `0038_object_visibility` | **Breaking.** Who sees files, batches and videos in a Team or Project; per user by default |
+| `0039_revocation_is_final` | Triggers that refuse clearing or changing a set `revoked_at`, for every role |
+| `0040` | An index for expiring sign-in attempts |
+| `0041_session_devices` | Session ids, last activity and a browser label, for Your sessions |
+| `0042`, `0043` | The session idle limit, and first and last sign-in times on each person, backfilled from existing sessions |
+| `0044_audit_export` | The audit export queue and its trigger on the audit log |
+| `0045_legal_holds` | Legal holds |
+| `0046`, `0047` | Indexes for finding a person's files and audit entries |
+| `0048_audit_export_sequence` | The audit export's gap-free `seq` counter, and the triggers that write the on and off events |
 
 There is no `0012` or `0023`.
+
+Some of v0.6.0's migrations take locks worth planning for: `0041` rewrites the sessions table under a full lock (dashboard requests and sign-in wait; inference doesn't), and `0047` builds indexes on every audit log partition. Check the size of `browser_sessions` first. `0042` and `0048` give up after a 10-second lock timeout; if either does, run `migrate` again. See [Upgrades](/docs/self-hosting/upgrades).
 
 ## Sizing
 
@@ -64,6 +94,20 @@ There is no `0012` or `0023`.
 - From v0.4.0, admission and settlement lock a workspace's and a key's own rows, not one installation-wide row, so replicas of different workspaces run in parallel and more replicas add capacity. One workspace or one key still serializes its own requests on its own rows, by design, to keep its budgets exact, so it tops out at a few hundred requests per second however many replicas you run; an **Admission ceiling** alert can tell you when that's happening. See [Scaling](/docs/self-hosting/scaling) for replica sizing, connection budgets and the rollback mode.
 - Request history is partitioned by month, with old months archivable, so history size no longer affects throughput. See [Scaling](/docs/self-hosting/scaling#history-partitions-and-archival).
 - Budget checks read maintained totals, so their cost doesn't grow with history. `open-model-gateway budget verify` compares those totals with a full scan (read-only; run it off-peak on large installations).
+- The CLI commands open their own connections, and `migrate` and `grants apply` hold one direct session each. Budget for them in `max_connections` too.
+
+## Highly available PostgreSQL
+
+The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md), new in v0.5.0, is for running two or more replicas on a primary with at least one standby. In short:
+
+- **The gateway has no failover logic of its own.** It reaches the primary through a host name that moves on failover. While no primary is reachable it refuses new work (`503 accounting_unavailable`, or `504` if a commit hangs) rather than serving it unaccounted. Requests already running keep their holds and are reconciled as unknown.
+- **Use a synchronous standby** as the failover target. With asynchronous replication a failover can lose recent admissions, settlements and management changes, such as a key revocation.
+- **Point `GATEWAY_LISTEN_DATABASE_URL` at the primary directly**, never at a transaction-mode pooler.
+- **Size connections for every consumer:** each replica's pool, one `LISTEN` session per replica, an optional reporting pool on the standby, and the migrator, backups and CLI commands.
+- **Take both kinds of backup:** base backups with WAL archiving for point-in-time recovery, and encrypted logical backups. See [Backups and restore](/docs/self-hosting/backups-and-restore).
+- **After a failover**, check readiness and `sum(gateway_config_listener_up)` on every replica, then run `budget verify` and `history verify`, and resolve the new unknown reservations with evidence.
+
+Managed services (Amazon RDS, Google Cloud SQL, Azure Database for PostgreSQL) haven't been tested. They need PostgreSQL 17, advisory locks, `LISTEN`/`NOTIFY` on a direct connection, and roles with explicit grants rather than a superuser. The gateway uses no extensions. For CloudNativePG failover timing, see [Kubernetes](/docs/self-hosting/kubernetes#failover-timing).
 
 ## Network
 
@@ -74,14 +118,17 @@ Don't expose PostgreSQL to the internet. If the database is on another host, use
 | Command | Does |
 |---|---|
 | `migrate` | Apply migrations, after read-only checks. |
+| `grants apply` / `grants verify` | Apply the runtime grants as the migrator; check them with rollback-only probes. |
+| `wait-for-database [--schema] [--timeout-seconds N]` | Wait until PostgreSQL accepts connections, or with `--schema` until the schema matches this binary (default 600 seconds). For init containers. |
 | `schema-version` | Print the binary's migrations as JSON. |
 | `provision-user --email … [--platform-admin]` | Give an email a User (or Admin) role and allow one first sign-in link. |
 | `budget verify` | Compare maintained budget totals with a full scan. Exits non-zero on a mismatch. |
 | `reconcile-executions [--limit N]` | Close expired requests now; unknown costs keep their holds. `serve` does this on its own. |
-| `compact-history --older-than-days N [--limit N]` | Clear old settled requests' error and timing details now. Never touches money. |
+| `compact-history --older-than-days N [--limit N]` | Clear old settled requests' error, timing, client session id and app now. Never touches money. |
 | `alerts evaluate --once` | Evaluate every alert rule once and send pending email. |
 | `files verify [--limit N]` | Compare file metadata with the store (read-only). |
 | `files sweep --once [--limit N]` | Delete expired and abandoned file objects once. `serve` sweeps every minute. |
+| `files rekey --from OLD --to NEW [--dry-run] [--limit N]` | Move files to a new master key so the old one can be removed. See [File storage](/docs/self-hosting/file-storage#rotate-a-key). |
 | `history verify [--since]` | Check that history rows reference real, matching parents (read-only). `serve` runs this hourly too. See [Scaling](/docs/self-hosting/scaling#history-partitions-and-archival). |
 | `partitions status` / `ensure --ahead N` / `prepare` | Read coverage of future monthly partitions; create missing ones; build new partition keys online before an upgrade. |
 | `rollups run --once` | Backfill hourly usage rollups faster than the per-minute background job. |

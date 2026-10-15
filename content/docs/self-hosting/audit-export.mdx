@@ -1,0 +1,144 @@
+---
+title: Audit export to a SIEM
+description: Stream Open Model Gateway's audit log off the host over a signed HTTPS webhook, syslog over TLS or OTLP, with gap detection and heartbeats.
+---
+
+From v0.6.0, Open Model Gateway can stream its audit log to a SIEM or log pipeline as it is written. The copy survives the loss of the gateway's database, and the receiver can tell when events are missing or the export has stopped ([with limits](#gap-detection-and-heartbeats)).
+
+The operator sets the destination, with environment variables. Platform Admins can see the status and send a test, but can't change or stop the export.
+
+## What is exported
+
+- The events the platform audit log shows: those with no workspace, or in a Team or Project.
+- **Never** personal-workspace events, prompts, responses or secrets.
+- Export starts when you turn it on. Earlier events stay in the dashboard and in backups.
+
+Each event's `metadata` holds only the audit log's safe fields: flags, counts and codes. The actor's label is their display name, or their email when they have none, so personal data does leave the gateway.
+
+## Choose a transport
+
+There is one destination at a time: set exactly one of the three URLs. Setting two, or `off` in one and a destination in another, stops startup. All three follow the [outbound address policy](/docs/self-hosting/security#the-outbound-address-policy), use no proxy, follow no redirects and time out after 10 seconds. Every variable is listed in [Configuration](/docs/self-hosting/configuration#audit-export).
+
+| | Webhook | Syslog over TLS | OTLP logs |
+|---|---|---|---|
+| Set | `GATEWAY_AUDIT_WEBHOOK_URL`, `GATEWAY_AUDIT_WEBHOOK_SECRET_ENV` | `GATEWAY_AUDIT_SYSLOG_URL` | `GATEWAY_AUDIT_OTLP_URL` |
+| Format | JSON, up to 100 events a request | RFC 5424, one message per event, RFC 5425 framing | OTLP/HTTP JSON, one log record per event |
+| Authenticity | HMAC-SHA256 signature | Mutual TLS, if the receiver requires it | A token in the headers, if the collector requires it |
+| Acknowledged | Yes, by a 2xx | Only as far as the TLS stream | Yes, by a 2xx |
+
+### Signed HTTPS webhook
+
+```sh
+GATEWAY_AUDIT_WEBHOOK_URL=https://siem.example.edu/ingest/omg
+GATEWAY_AUDIT_WEBHOOK_SECRET_ENV=AUDIT_WEBHOOK_SECRET
+AUDIT_WEBHOOK_SECRET=$(openssl rand -hex 32)
+```
+
+The secret must be at least 32 bytes. Its variable's name must be upper case, and must not be on `GATEWAY_SECRET_ENV_ALLOWLIST` or `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, be one of the gateway's own credentials, or start with `AWS_` or `GATEWAY_`: otherwise a Platform Admin could read it through a connection or the SMTP relay and forge deliveries.
+
+Each delivery is a `POST` with `Content-Type: application/json` and two headers:
+
+- `X-OMG-Delivery`: a new id for each request.
+- `X-OMG-Signature: t=<unix seconds>,v1=<hex>`, where `v1` is HMAC-SHA256, with the secret, over `<t>.<raw body>`.
+
+To check it, compute the HMAC over the timestamp, a dot and the raw body, compare it in constant time, and reject old timestamps (for example over 5 minutes) to stop replays. Each retry is signed afresh.
+
+### Syslog over TLS
+
+```sh
+GATEWAY_AUDIT_SYSLOG_URL=syslog+tls://siem.example.edu:6514
+GATEWAY_AUDIT_SYSLOG_CA_FILE=/etc/gateway/siem-ca.pem              # optional: trust only this CA
+GATEWAY_AUDIT_SYSLOG_CLIENT_CERT_FILE=/etc/gateway/audit-client.pem # optional: mutual TLS
+GATEWAY_AUDIT_SYSLOG_CLIENT_KEY_FILE=/etc/gateway/audit-client.key
+```
+
+- TLS always; there's no plaintext TCP or UDP, not even in development. The receiver's certificate must be valid for the URL's host. The port is 6514 by default.
+- `GATEWAY_AUDIT_SYSLOG_CA_FILE` replaces the public roots with your CA. The client certificate and key go together. Encrypted private keys aren't supported: protect the key file with file permissions.
+- The files are read once at startup, and a missing or unparsable file stops it. Restart to pick up a renewed certificate.
+- Each event is one RFC 5424 message with RFC 5425 octet counting, facility 13 (log audit) and severity 5 (notice). MSGID is the event's `action`; the message body is JSON with the event:
+
+  ```text
+  <109>1 2026-10-14T01:02:03.456Z <installation id> open-model-gateway - key.revoked - {"schema":"omg.audit.v1","installation_id":"…","event":{…,"seq":42}}
+  ```
+
+- RFC 5425 only requires receivers to accept 2,048 bytes, and events can be several KB. Raise the receiver's limit (for rsyslog, `$MaxMessageSize`, such as 64k).
+
+**Syslog messages aren't signed.** Without a client certificate, anyone who can reach the receiver can send messages, or heartbeats, that look like the gateway's. Make the receiver require the client certificate, and trust only that certificate for this source.
+
+### OTLP logs
+
+```sh
+GATEWAY_AUDIT_OTLP_URL=https://collector.example.internal:4318/v1/logs
+GATEWAY_AUDIT_OTLP_HEADERS_ENV=AUDIT_OTLP_HEADERS
+AUDIT_OTLP_HEADERS="Authorization=Bearer …"
+```
+
+- The URL is the collector's full logs endpoint; the path isn't added for you.
+- It's a separate destination from your operational telemetry: the audit export never reads `OTEL_*` variables.
+- Headers are optional: `Key=Value,Key2=Value2`, at most 16, values without commas. The headers variable follows the webhook secret's naming rules. Values never appear in logs, errors or status.
+- Each event is one log record. Its body is the same event object the webhook sends, as a JSON string; parse it to read the event. `event.name` is the action, and `omg.audit.id` and `omg.audit.seq` are attributes.
+- If the collector's reply reports `rejectedLogRecords` in `partialSuccess`, those events are refused for good, and OTLP says not to send them again. The gateway doesn't: it counts them in `gateway_audit_export_rejected_records_total`, shows **Collector refusing events**, and receivers see a `seq` gap.
+
+**OTLP requests aren't signed**, and there's no client-certificate option. Make the collector require a token, and keep the audit pipeline separate from general telemetry so nothing else can write `omg.audit` records or fake heartbeats.
+
+## The event format
+
+Every transport carries the same event objects, format `omg.audit.v1`. A webhook delivery looks like this:
+
+```json
+{"schema":"omg.audit.v1","installation_id":"…","sent_at":"…","events":[
+  {"id":"…","occurred_at":"…","action":"key.revoked","resource":{"type":"key","id":"…"},
+   "actor":{"id":"…","label":"Alex Doe"},"workspace":{"id":"…","name":"Product","kind":"team"},
+   "metadata":{"count":1},"seq":42}]}
+```
+
+- `id` identifies the event. Use it to drop duplicates.
+- `seq` is its number in the export ([below](#gap-detection-and-heartbeats)).
+- `actor` and `workspace` may be `null`. The actor's label is read when the event is delivered.
+- A test delivery has `"test": true` and no events.
+
+## Delivery
+
+- **Nothing is skipped.** Each event is queued in the same database transaction that writes it.
+- **One replica delivers**, holding the `audit_export` lease. It sends events in `seq` order, up to 100 at a time, and removes them from the queue only once they're accepted.
+- **Failures retry forever**, with exponential backoff up to 5 minutes. Nothing is dropped during an outage; events wait in the queue.
+- **At least once.** A retry can deliver an event again with the same `seq`. Deduplicate on `id`.
+- **Roughly oldest first.** Events are numbered by when their transaction started, so a late commit can get a later number than a newer event. Sort by `occurred_at` for time order.
+- **The exceptions:** an event whose month was archived before it was delivered is skipped and counted. With syslog, a receiver that fails after reading but before storing loses those events. With OTLP, events the collector refuses are dropped. All of these show as `seq` gaps.
+
+## Gap detection and heartbeats
+
+- `seq` starts at 1 for an installation and goes up by one for each exported event. A number is never reused, even after export is turned off and on. Database triggers refuse to rewind the counter or renumber an event, for every database role.
+- While export is on and nothing has been sent for a minute, the gateway sends a signed **heartbeat**: `{"schema":"omg.audit.v1","installation_id":"…","sent_at":"…","heartbeat":true,"next_seq":N,"events":[]}`. It means every number below `N` was sent or skipped. Syslog and OTLP carry the same heartbeat in their own format.
+- During a rolling upgrade from v0.5.0, a replica still on the old version can deliver events without `seq`. Start gap checks after the upgrade.
+
+Limits: events removed from the queue before they are numbered (by someone with the gateway's database credentials, polling the queue) leave no gap. The counter stops at 2<sup>53</sup>; a counter pushed there with those credentials stops the export until an operator resets it.
+
+## Turning export on and off
+
+- A replica with a URL turns export on.
+- Only `off`, in any of the three URL variables, turns it off. A replica with none of them set, such as a debug pod or one mid-rollout, changes nothing and never delivers.
+- Turning export off or on writes an `audit_export.disabled` or `audit_export.enabled` event, and that event is exported. A database trigger writes it, so this holds even if someone changes the export's state directly in the database. Heartbeats stop while export is off.
+
+## In the dashboard
+
+**Admin › Settings › Audit export** shows the transport and destination, the status (Delivering, Retrying, Collector refusing events, or Not set up), how many events are waiting and the oldest, the last delivery and heartbeat, the next sequence number and the last error. **Send test delivery** sends a test to the receiver and shows whether it was accepted.
+
+Error categories: `connection` (resolution, the address policy or TCP), `timeout`, `http_4xx`, `http_5xx` and `http_other` for the webhook and OTLP, `tls` for syslog, and `otlp_rejected`.
+
+## What receivers should alert on
+
+The gateway's own database credentials can stop the export, so alert at the receiver, not only in Prometheus:
+
+- **A gap:** a number below the latest `next_seq` that never arrived. It means an event was archived before delivery, refused, lost by a syslog receiver, or removed from the queue.
+- **`audit_export.disabled`:** someone turned the export off.
+- **Silence:** nothing at all, not even a heartbeat, for a few minutes.
+
+On the gateway side, watch `gateway_audit_export_oldest_seconds` (for example, alert above 15 minutes) and, for OTLP, `increase(gateway_audit_export_rejected_records_total[15m]) > 0`. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring#sign-in-egress-and-audit-export).
+
+## Kubernetes
+
+- Set the URL with `gateway.env`, and the webhook secret or OTLP headers through `gateway.extraEnvFrom` from a Secret; put that variable's name in `GATEWAY_AUDIT_WEBHOOK_SECRET_ENV` or `GATEWAY_AUDIT_OTLP_HEADERS_ENV`.
+- For syslog, mount the CA, certificate and key from a Secret as read-only files, and point the `_FILE` settings at them. Don't put PEM contents in environment variables. The chart has no volume option for this: add the volume and mount with a patch, such as a Kustomize post-renderer.
+- The chart's NetworkPolicy opens only 443. For syslog (6514) or OTLP (4318), add a `networkPolicy.egress.extraEgress` rule. If you narrowed 443 with `httpsCidrs`, allow the webhook's receiver there. See [Kubernetes](/docs/self-hosting/kubernetes#outbound-traffic).
+- A receiver on a private address must also be in `GATEWAY_EGRESS_PRIVATE_ALLOW`.

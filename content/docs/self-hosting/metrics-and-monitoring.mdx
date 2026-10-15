@@ -40,7 +40,7 @@ Labels are deliberately few: route templates (not raw paths), provider kinds and
 | `gateway_upstream_duration_seconds` | histogram | `provider`, `model` |
 | `gateway_upstream_time_to_first_token_seconds` | histogram | `provider`, `model` |
 | `gateway_inference_tokens_total` | counter | `provider`, `model`, `direction` |
-| `gateway_settlements_total` | counter | `outcome` (`settled`, `unknown`, `held`) |
+| `gateway_settlements_total` | counter | `outcome` (`settled`, `unknown`, `held`). From v0.5.0, `held` also counts settlement writes that time out after 3 seconds, the usual case during a database outage. |
 | `gateway_admission_seconds` / `gateway_settlement_seconds` | histogram | `phase`, `outcome`. Time spent in each phase of admission and settlement, including lock waits; see [Scaling](/docs/self-hosting/scaling#metrics-and-monitoring). |
 | `gateway_scope_lock_wait_seconds` | histogram | `lock` (`authority`, `rows`), `path` (`admission`, `settlement`). Time waiting for a workspace's or key's own scope locks; a rising `rows` tail means one scope is approaching its ceiling. |
 | `gateway_scope_lock_waiting` | gauge | `path`. Governance transactions on this replica waiting for a scope lock right now. |
@@ -66,6 +66,12 @@ Labels are deliberately few: route templates (not raw paths), provider kinds and
 | `gateway_batch_route_lines` | gauge | `provider`, `state` (`waiting`, `running`) |
 | `gateway_batch_paused_routes` | gauge | `reason` |
 | `gateway_batch_route_pauses_total` | counter | `reason` |
+| `gateway_egress_denied_total` | counter | `purpose` (`provider`, `oidc`, `storage`, `catalog`, `smtp`, `audit`). Outbound connections the [address policy](/docs/self-hosting/security#the-outbound-address-policy) refused, counted when no allowed address remains. New in v0.6.0. |
+| `gateway_auth_throttled_total` | counter | `endpoint` (`login`, `callback`), `reason` (`client_rate`, `pending_cap`). Sign-in steps refused by the [abuse controls](/docs/self-hosting/identity#sign-in-abuse-controls). No addresses or identities. New in v0.6.0. |
+| `gateway_audit_export_deliveries_total` | counter | `outcome` (`delivered`, `failed`, `skipped`). Audit export requests; `skipped` counts events whose month was archived before they were delivered. New in v0.6.0. |
+| `gateway_audit_export_rejected_records_total` | counter | Audit events an OTLP collector refused for good. They aren't retried. Resets when the replica restarts. New in v0.6.0. |
+| `gateway_audit_export_queued` | gauge | Audit events waiting for the receiver to accept them. New in v0.6.0. |
+| `gateway_audit_export_oldest_seconds` | gauge | Age of the oldest waiting audit event (0 when none). New in v0.6.0. |
 
 Counters and most gauges are per replica: `sum` them. `gateway_reservations_held` counts the whole installation, so take the `max` across replicas.
 
@@ -77,12 +83,28 @@ The repository's `deploy/monitoring/` has:
 - `prometheus-rules.yml`: example alerts for metrics down, 5xx rate, p95 latency, held settlements, growing unknown reservations, a stuck pending floor, budget denials, capacity saturation, upstream failure rate, time to first token, pool saturation, alert-evaluator failures and collector errors (validated with `promtool`; thresholds are starting points);
 - `grafana-dashboard.json`: a Grafana dashboard with overview, HTTP, inference, accounting and internals rows.
 
+From v0.5.0 the `GatewaySettlementHeld` example alert also fires on settlement writes that time out. The example files have no rules yet for the v0.6.0 metrics: add the ones below yourself.
+
+## Sign-in, egress and audit export
+
+Starting points for the metrics new in v0.6.0:
+
+| Alert on | Example | Means |
+|---|---|---|
+| Sign-in refused for everyone | `sum(rate(gateway_auth_throttled_total{reason="pending_cap"}[5m])) > 0` for 5 minutes | Too many sign-ins are pending installation-wide. Look for a flood of sign-in starts. |
+| Refused destinations | `sum by (purpose) (increase(gateway_egress_denied_total[15m])) > 0` | Something tried to reach an address the policy refuses, such as a private, loopback or metadata address. A new failure after an upgrade usually means a private network is missing from `GATEWAY_EGRESS_PRIVATE_ALLOW`. |
+| Audit export falling behind | `max(gateway_audit_export_oldest_seconds) > 900` | The oldest waiting audit event is over 15 minutes old: the receiver is down or refusing deliveries. |
+| OTLP collector refusing events | `sum(increase(gateway_audit_export_rejected_records_total[15m])) > 0` | The collector refused events for good; receivers see the gap. |
+
+The gateway's own database credentials could stop the audit export, so also alert at the receiver, on gaps and on silence. See [Audit export to a SIEM](/docs/self-hosting/audit-export#what-receivers-should-alert-on).
+
 ## When something fires
 
-- **Held settlements**: the gateway couldn't record a result. Holds are kept, never refunded as zero. Fix the database first; expired holds become unknown, then review unknown usage.
+- **Held settlements**: the gateway couldn't record a result, or the write took over 3 seconds. Holds are kept, never refunded as zero. Fix the database first; expired holds become unknown, then review unknown usage. During a database failover this is expected: see [Kubernetes](/docs/self-hosting/kubernetes#failover-timing).
 - **Unknown reservations**: they keep budget holds and can block budgeted requests (`unresolved_usage`). Resolve them with evidence; never delete reservations.
 - **Capacity or pool saturation**: requests beyond `GATEWAY_MAX_CONCURRENT_REQUESTS` get `429`. From v0.4.0, admission locks a workspace's and a key's own rows rather than one installation-wide row, so adding replicas raises overall capacity; one workspace or key still tops out on its own rows by design. See [Scaling](/docs/self-hosting/scaling).
-- **Upstream failures**: check the provider and the connection's credential. Routes that keep failing are skipped for their cooldown.
+- **Upstream failures**: check the provider and the connection's credential. Routes that keep failing are skipped for their cooldown. If `gateway_egress_denied_total{purpose="provider"}` rises at the same time, the address policy refused the destination.
+- **Audit export behind**: open Admin › Settings › Audit export for the last error. Nothing is dropped while it retries; events wait in the queue.
 
 ## Logs
 
