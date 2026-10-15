@@ -19,22 +19,22 @@ From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-mode
 
 | Tag | Points to |
 |---|---|
-| `vX.Y.Z`, such as `v0.3.0` | That release. |
-| `vX.Y`, such as `v0.3` | The newest patch release of that minor version. |
+| `vX.Y.Z`, such as `v0.6.0` | That release. |
+| `vX.Y`, such as `v0.6` | The newest patch release of that minor version. |
 | `latest-release` | The newest release. |
 
-Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with **cosign v3.0 or newer** (cosign v2 reports "no signatures found": v0.4.0's signature is stored in cosign v3's bundle format), then pin the image by its digest:
+Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with **cosign v3.0 or newer** (cosign v2 reports "no signatures found": from v0.4.0, signatures are stored in cosign v3's bundle format), then pin the image by its digest:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-model-gateway@sha256:9a3bb799c16d893107aacb334408da12097b3ea4c4d9fd5e8a4294978b64b6bd \
-  --certificate-identity https://github.com/ncecere/open-model-gateway/.github/workflows/image.yml@refs/tags/v0.4.0 \
+cosign verify ghcr.io/ncecere/open-model-gateway@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 \
+  --certificate-identity https://github.com/ncecere/open-model-gateway/.github/workflows/image.yml@refs/tags/v0.6.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag:
 
 ```sh
-docker pull ghcr.io/ncecere/open-model-gateway:v0.4.0@sha256:9a3bb799c16d893107aacb334408da12097b3ea4c4d9fd5e8a4294978b64b6bd
+docker pull ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393
 ```
 
 Before publishing, release images are scanned for known vulnerabilities (fixable high and critical findings block the release) and get an SBOM and build provenance. See [Security](/docs/self-hosting/security#how-releases-are-checked).
@@ -44,8 +44,8 @@ Before publishing, release images are scanned for known vulnerabilities (fixable
 ```sh
 git clone https://github.com/ncecere/open-model-gateway.git
 cd open-model-gateway
-git checkout v0.4.0        # the release you want
-docker build -t open-model-gateway:v0.4.0 .
+git checkout v0.6.0        # the release you want
+docker build -t open-model-gateway:v0.6.0 .
 ```
 
 The repository's manual publishing workflow also pushes a tested image of `main` to `ghcr.io/ncecere/open-model-gateway`, tagged with the full commit SHA, for staging.
@@ -75,13 +75,26 @@ It runs exactly the command you give it and **never migrates the database or cre
 ```sh
 # One-off: create or upgrade the schema, as the migrator role.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.4.0@sha256:9a3bb799c16d893107aacb334408da12097b3ea4c4d9fd5e8a4294978b64b6bd migrate
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 migrate
 
 # One-off: name the first Platform Admin.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.4.0@sha256:9a3bb799c16d893107aacb334408da12097b3ea4c4d9fd5e8a4294978b64b6bd \
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 \
   provision-user --email morgan.lee@example.edu --platform-admin
 ```
+
+After every `migrate`, also run `grants apply` the same way, as the migrator, to reapply the runtime role's grants.
+
+Other one-off commands you're likely to run in a container:
+
+| Command | Does |
+|---|---|
+| `grants apply` | Applies the runtime role's grants (`deploy/staging/runtime-grants.sql`, embedded in the binary), as the migrator. Run it after every `migrate`. From v0.5.0. |
+| `grants verify` | Checks the runtime role's privileges with probes that roll back. Needs a role that can `SET ROLE gateway_runtime`. From v0.5.0. |
+| `wait-for-database [--schema] [--timeout-seconds N]` | Waits until PostgreSQL accepts connections (with `--schema`, until this binary's schema and grants are in place), then exits 0; exits 1 after the timeout (600 s by default). For init containers. From v0.5.0. |
+| `files verify` | Compares stored-file records with the file store; also reports the active encryption key and any retired keys still in use. |
+| `files rekey --from <old> --to <new> [--dry-run]` | Re-wraps every stored file's data key under another master key, so the old key can be removed. Resumable, and safe while the gateway serves. From v0.6.0. See [File storage](/docs/self-hosting/file-storage). |
+| `budget verify`, `history verify` | Read-only consistency checks; each exits nonzero on a finding. |
 
 <Callout title="Upgrading from v0.3.0 or earlier">
   Images before v0.3.1 started through a shell script, `container-entrypoint`. Remove any `--entrypoint container-entrypoint` override: arguments after the image name go straight to the binary. Replace health checks that use `sh`, `curl` or `wget` with the exec form below.
@@ -133,13 +146,13 @@ The container is built to run with:
 
 ## Compose
 
-The repository's staging setup (`deploy/staging/` and `scripts/staging.py`) is a single-host reference: PostgreSQL 17 on an internal network, separate migrator and runtime roles with file secrets, one-off `migrate` and `grant-runtime` services, the gateway, and Caddy terminating HTTPS. `staging.py` generates the secrets and runs each step:
+The repository's staging setup (`deploy/staging/` and `scripts/staging.py`) is a single-host reference: PostgreSQL 17 on an internal network, separate migrator and runtime roles with file secrets, one-off `migrate` and `grant-runtime` services (the latter runs `grants apply`), the gateway, and Caddy terminating HTTPS. `staging.py` generates the secrets and runs each step:
 
 ```sh
 python3 scripts/staging.py init      # generate secrets and configuration (once)
 python3 scripts/staging.py build
 python3 scripts/staging.py db
-python3 scripts/staging.py migrate   # migrate, then reapply runtime grants
+python3 scripts/staging.py migrate   # migrate, then grants apply
 python3 scripts/staging.py up
 python3 scripts/staging.py verify
 ```
@@ -151,7 +164,7 @@ The shape of the gateway service, if you write your own Compose file:
 ```yaml
 services:
   gateway:
-    image: ghcr.io/ncecere/open-model-gateway:v0.4.0@sha256:9a3bb799c16d893107aacb334408da12097b3ea4c4d9fd5e8a4294978b64b6bd
+    image: ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
     cap_drop: [ALL]
@@ -186,7 +199,7 @@ The gateway sends no CORS headers and isn't meant to be called from other origin
 
 ## Kubernetes
 
-From v0.4.0 there's a **beta** Helm chart for Kubernetes deployments, with an optional CloudNativePG-managed database. See [Kubernetes](/docs/self-hosting/kubernetes).
+From v0.4.0 there's a **beta** Helm chart for Kubernetes deployments, with an optional CloudNativePG-managed database. From v0.5.0 a first install, database and schema included, is one `helm install` with `--set migrations.run=true`. See [Kubernetes](/docs/self-hosting/kubernetes).
 
 ## Without a container
 

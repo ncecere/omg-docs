@@ -1,0 +1,31 @@
+---
+title: v0.4.1
+description: A dashboard fix. The Add model form marks the prices it needs and takes you to the first field to fix.
+---
+
+Released 2026-10-11. No migrations.
+
+A small release with one dashboard fix. On the **Add model** form, the price ceilings a price needs weren't marked as required, and the error for a missing one could be out of sight, further down the page.
+
+## Add model shows what's missing
+
+- **Required pricing ceilings are marked** "Required".
+- **A summary names what to fix.** After you submit, a summary near the top of the form ("Fix 2 fields") links to each field that needs a value.
+- **The first field to fix gets focus.** Submitting an invalid form scrolls to the first invalid field and focuses it, even when it's below the fold.
+- **Output ceilings must be positive.** Text and System One models give the same error for a missing or zero output ceiling.
+- Browser tests cover an invalid submission and its correction, on a desktop and on a phone.
+
+See [Models and routes](/docs/administration/models-and-routes).
+
+## Before you upgrade
+
+Nothing changes for clients, scripts or the database: no migrations, no new runtime grants, and no change to the inference API, providers, pagination or deployment.
+
+## Upgrade guide
+
+Redeploy the new image by its digest. Rolling back to v0.4.0 is a redeploy of its digest. See [Upgrades](/docs/self-hosting/upgrades#to-v041).
+
+## Known limitations
+
+- **The Helm chart's default image is still v0.4.0.** The chart's version moved to 0.4.1, but its default `image.tag` was left at `v0.4.0`. With this chart, set `image.tag: v0.4.1` (or, better, `image.digest`) yourself. v0.5.0 fixes the default and adds a test that keeps it in step.
+- Everything listed under [v0.4.0's known limitations](/docs/releases/v0-4-0#known-limitations) still applies. The Helm chart is still **beta**.

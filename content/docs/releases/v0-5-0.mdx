@@ -1,0 +1,126 @@
+---
+title: v0.5.0
+description: Responses and Messages stream text as it's generated, a dashboard that stays fast at scale, encrypted off-host backups, a one-step Helm install, and faster database failover on Kubernetes.
+---
+
+Released 2026-10-14. Migration `0037`.
+
+This release finishes most of the scale work. The dashboard stays fast with tens of thousands of users, workspaces, keys and models. Backups can be encrypted and copied off the host. The [Helm chart](/docs/self-hosting/kubernetes) installs in one step, and survives a database failover with its accounting intact. Responses and Messages now stream text as the model generates it.
+
+It's the first release tested on a real multi-node Kubernetes cluster, with a CloudNativePG primary and a synchronous standby. Those tests aren't finished; see [Known limitations](#known-limitations). There are breaking changes for streaming clients and Helm values below.
+
+## Responses and Messages stream as they generate
+
+Before, `POST /v1/responses` and `POST /v1/messages` with `stream: true` sent everything at the end. Now text arrives as the model writes it:
+
+- **Responses** sends `response.created` and `response.in_progress` when the upstream stream opens, then each piece of text as a `response.output_text.delta` event.
+- **Messages** sends `message_start` at once, then each piece of text as a `text_delta`.
+- **Tool calls still arrive whole**, after the text, so parallel calls never interleave.
+
+The usage counts move with this change; see [Before you upgrade](#before-you-upgrade). See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
+
+## A dashboard that stays fast at scale
+
+Measured on a cluster with 50,000 users, 20,000 shared workspaces, 107,000 keys and 2,004 models:
+
+| | Before | After |
+|---|---|---|
+| Platform users list, any page | 1.1 s; deep pages took minutes to hours | about 0.19 s |
+| One slow admin list | froze the admin area for 12 minutes | never blocks other requests; 10 s limit |
+| Home, for a user in 2,003 workspaces | about 2,000 requests and 116 s, then the tab crashed | 5 requests, 0.64 s |
+| Full model list | 11 requests, 23 s | builds only the rows on the page |
+
+People, workspace, key and model pickers and filters, and the audit log, no longer load whole lists: the server searches them or names the rows itself.
+
+New and extended management endpoints: `GET /api/v1/me/models`; `GET /api/v1/platform/workspaces/{ws}/member-candidates`; `q` on member, key and model lists; `not_in_catalog` and `not_direct_in` on `GET /api/v1/platform/models`; `actor_name`, `workspace_name` and `target_name` on audit rows; `issued_to_name` on key rows; and workspace names and kinds on mapping and cost-report rows. See [Management API](/docs/api/management-api).
+
+## Encrypted, off-host backups
+
+- **Encrypted as they're taken.** `scripts/backup.py backup --encrypt-to age1…` streams the dump through [age](https://age-encryption.org); the unencrypted dump never reaches disk. `verify --identity` checks the decrypted contents, and `restore --identity` decrypts without writing them out.
+- **Copies off the host.** New `upload`, `list`, `download` and `prune` commands copy backups to S3-compatible storage.
+- **File-store keys are checked.** A backup's manifest records the file-store key IDs its stored files need, and restore checks that you have them.
+
+These are logical dumps, not point-in-time recovery. See [Backups and restore](/docs/self-hosting/backups-and-restore).
+
+A timed restore drill on the test cluster restored the newest encrypted off-host backup onto a fresh environment. The recovery point was 48 s old (the time since that backup), and getting to a serving gateway took 92 s, 73 s of it creating the new environment. The drill found two bugs, both fixed in this release.
+
+## One-step Helm install, and faster failover
+
+- **One command installs everything.** A first `helm install` with `--set migrations.run=true` now also brings up the chart-managed CloudNativePG cluster: the migration Job waits for the database, then migrates and applies the runtime grants, and gateway pods wait for the schema instead of crash-looping. On later upgrades the Job runs before any new gateway pod starts.
+- **Failover in under a minute.** With CloudNativePG's default 180 s smart-shutdown timeout, deleting the primary under load kept writes down for about 3 minutes. The chart now sets 15 s (`cnpg.cluster.smartShutdownTimeout`), and in testing the standby was promoted in under a minute.
+- **Accounting survives faults.** Under every fault tested (graceful and hard gateway kills, streams cut mid-way, and a primary failover under load), interrupted attempts kept their holds and were reconciled as unknown. Across 117,256 attempts no reservation stayed pending, nothing was charged twice, and `budget verify` and `history verify` were clean.
+- **A slow commit no longer stalls the connection pool.** Every replica used to refresh the same routing-health row after successful requests; behind a slow commit they all queued on it. Now one task per replica refreshes it.
+
+The repository has a new HA PostgreSQL operations guide (`docs/postgresql-ha.md`): failover, synchronous versus asynchronous replication, connection and database sizing, and managed PostgreSQL requirements. See [Kubernetes](/docs/self-hosting/kubernetes) and [Scaling](/docs/self-hosting/scaling).
+
+## Before you upgrade
+
+These changes can affect clients, scripts or Helm values:
+
+- **Messages streaming usage.** `message_start` now comes at once, with `usage: {"input_tokens": 0}` as a placeholder. The observed input, cache and output counts arrive in `message_delta`, which the Anthropic SDKs apply. A client that reads usage only from `message_start` now sees 0.
+- **Responses streaming events.** Text now arrives as `response.output_text.delta` events while the model generates, instead of all at the end. Tool calls still arrive whole, after the text.
+- **Slow dashboard lists return `503`.** Platform users, user detail and workspace lists, and workspace members, keys and service accounts now read from the same lock-free snapshots as reports. A statement running over 10 s is cancelled with `503` "The request took too long; narrow it and try again", instead of holding up other admin requests.
+- **Person pickers search instead of listing.** Add member, initial owners, SSO group mappings and cost-center assignment search on the server and show the first 20 matches. People who are already members aren't shown at all, instead of as disabled options.
+- **Helm values:**
+  - `migrations.grants.image` is removed. The migration Job applies the runtime grants with the gateway image itself (`open-model-gateway grants apply`), so there's no second image to pin.
+  - `cnpg.cluster.backup.destinationPath` is removed; it was never used. Put `destinationPath` inside `cnpg.cluster.backup.barmanObjectStore`.
+  - The loadtest profile's `loadtest.loadgen.requests` and `concurrency` are replaced by `rate`, `duration`, `warmup`, `keys` and `extraArgs`.
+  - New default `cnpg.cluster.smartShutdownTimeout: 15`.
+
+## Upgrade guide
+
+One migration, `0037`, adds two indexes for per-user lookups. It adds no grants, but reapply the runtime grants after every migration anyway. Reapplying them is now a command, `open-model-gateway grants apply`, and `grants verify` checks the result.
+
+<Steps>
+<Step>
+
+### Back up
+
+Back up with `scripts/backup.py` (optionally with `--encrypt-to`) and run `verify`.
+
+</Step>
+<Step>
+
+### Stop every replica
+
+Mixed-schema replicas are not supported.
+
+</Step>
+<Step>
+
+### Migrate and grant
+
+As the migrator, run `open-model-gateway migrate`, then `open-model-gateway grants apply`. Then run `open-model-gateway grants verify` with a role that can `SET ROLE gateway_runtime`.
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new replicas and wait for `/health/ready`.
+
+</Step>
+</Steps>
+
+With Helm, upgrade with `--set migrations.run=true`. See [Upgrades](/docs/self-hosting/upgrades#to-v050) for the full procedure.
+
+## Also in this release
+
+- New commands: `open-model-gateway grants apply` and `grants verify`, and `open-model-gateway wait-for-database [--schema] [--timeout-seconds]` for init containers.
+- `gateway_settlements_total{outcome="held"}` and the `GatewaySettlementHeld` alert now also count settlement writes that time out after 3 s, the usual case during a database outage. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring).
+- The chart's default `image.tag` follows the release again (v0.4.1 left it at `v0.4.0`), and a test keeps it in step.
+- Key dialogs: a create or rotate dialog that was cancelled, closed or left, or whose access was revoked, can no longer submit a request or copy a one-time key.
+- A design for content guardrails is recorded in the repository. Nothing is built yet.
+
+## Known limitations
+
+- **The cluster tests aren't finished.** Still to run: a connection-pooler restart under load, dropping the gateway's LISTEN connection, a primary failover under load with the new 15 s setting, and a clean capacity measurement.
+- **No certified capacity number yet.** Steady load ran cleanly at 100–150 requests per second, but about half the runs hit a 1–5 s lock stall that the queue never recovered from. The routing-health fix above isn't yet confirmed on the cluster.
+- **The chart's default database sizing is too small for load.** The default (2 CPU, 2 GiB) collapsed at 50 requests per second; 6 CPU and 8 GiB handled 100–150. Size the database for your load.
+- The Helm chart is still **beta**.
+- One workspace or one API key still tops out at a few hundred admissions per second, by design (unchanged since v0.4.0).
+- Development software: not accepted for production. Live SCIM acceptance against a real identity provider and an independent security review are still open.
+
+## Upgrading
+
+See [Upgrades](/docs/self-hosting/upgrades#to-v050) for the full procedure.

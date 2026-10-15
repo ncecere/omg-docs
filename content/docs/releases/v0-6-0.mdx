@@ -1,0 +1,159 @@
+---
+title: v0.6.0
+description: The security release. One outbound address policy, sign-in limits and session management, audit export to a SIEM with gap detection, data controls, file-store key rotation, per-user object visibility, security headers and a threat model.
+---
+
+Released 2026-10-15. Migrations `0038` to `0048`.
+
+This is the security release. Every outbound connection follows one address policy. Sign-in is rate-limited, and people can see and end their own dashboard sessions. The audit log streams to a SIEM, with numbers that let the receiver spot a lost event. People's data can be exported, removed early and put on legal hold, and there's a documented retention period for each kind. File-store master keys can be retired. A new [threat model](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/threat-model.md) maps each threat to the code and tests that address it.
+
+Several changes can stop email, sign-in, storage or clients until you act. Read [Before you upgrade](#before-you-upgrade) first.
+
+## One outbound address policy
+
+Every outbound connection (providers, sign-in, S3, the model catalog, SMTP, realtime and audit export) connects only to an address that passes one policy. The gateway resolves the name itself and connects only to an address it checked, so a DNS answer can't change in between.
+
+- **Never:** cloud metadata and other link-local addresses, and reserved ranges.
+- **Loopback:** only with `GATEWAY_ENV=development`.
+- **Private networks** (RFC 1918, `100.64.0.0/10` including Tailscale, IPv6 unique-local): only those you list in `GATEWAY_EGRESS_PRIVATE_ALLOW`.
+- **SMTP relays** must also be listed in `GATEWAY_SMTP_HOST_ALLOWLIST`.
+
+On Kubernetes, the chart can also narrow outbound HTTPS at the network layer with `networkPolicy.egress.httpsCidrs` or `httpsExceptCidrs`. See [Configuration](/docs/self-hosting/configuration) and [Kubernetes](/docs/self-hosting/kubernetes).
+
+## Sign-in limits and your sessions
+
+- **Sign-in limits.** Sign-in starts and callbacks are limited per address (`GATEWAY_LOGIN_RATE_PER_MINUTE`, 60 a minute per replica by default), and at most 10,000 sign-ins can be pending across the installation. Refusals return `429` or `503` with `Retry-After`.
+- **Your profile › Sessions** lists where you're signed in (browser and OS family, sign-in and last-active times; no IP address) and signs out one session or all the others. Platform Admins can sign a person out everywhere without suspending them.
+- **Idle and absolute limits.** A dashboard session ends after 2 hours without activity, and 12 hours after sign-in (`GATEWAY_SESSION_IDLE_TIMEOUT`, `GATEWAY_SESSION_LIFETIME`).
+- **Old sessions and expired sign-in attempts are removed** by the gateway's regular maintenance.
+
+See [Identity setup](/docs/self-hosting/identity).
+
+## Audit export to a SIEM
+
+The operator can stream the platform audit log (never personal-workspace events, prompts, responses or secrets) to one destination:
+
+- a **signed HTTPS webhook** (HMAC-SHA256);
+- **syslog over TLS** (RFC 5424 and 5425), optionally with mutual TLS;
+- **OTLP/HTTP** JSON logs to an OpenTelemetry collector.
+
+Delivery is at least once and in order, and nothing is dropped during an outage. Every event carries a gap-free `seq` number, and an idle export sends a heartbeat after a minute without events, so the receiver can alert on a lost event and on silence. Turning export off is itself an exported event, even when it's done directly in the database. Admin › Settings › Audit export shows the status and sends a test. See [Audit export](/docs/self-hosting/audit-export).
+
+## Data controls
+
+- **Your profile › Your data:** download your own data as one JSON file: your profile, memberships, key details, sessions, files list, and your requests and audit entries for up to 93 days. Never key secrets, prompts, responses or file contents. Platform Admins and Auditors can export a person's record with only what admins already see.
+- **Remove personal data now:** Platform Admins can run the departed-user cleanup at once for a suspended person.
+- **Legal holds:** Platform Admins can put a person or a Team or Project on hold, with a reference code. While a hold is in place nothing of that scope is removed. Holds grant no access, and are released, never deleted (Admin › Records › Legal holds).
+- **A retention contract:** each kind of data, how long it's kept, what removes it and how holds apply.
+
+See [Data controls](/docs/administration/data-controls).
+
+## Who sees files, batches and videos
+
+Teams and Projects have a new setting, **who sees files, batches and videos**, in Workspace › Settings › General:
+
+- **Per user**, the default for new and existing shared workspaces: a member's API keys and dashboard see only objects created with that member's keys. Service-account keys and workspace owners and admins see everything.
+- **Workspace-wide:** every key sees everything.
+
+In both modes, only the creator, a workspace owner or admin, or a service-account key can delete or cancel an object. Before, any key of a shared workspace could read, delete or cancel every member's objects. See [Workspace settings](/docs/using/workspace-settings) and [Files](/docs/using/files).
+
+## Retire a file-store key
+
+`open-model-gateway files rekey --from <old> --to <new>` re-wraps every file's data key under a new master key, without decrypting or re-encrypting the contents. It's resumable and safe to run while serving. `files verify` now reports the active key and any retired keys still in use, so you know when an old key can be removed. See [File storage](/docs/self-hosting/file-storage).
+
+## Safer restores and revocations
+
+- **Revocations are final.** Once a key, grant, session or invitation is revoked, no database role can clear or change that, so hand-written SQL can't "un-revoke" it.
+- **After a restore,** `scripts/backup.py reapply-revocations` copies every revocation and suspension from the old database onto the restored one, so access removed after the backup stays removed. It's a dry run without `--yes`.
+
+See [Backups and restore](/docs/self-hosting/backups-and-restore).
+
+## Before you upgrade
+
+These changes can stop email, sign-in, storage or clients until you act:
+
+- **SMTP password allowlist.** The SMTP password reference now resolves only from the new `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` (Helm `gateway.smtpSecretEnvAllowlist`), never from the provider list `GATEWAY_SECRET_ENV_ALLOWLIST`. Move your SMTP password variable's name to the new list; until you do, invitations and alerts aren't emailed. The gateway refuses to start if a name is on both lists. If a provider key was ever used as an SMTP password, rotate it.
+- **SMTP relay allowlist.** List your relay host in the new `GATEWAY_SMTP_HOST_ALLOWLIST` (Helm `gateway.smtpHostAllowlist`), or email stops with `host_not_allowed`.
+- **Outbound address policy.** A private identity provider, S3-compatible store or Bedrock endpoint must be in `GATEWAY_EGRESS_PRIVATE_ALLOW`, or startup (for sign-in) or those requests fail with a message naming the setting. List only the addresses you use, not all of `100.64.0.0/10`. Loopback sidecars, such as a local object store or proxy, only work with `GATEWAY_ENV=development`.
+- **Files, batches and videos in Teams and Projects are per user by default.** A member's keys see only objects created with that member's keys; other reads return `404`. For shared automation, set the workspace to Workspace-wide or use a service-account key.
+- **Dashboard sessions end after 2 hours idle**, as well as 12 hours after sign-in. Change this with `GATEWAY_SESSION_IDLE_TIMEOUT` and `GATEWAY_SESSION_LIFETIME` (Helm `gateway.sessionIdleTimeout`, `gateway.sessionLifetime`).
+- **Behind a reverse proxy, set `GATEWAY_TRUSTED_PROXIES`** (Helm `gateway.trustedProxies`) to its addresses, or every user shares the proxy's sign-in budget.
+- **Security headers.** Every response now carries a Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. The dashboard can't be framed, and inline scripts are refused, so a proxy that injects scripts into it no longer works.
+- **The sign-in client ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`.** The gateway must reach the identity provider directly.
+- **Revocations are final.** SQL that clears or changes `revoked_at` now fails; issue a new key or grant instead.
+- **Kubernetes:** the chart's NetworkPolicy has never opened SMTP or syslog ports. Add a `networkPolicy.egress.extraEgress` rule for your relay or syslog receiver.
+
+## Upgrade guide
+
+Eleven migrations, `0038` to `0048`. Most are small, but four take locks worth planning for, and two give up after 10 s:
+
+- **`0041`** rewrites `browser_sessions` under a full table lock: dashboard requests and sign-in wait until it finishes. Inference is unaffected. Sessions were never deleted before this release, so check `SELECT count(*) FROM browser_sessions` first and plan a short window for a large table.
+- **`0040`** builds an index on `oidc_login_attempts`; sign-in waits while it builds.
+- **`0043`** backfills sign-in times while holding row locks on `users`; admissions of the affected users' keys wait until it commits.
+- **`0047`** builds two indexes on every `audit_events` month partition; audit writes wait while they build.
+- **`0042`** and **`0048`** use a 10 s lock timeout. If either times out behind a long transaction, run `migrate` again.
+
+The runtime role gains grants for the new tables and columns, so reapplying the grants is required.
+
+<Steps>
+<Step>
+
+### Back up
+
+Back up with `scripts/backup.py` and run `verify`.
+
+</Step>
+<Step>
+
+### Set the new allowlists
+
+Set `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, `GATEWAY_SMTP_HOST_ALLOWLIST`, `GATEWAY_EGRESS_PRIVATE_ALLOW` and `GATEWAY_TRUSTED_PROXIES` as your deployment needs them.
+
+</Step>
+<Step>
+
+### Stop every replica
+
+Mixed-schema replicas are not supported.
+
+</Step>
+<Step>
+
+### Migrate and grant
+
+As the migrator, run `open-model-gateway migrate`, then `open-model-gateway grants apply`, then `grants verify`.
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new replicas and wait for `/health/ready`. Send a test email from Admin › Settings › Email, and sign in.
+
+</Step>
+</Steps>
+
+With Helm, upgrade with `--set migrations.run=true`, and set the new values: `gateway.smtpSecretEnvAllowlist`, `gateway.smtpHostAllowlist`, `gateway.trustedProxies`, `gateway.sessionIdleTimeout`, `gateway.sessionLifetime`, and optionally `networkPolicy.egress.httpsCidrs` or `httpsExceptCidrs`. See [Upgrades](/docs/self-hosting/upgrades#to-v060) for the full procedure.
+
+## Also in this release
+
+- **Clearer audit entries.** An admin suspension is recorded as `user.suspended` (with the reason) and a reactivation as `user.reactivated`, instead of `user.updated`. `user.updated` now says whether the email or the sign-in link changed, never the values.
+- **Pinned builds.** CI pins every GitHub Action by commit and the `Dockerfile`'s build images by digest, and fails on any unpinned one.
+- **rustls 0.23.46**, for four TLS advisories (RUSTSEC-2026-0346 to 0349).
+- **Database failover, measured again.** On the test cluster, a connection-pooler restart under load failed 2 of 5,400 requests, a dropped LISTEN connection failed none, and a primary failover promoted the standby in 18 s with the chart's 15 s smart shutdown. Accounting stayed exact through every fault.
+- Settings pages keep "Settings saved." when the reload after a save brings back the saved values.
+
+## Known limitations
+
+- **No certified capacity number yet.** Steady-load stalls are still open.
+- **A second write outage after failover with two database instances.** On a two-instance cluster with a required synchronous standby, writes stalled again shortly after a failover; the cause isn't confirmed yet. Until it is, run three instances if writes must stay available through a failover.
+- Syslog messages aren't signed: their authenticity depends on the receiver requiring the client certificate. OTLP has no client-certificate option.
+- Sign-out started by the identity provider (back-channel or front-channel logout) isn't implemented.
+- AWS credential lookups (instance metadata, ECS and EKS, STS) don't go through the outbound address policy.
+- Guardrails are designed but not built.
+- The Helm chart is still **beta**.
+- Development software: not accepted for production. Live SCIM acceptance and an independent security review are still open.
+
+## Upgrading
+
+See [Upgrades](/docs/self-hosting/upgrades#to-v060) for the full procedure, and [Container and Compose](/docs/self-hosting/container#release-images) to verify the signed image.
