@@ -1,12 +1,12 @@
 ---
 title: Scaling
-description: How replicas, per-replica caches, history partitions and the per-workspace/key admission ceiling work from v0.4.0, and the rollback mode.
+description: How replicas, per-replica caches, history partitions and the per-workspace/key admission ceiling work, the dashboard at scale, what was measured on a cluster, and the known limits.
 ---
 
 Before v0.4.0, every request locked one installation-wide row, so admission and settlement were serialized across the whole installation regardless of how many replicas or database connections you ran. From v0.4.0, admission and settlement lock a workspace's and a key's own rows instead, so requests from different workspaces run in parallel and more replicas add real capacity.
 
-<Callout title="No capacity numbers here">
-  The project's own measurements for this work come from a laptop load-test stack, not a capacity promise for your hardware. Measure in your own environment before you rely on a number.
+<Callout title="No certified capacity number">
+  The project's measurements come from a laptop load-test stack and, from v0.5.0, a homelab Kubernetes cluster ([below](#measured-on-a-cluster)). They are not a capacity promise for your hardware, and steady-load stalls are still open. Measure in your own environment before you rely on a number.
 </Callout>
 
 ## Scoped admission
@@ -43,6 +43,44 @@ Because a workspace's (and a key lineage's) own admissions still serialize on it
 ## Connection sizing
 
 Each replica opens up to `GATEWAY_DATABASE_MAX_CONNECTIONS` connections (default 10). From v0.4.0, each replica admits on up to half its pool and settles on up to three tenths of it (previously a quarter each, since the installation lock serialized them regardless of pool size). Size PostgreSQL's `max_connections`, and any connection pooler in front of it, for every replica's pool plus the migrator and backup sessions — and one extra session per replica if `GATEWAY_LISTEN_DATABASE_URL` points through a session-mode pooler rather than directly at PostgreSQL. See [Configuration](/docs/self-hosting/configuration#scaling) for the full list of new environment variables, and [Kubernetes](/docs/self-hosting/kubernetes#pgbouncer-caveats) for PgBouncer-specific caveats, including why `LISTEN` needs a direct connection.
+
+## The dashboard at scale
+
+v0.5.0 made the dashboard stay fast with tens of thousands of people, workspaces, keys and models. Measured on a cluster with 50,000 users, 20,000 shared workspaces, 107,000 keys and 2,004 models:
+
+| | Before | After |
+|---|---|---|
+| Platform users list, any page | 1.1 s; deep pages minutes to hours | about 0.19 s |
+| One slow admin list | froze the admin area for 12 minutes | lists never block other requests; 10 s limit |
+| Home, for a user in 2,003 workspaces | about 2,000 requests, 116 s, then the tab crashed | 5 requests, 0.64 s |
+| Audit log, people, workspace, key and model pickers and filters | loaded whole lists | named by the server, or searched |
+| Full model list | 11 requests, 23 s | pages built only for the rows shown |
+
+What changed for operators:
+
+- Platform users, user detail, workspace lists, and workspace members, keys and service accounts read from the same lock-free snapshots as reports. They never wait for admission or management changes, and never make them wait.
+- Like reports, a list whose query runs over 10 seconds is cancelled with `503` "The request took too long; narrow it and try again".
+- Person pickers search on the server and show the first 20 matches.
+- Migration `0037` adds two indexes for these lookups.
+
+## Measured on a cluster
+
+From v0.5.0 the project tests on its homelab Kubernetes cluster: CloudNativePG 1.30.1, PostgreSQL 17.6, a primary and one synchronous standby, PgBouncer in transaction mode, and 1, 3 and 6 gateway replicas.
+
+**Database sizing.** The chart's default database (2 CPU and 2 GiB, `shared_buffers` 256 MB, a Pooler limited to 500m CPU) collapsed at 50 requests a second. 6 CPU and 8 GiB with `shared_buffers` 2 GB handled 100–150 requests a second cleanly, with p50 latency of 70–90 ms. Above about 150 a second, the primary's CPU, WAL writes and waits for the synchronous standby were the limit. Override `cnpg.cluster.resources` and `cnpg.cluster.postgresql.parameters` for production.
+
+**Faults.** Under every fault tested (graceful and hard gateway kills, streams cut midway, a primary failover under load), interrupted attempts kept their holds and were reconciled as unknown. Across 117,256 attempts no reservation stayed pending, nothing was charged twice, and `budget verify` and `history verify` were clean. In v0.6.0, restarting the PgBouncer Pooler under load failed 2 of 5,400 requests, and dropping every replica's `LISTEN` connection failed none. For failover timing, see [Kubernetes](/docs/self-hosting/kubernetes#failover-timing).
+
+**A slow commit no longer stalls the pool.** Before v0.5.0, every successful request refreshed the same routing-health row every 30 seconds. Behind a slow commit they all queued on it, each holding a pooled connection. Now one task per replica refreshes it, and skips it while it is busy (#132).
+
+## Known limits
+
+- **No certified capacity number.** About half the steady-load runs still hit stalls of 17–40 seconds, sometimes without recovering (#132). Clean runs held 100–150 requests a second with p99 under 650 ms.
+- **A second write outage after a two-instance failover** is still open (#149). Run three database instances if writes must stay available through a failover.
+- **The chart's default database sizing is too small for load.** Size it for yours.
+- One workspace or one key still tops out at a few hundred admissions a second, by design ([above](#per-workspace-and-key-ceiling)).
+
+The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md) has the details and what hasn't been measured yet.
 
 ## An optional reporting replica
 

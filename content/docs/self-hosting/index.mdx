@@ -15,6 +15,7 @@ TLS reverse proxy (your choice)
        └─ /health/*          liveness and readiness
             ├─ PostgreSQL 17      identity, configuration, accounting
             ├─ file store         local disk or S3-compatible (optional)
+            ├─ audit export       webhook, syslog over TLS or OTLP (optional)
             └─ providers          cloud APIs and approved self-hosted servers
 ```
 
@@ -24,7 +25,7 @@ TLS reverse proxy (your choice)
 - **PostgreSQL 17**, with three roles: a cluster administrator, a **migrator** that owns the schema, and a restricted **runtime** role for the gateway.
 - An **OpenID Connect** identity provider for dashboard sign-in, with a registered client and a signed groups claim.
 - **HTTPS** in front of the gateway, with a stable public hostname.
-- Optionally: S3-compatible object storage (or a local directory) for files and batches, an SMTP relay, Prometheus.
+- Optionally: S3-compatible object storage (or a local directory) for files and batches, an SMTP relay, Prometheus, a SIEM or log pipeline for the audit export.
 
 No Node.js, Redis or message queue is needed at run time.
 
@@ -39,12 +40,13 @@ No Node.js, Redis or message queue is needed at run time.
   <Card title="Provider credentials" href="/docs/self-hosting/provider-credentials">Secret references, allowlists, AWS identities and local endpoints.</Card>
   <Card title="File storage" href="/docs/self-hosting/file-storage">Encrypted storage on S3, MinIO, RustFS or local disk.</Card>
   <Card title="Metrics and monitoring" href="/docs/self-hosting/metrics-and-monitoring">Health checks, Prometheus metrics, alert rules and a dashboard.</Card>
-  <Card title="Scaling" href="/docs/self-hosting/scaling">Replicas, per-replica caches, history partitions and the per-scope ceiling.</Card>
-  <Card title="Backups and restore" href="/docs/self-hosting/backups-and-restore">Checksummed dumps, guarded restores and drills.</Card>
+  <Card title="Audit export to a SIEM" href="/docs/self-hosting/audit-export">A signed webhook, syslog over TLS or OTLP, with gap detection.</Card>
+  <Card title="Scaling" href="/docs/self-hosting/scaling">Replicas, caches, partitions, the per-scope ceiling and cluster measurements.</Card>
+  <Card title="Backups and restore" href="/docs/self-hosting/backups-and-restore">Encrypted off-host dumps, guarded restores and drills.</Card>
   <Card title="Upgrades" href="/docs/self-hosting/upgrades">Forward-only migrations and the upgrade procedure.</Card>
-  <Card title="Security" href="/docs/self-hosting/security">What the gateway protects, and what is still yours to do.</Card>
+  <Card title="Security" href="/docs/self-hosting/security">The outbound address policy, the threat model, and what is still yours to do.</Card>
 </Cards>
 
 <Callout type="warn" title="Pre-1.0">
-  The repository includes a single-host staging setup and operations runbooks, tested locally. Live identity-provider and provider acceptance, production load testing, off-host recovery and an independent security review are still open. Pilot with a small group, a private network and low budgets first.
+  The repository includes a single-host staging setup, a beta Helm chart and operations runbooks, tested locally and on a homelab Kubernetes cluster. There is no certified capacity number yet, and live identity-provider and SCIM acceptance and an independent security review are still open. Pilot with a small group, a private network and low budgets first.
 </Callout>

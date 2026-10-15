@@ -1,13 +1,13 @@
 ---
 title: Backups and restore
-description: Checksummed PostgreSQL backups, restores that refuse to overwrite anything, point-in-time recovery, and the restore drill.
+description: Encrypted, checksummed PostgreSQL backups copied off the host, restores that refuse to overwrite anything, reapplying revocations, point-in-time recovery, and the restore drill.
 ---
 
-Everything that matters is in PostgreSQL, plus, if you use it, the file store and its encryption keys. Back up all three, separately.
+Everything that matters to Open Model Gateway is in PostgreSQL, plus, if you use it, the file store and its encryption keys. Back up all three, separately.
 
 | What | How | Notes |
 |---|---|---|
-| Database | `scripts/backup.py`, or your platform's backups and point-in-time recovery | Contains identities and accounting data. |
+| Database | `scripts/backup.py`, and your platform's base backups and point-in-time recovery | Contains identities and accounting data. |
 | File store objects | Bucket replication or versioning, or a copy of the local directory | Ciphertext only: useless without the keys. |
 | Encryption keys, secrets, configuration, TLS certificates | Your secret manager and an encrypted recovery plan | Never in the same place as the backups they unlock. |
 
@@ -31,30 +31,122 @@ python3 scripts/backup.py restore /secure/backups/gateway-….dump.manifest.json
 
 - Connection URLs come from `--url-env` (default `DATABASE_URL`) or `--url-file`, and are never printed or put on a command line. `--pg-container NAME` runs the PostgreSQL 17 tools inside a container.
 - A backup refuses an empty or dirty migration history, or one that changed during the dump.
+- From v0.5.0 backups contain only the built-in `plpgsql` extension. Extensions a cluster adds to every database through `template1`, such as pgvector, are left out, and `restore --create` copies `template0`.
 - A restore checks the checksum, then that the backup's migrations equal the binary's (`--gateway-binary`, or the weaker `--expect-version N`). The target must be empty; system and demo databases are refused. It restores in a single transaction and never drops or overwrites existing data.
-- **Backups aren't encrypted by the script.** Encrypt them before they leave the host, restrict access and set retention.
+- The manifest is plaintext JSON with no secrets. It records the checksum, the migrations, and the file-store key IDs that live files use (IDs only, never keys).
+
+## Encrypted backups
+
+From v0.5.0 the script can encrypt with [age](https://age-encryption.org). The host that runs it needs `age` and `age-keygen`.
+
+```sh
+# Once, on a trusted machine: create the identity, keep it in your secret manager,
+# and keep only the public key (age1…) where backups are taken.
+age-keygen -o backup-identity.txt
+
+# Back up: pg_dump streams through age into <dump>.age. The plaintext never reaches disk.
+python3 scripts/backup.py backup --url-file /secure/migrator_database_url \
+  --out-dir /secure/backups --encrypt-to age1…
+
+# Verify the ciphertext; with --identity, also decrypt in memory and check the plaintext.
+python3 scripts/backup.py verify /secure/backups/gateway-….dump.age.manifest.json \
+  --identity /run/secrets/backup-identity.txt
+
+# Restore: two decrypt passes, no plaintext on disk.
+python3 scripts/backup.py restore /secure/backups/gateway-….dump.age.manifest.json \
+  --url-env MIGRATOR_ADMIN_URL --target-db gateway_restore_20261013 --create \
+  --gateway-binary /usr/local/bin/open-model-gateway \
+  --identity /run/secrets/backup-identity.txt --file-keys-env GATEWAY_FILE_KEYS
+```
+
+- `--encrypt-to` can be repeated, or use `--encrypt-to-file` with a list of recipients. Any one identity can decrypt: use one for routine restores and one offline break-glass identity.
+- A restore decrypts once to check the plaintext checksum, then again straight into `pg_restore`. An archive that changes between passes never completes a restore.
+- Without `--encrypt-to` the dump is plaintext on disk. Encrypt anything that leaves the host.
+
+### File-store keys
+
+If the manifest lists file-store key IDs, a restore refuses unless `--file-keys-env NAME` names a variable holding the key list (the same `kid:base64key,…` format as the file store's) that contains every listed ID. Only the IDs are read; values are never printed. Pass `--skip-file-key-check` only when stored files won't be recovered.
+
+## Off-host copies
+
+`upload`, `list`, `download` and `prune` copy backups to S3-compatible storage (AWS S3, RustFS, MinIO). They use only the Python standard library.
+
+```sh
+export AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…   # a key limited to this bucket
+S3="--endpoint https://rustfs.example.internal --region us-east-1"
+
+python3 scripts/backup.py upload /secure/backups/gateway-….dump.age.manifest.json --to s3://omg-backups/prod $S3
+python3 scripts/backup.py list --from s3://omg-backups/prod $S3                   # newest first
+python3 scripts/backup.py download gateway-….dump.age --from s3://omg-backups/prod --out-dir /restore $S3
+python3 scripts/backup.py prune --from s3://omg-backups/prod --keep 30 $S3        # prints the plan
+python3 scripts/backup.py prune --from s3://omg-backups/prod --keep 30 --yes $S3  # deletes
+```
+
+- Credentials come only from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optionally `AWS_SESSION_TOKEN`, never from arguments. Plain `http://` endpoints are accepted only for loopback hosts. No redirects, proxies or retries.
+- **Upload** refuses unencrypted backups unless you pass `--allow-plaintext`, and refuses archives over 5 GiB. It uploads the archive first and the manifest last, so a manifest exists only once its archive is complete. It never overwrites a backup that is already there.
+- **Download** checks the archive against the manifest and deletes what it wrote if the check fails. Then run `verify --identity` and `restore`.
+- **Prune** keeps the newest `--keep` backups (at least 1) and only prints its plan without `--yes`. It deletes only complete pairs it recognises; it never counts an incomplete archive toward `--keep`. Use bucket versioning or object lock as well if a stolen credential could delete backups.
+
+### Key custody
+
+Keep three things apart, with separate access:
+
+1. **The age identity.** In your secret manager, plus an offline break-glass copy. Never in the bucket or beside the backups.
+2. **The file-store key list**, every key that stored files or retained backups still need.
+3. **The backup bucket's credentials.** They can read and, unless restricted, delete ciphertext, but can't decrypt it.
+
+Anyone with both the bucket's credentials and the age identity can read every database backup.
+
+## After a restore
+
+A restore returns the database to the moment of the backup. Before serving it:
+
+1. **Revocations and suspensions made after the backup are undone.** Keys, grants, sessions and invitations revoked since then, and people, keys, service accounts and workspaces disabled since then, are active again.
+   - If the old database can still be read, copy its revocations onto the restored one before starting the gateway. Run it as the migrator on both:
+
+     ```sh
+     python3 scripts/backup.py reapply-revocations --source-url-file old.url --url-file restored.url        # dry run: counts per table
+     python3 scripts/backup.py reapply-revocations --source-url-file old.url --url-file restored.url --yes  # one transaction
+     ```
+
+     It copies revocations and suspensions only onto rows still active in the restored copy, never clears anything, and refuses two databases of different installations. Something re-enabled after the backup stays disabled until you re-enable it.
+   - If the old database is gone, take what changed since the backup from your off-host [audit export](/docs/self-hosting/audit-export) and repeat it in the dashboard: `key.revoked`, `key.disabled`, `role.revoked`, `workspace.manual_membership_revoked`, `invitation.revoked`, `scim.user.deactivated`, `service_account.updated`, `workspace.updated`, `user.suspended` and `user.reactivated`. Without an export, revoke every key created before the incident that you can't vouch for, and have people sign in again.
+2. **Sessions.** If the incident involved a compromise, revoke every session before serving, so everyone signs in again. As the migrator: `UPDATE browser_sessions SET revoked_at = now() WHERE revoked_at IS NULL;`
+3. **Spend recorded after the backup is lost.** Budgets count from the restored totals, so a workspace may spend again what it already spent. Compare provider invoices for the gap, and tighten affected budgets until the period rolls over.
 
 ## Point-in-time recovery
 
-A dump gives you a recovery point at the time it was taken. For a smaller window, use your PostgreSQL platform's point-in-time recovery (a managed service's, or base backups with continuous WAL archiving), stored encrypted off the host. To recover:
+A dump gives you a recovery point at the time it was taken: with a daily backup you can lose up to a day. For a smaller window, use your PostgreSQL platform's point-in-time recovery: a managed service's, or base backups with continuous WAL archiving (pgBackRest, WAL-G, or CloudNativePG's object-store backups), stored encrypted off the host. You need both parts: a base backup alone restores only to its end, and archived WAL is useless without a base backup.
+
+To recover:
 
 1. Restore the base backup to a **new** cluster.
 2. Set the recovery target to just before the incident.
 3. Promote it, then run the drill checks below before switching over.
 
-Never recover over the live cluster, never run down migrations, and never delete pending or unknown reservations to make numbers add up.
+Keep the encrypted logical backups as well. Never recover over the live cluster, never run down migrations, and never delete pending or unknown reservations to make numbers add up. See the repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md#backups).
 
 ## The restore drill
 
 Do this quarterly and after releases with migrations:
 
 1. Take a fresh backup and `verify` it.
-2. Restore it with `--create` into a new database on a non-production cluster, with the binary of the release you will run.
-3. Apply `deploy/staging/runtime-grants.sql` as the migrator, then run `verify-privileges.sql`.
+2. Restore it with `--create` into a new database on a non-production cluster, with the binary of the release you will run. If the migrator may not create databases, an administrator creates the target from `template0`, revokes `PUBLIC`'s rights on it and grants `CONNECT` to `gateway_runtime`; then restore without `--create`.
+3. Apply the runtime grants as the migrator with `open-model-gateway grants apply`, then run `open-model-gateway grants verify` with a role that can `SET ROLE gateway_runtime`.
 4. Start that release against the restored database: `/health/ready` must report `schema: ok`.
-5. Compare ledger and request counts with the source, spot-check costs, check that pending and unknown reservations survived, and run `open-model-gateway budget verify`.
+5. Compare ledger and request counts with the source, spot-check costs, check that pending and unknown reservations survived, and run `open-model-gateway budget verify` and `history verify`.
 6. If you use the file store, run `open-model-gateway files verify` with your keys.
 7. Record how long it took (your recovery time) and the backup's age (your recovery point), then drop the drill database.
+
+### A measured drill
+
+In v0.5.0 the project restored its newest encrypted off-host backup onto a fresh environment on its homelab cluster, as if the original installation were lost:
+
+- **Recovery point: 48 seconds**, the time since the last backup. Exactly the one write made in that window was lost.
+- **Recovery time: 92 seconds** to a serving gateway. 73 of them went to creating the new environment; the restore itself, with two decrypt passes, took 7.2.
+- The drill found two bugs, both fixed in v0.5.0: backups carried extensions from the cluster's `template1`, and `restore --create` copied `template1`.
+
+That database was small (a 0.5 MB compressed dump) and had no file store. A large installation restores more slowly: time your own.
 
 ## The staging setup
 

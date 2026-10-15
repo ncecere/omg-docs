@@ -1,13 +1,16 @@
 ---
 title: Security
-description: What Open Model Gateway does to protect credentials, data and money, and what remains the operator's job.
+description: What Open Model Gateway does to protect credentials, data and money, the threat model and its residual risks, and what remains the operator's job.
 ---
+
+v0.6.0 is Open Model Gateway's security release: one outbound address policy, sign-in limits and idle sessions, security headers, final revocations, separate SMTP allowlists, an audit export to a SIEM and a published threat model.
 
 ## What the gateway does
 
 **Credentials**
 
 - Provider secrets are references to server-side environment variables, AWS identities or file mounts, allowed by name. They are never accepted from the browser, stored in the database or returned by any API.
+- The SMTP password has its own allowlist, separate from the providers' ([below](#smtp-allowlists)).
 - API keys and session tokens are stored only as hashes. Keys are shown once.
 - Callers' API keys are never sent to providers. API keys can't use the management API; browser sessions can't call inference.
 - The SCIM token is read once at startup and kept as a hash.
@@ -17,18 +20,23 @@ description: What Open Model Gateway does to protect credentials, data and money
 - Prompts and responses are never stored or logged. Logs, metrics, audit entries and alerts hold metadata only.
 - Files the gateway keeps are encrypted with per-object keys before any backend sees them.
 - Personal workspaces' keys and requests are private to their owner, Platform Admins included.
+- In Teams and Projects, files, batches and videos are per user by default ([below](#files-batches-and-videos-in-shared-workspaces)).
 
 **Network**
 
+- Every outbound connection follows one address policy ([below](#the-outbound-address-policy)).
 - Cloud providers are reached over HTTPS at fixed addresses. Self-hosted servers only at approved, IP-pinned addresses.
-- No redirects are followed, proxy environment variables are ignored, and nothing is retried implicitly.
+- No redirects are followed, proxy environment variables are ignored, and nothing is retried implicitly. From v0.6.0 this includes the sign-in client.
 - Upstream bodies, frames and responses have size limits.
 
 **Sign-in and the dashboard**
 
 - OpenID Connect with PKCE, state and nonce; verified email required; asymmetric signatures only.
 - Signing in grants nothing: access needs a platform role. Losing it revokes sessions and keys, and revoked keys never return.
-- Changes need an exact `Origin` and a CSRF token. No CORS. Sessions last 12 hours.
+- Sign-in is rate-limited per client address, and the number of pending sign-ins is capped ([Identity setup](/docs/self-hosting/identity#sign-in-abuse-controls)).
+- Sessions end 12 hours after sign-in or after 2 hours idle, by default. People can see and end their own sessions; Platform Admins can sign a person out everywhere ([Sessions](/docs/self-hosting/identity#sessions)).
+- Changes need an exact `Origin` and a CSRF token. No CORS.
+- Every response carries security headers ([below](#security-headers)).
 - The last Platform Admin can't be removed.
 
 **Money**
@@ -40,34 +48,113 @@ description: What Open Model Gateway does to protect credentials, data and money
 **The database**
 
 - The running gateway uses a restricted role with a reviewed allowlist of table and column privileges. Prices, the ledger and the audit log are insert-only for it.
+- Revocations are final ([below](#revocations-are-final)).
 
 **The image**
 
-- From v0.3.1 the image is distroless: the binary, the dashboard, C runtime libraries and CA certificates, with no shell, package manager or `curl`. It runs as a non-root user (`10001`) with a read-only root filesystem.
+- The image is distroless: the binary, the dashboard, C runtime libraries and CA certificates, with no shell, package manager or `curl`. It runs as a non-root user (`10001`) with a read-only root filesystem.
 - Secrets read from files are checked at startup; invalid ones stop the gateway without printing the value.
+
+## The outbound address policy
+
+From v0.6.0 every outbound connection is checked against one policy: providers, sign-in (discovery, tokens and signing keys), S3, the OpenRouter catalog, SMTP, the OpenAI realtime WebSocket and the [audit export](/docs/self-hosting/audit-export).
+
+| Address | Allowed |
+|---|---|
+| Unspecified, link-local (including cloud metadata at `169.254.169.254`), `fd00:ec2::/32`, Alibaba Cloud's `100.100.100.200`, multicast, broadcast, reserved, documentation and benchmarking ranges | Never |
+| Loopback | Only with `GATEWAY_ENV=development` |
+| Private: RFC 1918, `100.64.0.0/10` (carrier-grade NAT, which includes Tailscale), IPv6 unique-local | Only inside `GATEWAY_EGRESS_PRIVATE_ALLOW` |
+| Public | Yes |
+
+- The gateway resolves names itself, drops refused addresses, and connects only to an address that passed. A DNS answer can't change between the check and the connection.
+- NAT64 (`64:ff9b::/96`), 6to4 and Teredo addresses are judged by the IPv4 address they carry, so IPv6-only clusters with DNS64 keep working.
+- IP-literal endpoints in the configuration (`GATEWAY_S3_ENDPOINT`, `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST`, the OIDC issuer and the endpoints it publishes) are checked at startup.
+- A refused request fails like an unreachable upstream. The log names the purpose, host and reason, and `gateway_egress_denied_total{purpose}` counts it when no allowed address remains.
+- Approved self-hosted servers (`GATEWAY_LOCAL_UPSTREAMS`) keep their own pinned approval and need no entry.
+- **Not covered:** the AWS SDK's own credential lookups (instance metadata, ECS and EKS Pod Identity, STS and SSO). They use the SDK's own HTTP client, because instance metadata must be reachable for credentials.
+
+List a private network when the gateway needs it: an identity provider or S3-compatible store on a private address, AWS PrivateLink endpoints for Bedrock or S3 (the VPC range), or anything over Tailscale (only those addresses, such as `100.101.102.103/32`, never all of `100.64.0.0/10`).
+
+The policy is not a firewall. In Kubernetes, narrow the chart's NetworkPolicy to match: see [Outbound traffic](/docs/self-hosting/kubernetes#outbound-traffic).
+
+## Security headers
+
+From v0.6.0 every response carries a Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+
+- The dashboard's policy allows only its own scripts, styles, fonts and API. No inline script or `eval`, and it can't be framed.
+- API and file responses get `default-src 'none'`.
+- If you embed the dashboard in a frame, or load it through a proxy that injects scripts, that no longer works.
+
+## Revocations are final
+
+From v0.6.0 the database itself refuses to clear or change `revoked_at` once it is set, on API keys, workspace and platform role grants, browser sessions and invitations, for every database role. Hand-written SQL that "un-revokes" a key or grant fails; issue a new one instead.
+
+This guards against application bugs. It doesn't stop someone holding the runtime database credential from creating new keys and grants. After restoring a backup, copy later revocations onto it: see [Backups and restore](/docs/self-hosting/backups-and-restore#after-a-restore).
+
+## SMTP allowlists
+
+A Platform Admin chooses the SMTP relay in Admin › Settings › Email. Two operator settings limit what that choice can reach:
+
+- **`GATEWAY_SMTP_HOST_ALLOWLIST`** lists the relays email may go to. An unlisted relay never gets a connection or the password, and email shows `host_not_allowed`.
+- **`GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`** lists the variables the SMTP password may read. Before v0.6.0 the password used the provider list, so a Platform Admin could send a provider key to a mail server of their choice. Now startup fails if a name is on both lists, or if the SMTP list names one of the gateway's own credentials.
+
+If a provider key was ever used as an SMTP password, rotate it. See [Configuration](/docs/self-hosting/configuration#email).
+
+## Files, batches and videos in shared workspaces
+
+Before v0.6.0, any key of a Team or Project could read, delete or cancel every member's files, batches and videos. From v0.6.0 each shared workspace has a setting for who sees them:
+
+- **Per user** (the default, also for existing workspaces): a member's keys see only objects created with that member's keys. Service-account keys and workspace owners and admins see everything.
+- **Workspace-wide:** every key sees everything.
+
+Either way, only the creator, an owner or admin, or a service-account key may delete or cancel. An object the caller can't see returns `404`. See [Workspace settings](/docs/using/workspace-settings).
 
 ## How releases are checked
 
 - **Dependencies.** Every change runs `cargo-deny` over the Rust dependencies (known advisories, unmaintained or yanked crates, licences, and crates.io as the only source) and an audit of the production npm dependencies, where high and critical advisories fail the build. The few advisories that are deliberately ignored are listed in the repository's `deny.toml` with the reason.
 - **Code scanning.** CodeQL analyses the TypeScript and Rust code on every change and weekly.
-- **Updates.** Dependabot opens weekly grouped updates for Rust crates, npm packages, GitHub Actions and the image's base images; security updates arrive on their own.
-- **Images.** Release images are scanned for known vulnerabilities before publishing (fixable high and critical findings block the release), carry an SBOM and build provenance, and are [signed with cosign](/docs/self-hosting/container#release-images). Workflow actions are pinned by commit.
+- **Pinning.** From v0.6.0 every GitHub Action in CI is pinned by commit SHA and every build image in the `Dockerfile` by digest. `npm run test:supply-chain` fails CI on any that isn't.
+- **Updates.** Dependabot opens weekly grouped updates for Rust crates, npm packages, GitHub Actions and the image's base images; security updates arrive on their own. v0.6.0 moves rustls to 0.23.46 for RUSTSEC-2026-0346 (session `Debug` output exposed TLS secrets), -0347 (data sent to the outer server after an ECH rejection), -0348 (unbounded Brotli certificate decompression) and -0349 (an unauthenticated ServerHello could downgrade later connections to classical key exchange).
+- **Images.** Release images are scanned for known vulnerabilities before publishing (fixable high and critical findings block the release), carry an SBOM and build provenance, and are [signed with cosign](/docs/self-hosting/container#release-images).
 
 These checks find known issues in what the project depends on. They are not a security review of the gateway itself.
 
+## The threat model
+
+The repository's [threat model](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/threat-model.md) lists threats by area (tenancy, keys and sessions, sign-in, SCIM, accounting, provider credentials and egress, file store, caches, batches and realtime, the dashboard, supply chain, operator actions, audit and retention). For each it names the code and tests that address it, and what remains. It is not a certification or a penetration test.
+
+### Residual risks
+
+Open items from its gaps table, as of v0.6.0:
+
+- There is no secret manager integration: every replica holds every secret.
+- The SCIM token is one static secret, and it can grant roles that groups are mapped to, including admin.
+- There is no row-level security in the database. Workspace isolation depends on the gateway's queries.
+- Native batches and video jobs keep running at the provider after their key is revoked.
+- Input ceilings and provider-reported usage are trusted, and there is no reconciliation with provider invoices.
+- Each unknown but well-formed key costs a database query, and there is no per-client rate limit on inference.
+- The realtime browser subprotocol carries the key in a request header.
+- Branch images aren't signed, and nothing checks image signatures at deploy time.
+- Live acceptance against a real identity provider and SCIM client isn't done.
+- Prompt injection and output content aren't checked: guardrails are designed, not built.
+- Invitation-code handling hasn't been reviewed, and "prompts are never stored" rests on the schema alone, with no test that asserts it.
+
+Most of these are for the independent security review, which is still open.
+
 ## What is yours to do
 
-- **HTTPS and the edge.** Terminate TLS in front of the gateway. Rate-limit sign-in and `/scim`. Keep query strings, cookies and `Authorization` headers out of access logs.
-- **Network egress.** Restrict where the gateway's host can connect. The gateway's allowlists are not a firewall.
-- **Secrets.** Keep provider keys, the SCIM token, file-store keys and database passwords in a secret manager; rotate them; never put them in `VITE_*` variables or images.
+- **HTTPS and the edge.** Terminate TLS in front of the gateway. Set `GATEWAY_TRUSTED_PROXIES` to your proxies. Keep query strings, cookies and `Authorization` headers out of access logs.
+- **Network egress.** List only the private networks the gateway needs in `GATEWAY_EGRESS_PRIVATE_ALLOW`, and restrict where the host can connect at the network layer too.
+- **Secrets.** Keep provider keys, the SCIM token, file-store keys, the audit export secret and database passwords in a secret manager; rotate them; never put them in `VITE_*` variables or images.
 - **The metrics listener.** Keep it private.
-- **Backups.** Encrypt them, store them off the host, and drill restores.
-- **People.** Without SCIM, group removals arrive only at sign-in: suspend people by hand when access must end now. Keep two Platform Admins.
+- **The audit log.** Stream it off the host with the [audit export](/docs/self-hosting/audit-export), and alert on gaps and silence at the receiver.
+- **Backups.** Encrypt them (`--encrypt-to`), store them off the host, and drill restores. See [Backups and restore](/docs/self-hosting/backups-and-restore).
+- **People.** Without SCIM, group removals arrive only at sign-in: suspend people, or sign them out everywhere, when access must end now. Keep two Platform Admins.
 - **Costs.** Prices are your estimates. Compare them with provider invoices; set budgets with that margin in mind.
 
 ## Known limits
 
-The project's own notes list what isn't done yet: an independent security review, production load testing, live identity-provider and SCIM acceptance, off-host recovery exercises, login abuse limits and session cleanup, single logout, and provider-invoice reconciliation. Treat a deployment as a pilot until you have covered these for your environment.
+As of v0.6.0: there is no certified capacity number; IdP-initiated (back-channel or front-channel) logout isn't implemented; syslog audit messages aren't signed, and OTLP has no client-certificate option; guardrails aren't built; the Helm chart is beta. Live SCIM acceptance and an independent security review are still open, and the software is not accepted for production. Treat a deployment as a pilot until you have covered these for your environment.
 
 ## Reporting a vulnerability
 

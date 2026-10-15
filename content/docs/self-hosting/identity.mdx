@@ -1,6 +1,6 @@
 ---
 title: Identity setup
-description: Configure OpenID Connect sign-in, the groups claim, the first Platform Admin, signing-key refresh and SCIM.
+description: Configure OpenID Connect sign-in, the groups claim, the first Platform Admin, signing-key refresh, sign-in limits, sessions and SCIM.
 ---
 
 The dashboard signs people in with **OpenID Connect** (authorization code with PKCE). There are no local passwords and no development login.
@@ -27,6 +27,8 @@ GATEWAY_OIDC_GROUPS_CLAIM=groups      # the default
 - The issuer must be exact, including any path, as published in its discovery document.
 - Everything must use HTTPS. Only `GATEWAY_ENV=development` allows plain HTTP, and only on loopback addresses.
 - If the issuer can't be reached at startup, the gateway doesn't start.
+- From v0.6.0 the gateway connects to the issuer directly. It ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` and retries nothing, like its provider clients. If sign-in only worked through such a proxy, let the gateway reach the issuer directly.
+- From v0.6.0 an issuer on a private address must be in `GATEWAY_EGRESS_PRIVATE_ALLOW`, or startup stops with a message naming that variable. See [Outbound connections](/docs/self-hosting/configuration#outbound-connections).
 - **Admin › Settings › Sign-in** shows the configuration in use and the callback URL to register (never the secret).
 
 ## The first Platform Admin
@@ -43,7 +45,7 @@ It runs with the migrator's database access. It gives the email the Admin role a
 
 - People are identified by the issuer and subject, not their email. Changing an email at the identity provider doesn't move anyone to another account.
 - Group claims are read at every sign-in, from the signature-checked ID token. A missing or malformed groups claim refuses sign-in without removing anything.
-- Sessions last 12 hours and are stored as hashes. The `omg_session` cookie is `HttpOnly` and `SameSite=Lax`; `omg_csrf` is `SameSite=Strict`. Every change in the dashboard must also send a matching `Origin` and CSRF header.
+- Sessions are stored as hashes and end after a lifetime or an idle period ([below](#sessions)). The `omg_session` cookie is `HttpOnly` and `SameSite=Lax`; `omg_csrf` is `SameSite=Strict`. Every change in the dashboard must also send a matching `Origin` and CSRF header.
 - The gateway doesn't call the userinfo endpoint and doesn't keep the identity provider's access or refresh tokens.
 - Signing out ends the gateway session only, not the identity provider's.
 
@@ -69,6 +71,57 @@ IDP_SCIM_TOKEN=$(openssl rand -hex 32)
 
 The token must be 32 to 1,024 printable characters without spaces. The gateway keeps only its hash; to rotate it, change the value and restart. SCIM needs OIDC. Give the identity provider `https://ai.example.edu/scim/v2` and the token as a bearer header. Without `GATEWAY_SCIM_TOKEN_ENV`, every `/scim` path returns `404`. See [SCIM provisioning](/docs/administration/scim).
 
+## Sign-in abuse controls
+
+From v0.6.0 the gateway limits sign-in itself:
+
+- **Per address.** Each replica allows `GATEWAY_LOGIN_RATE_PER_MINUTE` sign-in starts per client address per minute (default 60), and as many callbacks separately. IPv6 clients are counted per /64. Past the limit, that step gets `429` with `Retry-After`, and nothing is stored. The limits are kept in memory per replica, so with three replicas a client can make up to three times as many.
+- **Installation-wide.** At most about 10,000 sign-in attempts can be pending at once. Beyond that, sign-in returns `503` with `Retry-After: 60` until attempts expire (after 10 minutes) or complete. People already signed in keep working.
+- **No account lockout.** The gateway never sees passwords; your identity provider handles password attacks. A per-account lockout would let anyone lock a known person out.
+
+The metric `gateway_auth_throttled_total{endpoint,reason}` counts refusals (`reason` is `client_rate` or `pending_cap`). A sustained `pending_cap` rate means sign-in is refused for everyone. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring#sign-in-egress-and-audit-export).
+
+### Behind a reverse proxy
+
+The client address is the connection's address. Behind a proxy, that is the proxy, so every person shares one budget. Set `GATEWAY_TRUSTED_PROXIES` to your proxies' addresses or networks:
+
+```sh
+GATEWAY_TRUSTED_PROXIES=10.42.0.0/16
+```
+
+- For a request from a trusted proxy, the client is the right-most `X-Forwarded-For` entry that isn't itself a trusted proxy. An untrusted client's own `X-Forwarded-For` is ignored.
+- List every layer-7 hop in front of the gateway: a CDN, a cloud load balancer, then the ingress controller. In Kubernetes, that is usually the cluster's pod network (Helm: `gateway.trustedProxies`).
+- A layer-4 load balancer hides client addresses unless it preserves them, for example with `externalTrafficPolicy: Local` or the PROXY protocol to the ingress.
+- It affects these limits only.
+
+## Sessions
+
+A dashboard session ends at whichever comes first:
+
+| Variable | Default | Allowed |
+|---|---|---|
+| `GATEWAY_SESSION_LIFETIME` | `12h` after sign-in | `15m` to `7d` |
+| `GATEWAY_SESSION_IDLE_TIMEOUT` | `2h` without activity | `off`, or `15m` up to the lifetime |
+
+- The idle timeout is new in v0.6.0. Activity is recorded at most every 5 minutes, so a session can end up to 5 minutes before the idle timeout.
+- Both deadlines are stored on the session. A longer setting never brings back a session that has ended, and a shorter one doesn't shorten sessions that exist already. To end them now, sign people out.
+- Without SCIM, a removed group takes effect at the next sign-in. A longer lifetime, with the idle timeout `off`, keeps that access longer.
+- Maintenance deletes expired sign-in attempts every minute, and sessions that ended more than 30 days ago every hour. "First signed in" and "Last sign-in" are kept on the person, so they survive the cleanup.
+
+Helm: `gateway.sessionLifetime` and `gateway.sessionIdleTimeout`.
+
+### Your sessions, and signing a person out
+
+- **Your profile › Sessions** lists where you're signed in to the dashboard: a browser and OS family, when the session signed in and when it was last active. No IP address or raw user agent is stored. You can sign one session out, or all the others.
+- A Platform Admin sees how many sessions a person has, never which devices. **Sign out all sessions…** on the person ends them all at once without suspending them; their API keys keep working. It's audited as `user.sessions_revoked`.
+- A signed-out session stops working on its next request, on every replica. Signing sessions out never touches API keys.
+
+## Suspension and reactivation
+
+From v0.6.0, suspending a person in the dashboard is audited as `user.suspended`, with the reason, and reactivating them as `user.reactivated`. Before, both were `user.updated` without detail. `user.updated` now notes whether the email or the sign-in link changed, never the values, and is written only when something changed.
+
+These events matter after a restore: see [Backups and restore](/docs/self-hosting/backups-and-restore#after-a-restore).
+
 ## At the edge
 
-Rate-limit `/api/v1/auth/*` and `/scim` at your proxy, and keep callback query strings, cookies and `Authorization` headers out of logs.
+The gateway's own sign-in limits work per replica. You can still rate-limit `/api/v1/auth/*` and `/scim` at your proxy. Keep callback query strings, cookies and `Authorization` headers out of logs. IdP-initiated logout (back-channel or front-channel) is not implemented: signing out at the identity provider doesn't end a gateway session.
