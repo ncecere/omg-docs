@@ -5,6 +5,9 @@ description: Open Model Gateway's releases, what to expect before 1.0, and how r
 
 | Release | Date | In short |
 |---|---|---|
+| [v0.6.0](/docs/releases/v0-6-0) | 2026-10-15 | The security release: one outbound address policy, sign-in limits and session management, audit export to a SIEM (signed webhook, syslog over TLS or OTLP) with gap detection, data controls (subject export, remove personal data, legal holds, retention), file-store key rotation, per-user visibility of files, batches and videos, and security headers. Migrations `0038` to `0048`. |
+| [v0.5.0](/docs/releases/v0-5-0) | 2026-10-14 | Responses and Messages stream text as it's generated, a dashboard that stays fast at scale, encrypted off-host backups, a one-step Helm install with CloudNativePG, faster database failover, and `grants apply`. Migration `0037`. |
+| [v0.4.1](/docs/releases/v0-4-1) | 2026-10-11 | The Add model form marks required price ceilings and takes you to the first field to fix. No migrations. |
 | [v0.4.0](/docs/releases/v0-4-0) | 2026-10-10 | Replicas add capacity (scoped admission, per-replica caches), monthly history partitions and archival, a beta Kubernetes Helm chart, and an Admission ceiling alert. Installation-wide budgets and rate limits are removed. Migrations `0024` to `0036`. |
 | [v0.3.2](/docs/releases/v0-3-2) | 2026-10-09 | Routes a connection can't serve and prices that don't state every meter are refused when you configure them, `503 price_unbounded` instead of a misleading budget denial, `max_tokens` on Chat Completions, and dashboard fixes. No migrations. |
 | [v0.3.1](/docs/releases/v0-3-1) | 2026-10-09 | A distroless image with the binary as entrypoint and a built-in health check, rerank and System One on self-hosted servers, supply-chain scanning, retryable 503s for cooling-down routes, and dashboard fixes such as rounded money. No migrations. |
@@ -29,4 +32,4 @@ The full history is in the repository's [commits](https://github.com/ncecere/ope
 
 ## What's next
 
-From the [roadmap](https://github.com/ncecere/open-model-gateway/blob/main/docs/roadmap.md), planned and not yet built: an OpenRouter video adapter, using uploaded files in chat requests, image edits and image input, token-by-token Responses and Messages streaming, native batches for more providers, more of the realtime interface, active health checks, key-expiry notifications and webhooks, and provider-invoice reconciliation. A plan, not a promise.
+From the [roadmap](https://github.com/ncecere/open-model-gateway/blob/main/docs/roadmap.md), planned and not yet built: an OpenRouter video adapter, using uploaded files in chat requests, image edits and image input, content guardrails (designed, not yet built), native batches for more providers, more of the realtime interface, active health checks, key-expiry notifications and webhooks, and provider-invoice reconciliation. A plan, not a promise.

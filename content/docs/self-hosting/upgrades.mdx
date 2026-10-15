@@ -12,7 +12,7 @@ Every release can change the database schema. The gateway never migrates itself,
 
 ### Read the release notes
 
-Check the [release](/docs/releases) for migrations, new settings and grant changes. Build or pull the image and note its digest.
+Check the [release](/docs/releases) for migrations, new settings and grant changes. If you're skipping releases, read the notes below for each one you cross: one `migrate` with the new binary applies every migration you're missing, but each release's settings changes still apply. Build or pull the image and note its digest.
 
 </Step>
 <Step>
@@ -33,7 +33,11 @@ Stop the proxy's traffic, then every gateway replica. Mixed-release replicas are
 
 ### Migrate and grant
 
-As the migrator, run `open-model-gateway migrate` with the **new** binary, then reapply `deploy/staging/runtime-grants.sql`. (`python3 scripts/staging.py migrate` does both.)
+As the migrator, run `open-model-gateway migrate` with the **new** binary, then `open-model-gateway grants apply`, which reapplies the runtime grants (`deploy/staging/runtime-grants.sql`, embedded in the binary). Then run `open-model-gateway grants verify` with a role that can `SET ROLE gateway_runtime`: it checks the runtime role's privileges with probes that roll back. (`python3 scripts/staging.py migrate` runs `migrate` and `grants apply`.)
+
+`grants apply` and `grants verify` are new in v0.5.0. Before that, apply the SQL file with `psql` as the migrator, and check it with `deploy/staging/verify-privileges.sql`.
+
+`migrate` and `grants apply` take a session-level lock, so connect them to PostgreSQL directly, never through a transaction-mode connection pooler.
 
 </Step>
 <Step>
@@ -45,12 +49,103 @@ Start the new release. Wait for `/health/ready` to show `schema: ok`, then check
 </Step>
 </Steps>
 
+### With Helm
+
+The chart's migration Job runs `migrate` and `grants apply` with the gateway image and the migrator's credentials; it only runs when you pass `--set migrations.run=true`.
+
+- **First install** (from v0.5.0): one command, including a chart-managed CloudNativePG cluster. The Job waits for the database (`open-model-gateway wait-for-database`), then migrates and applies the grants, and gateway pods wait for the schema (`wait-for-database --schema`) instead of crash-looping:
+
+  ```sh
+  helm install <release> deploy/helm/open-model-gateway -f <values>.yaml \
+    --set migrations.run=true --wait --timeout 10m
+  ```
+
+- **Upgrades that ship a migration:** `helm upgrade … --set migrations.run=true --wait`. The Job then runs before any new gateway pod starts. Mixed-schema replicas still aren't supported, so scale the gateway to 0 first.
+
+See [Kubernetes](/docs/self-hosting/kubernetes). The chart is **beta**.
+
 ## Rolling back
 
 - If **no migration ran**, redeploy the previous image by its digest.
 - If a migration ran, restore the pre-upgrade backup **into a new database** and switch to it. There are no down migrations, and an older binary refuses a newer schema.
 
 ## Release notes
+
+### To v0.6.0
+
+**Migrations `0038` to `0048`**, and new runtime grants. Read [the release](/docs/releases/v0-6-0) first: several changes stop email, sign-in, storage or clients until you act.
+
+**Before you upgrade**, set these in your deployment:
+
+- **`GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`** (Helm `gateway.smtpSecretEnvAllowlist`): move your SMTP password variable's name here from `GATEWAY_SECRET_ENV_ALLOWLIST`. The SMTP password no longer resolves from the provider list, and a name on both lists stops startup. Until you move it, invitations and alerts aren't emailed. If a provider key was ever used as an SMTP password, rotate it.
+- **`GATEWAY_SMTP_HOST_ALLOWLIST`** (Helm `gateway.smtpHostAllowlist`): list your SMTP relay host, or email stops with `host_not_allowed`.
+- **`GATEWAY_EGRESS_PRIVATE_ALLOW`**: list the private networks the gateway must reach (RFC 1918, `100.64.0.0/10` including Tailscale, IPv6 unique-local), such as a private identity provider, S3-compatible store or Bedrock endpoint. Without it, startup (for sign-in) or those requests fail with a message naming the setting. List only the addresses you use. Loopback is allowed only with `GATEWAY_ENV=development`.
+- **`GATEWAY_TRUSTED_PROXIES`** (Helm `gateway.trustedProxies`): your reverse proxy's addresses. Without it, every user shares the proxy's sign-in rate budget (60 a minute per replica by default).
+- **Session limits:** dashboard sessions now end after 2 hours idle, as well as 12 hours after sign-in. To change that, set `GATEWAY_SESSION_IDLE_TIMEOUT` and `GATEWAY_SESSION_LIFETIME` (Helm `gateway.sessionIdleTimeout`, `gateway.sessionLifetime`).
+- **Kubernetes:** the chart's NetworkPolicy has never opened SMTP or syslog ports; add a `networkPolicy.egress.extraEgress` rule for them. New optional values `networkPolicy.egress.httpsCidrs` or `httpsExceptCidrs` narrow outbound HTTPS.
+
+**Breaking changes:**
+
+- **Files, batches and videos in Teams and Projects are per user** (`0038`). Existing shared workspaces become **Per user**: a member's keys see only objects created with that member's keys, and other reads return `404`. Workspace owners and admins and service-account keys still see everything. For shared automation, set Workspace › Settings › General to Workspace-wide, or use a service-account key. See [Workspace settings](/docs/using/workspace-settings).
+- **Revocations are final** (`0039`). Clearing or changing `revoked_at` on keys, grants, sessions or invitations fails for every role, so hand-written SQL that "un-revokes" now fails; issue a new one instead.
+- **Security headers.** The dashboard can't be framed and refuses inline scripts, so a proxy that injects scripts into it no longer works.
+- **The sign-in client ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`**: the gateway must reach the identity provider directly.
+- The SMTP, outbound-address and session changes above.
+
+**Locks to plan for.** Most migrations in this range are small (`0038` adds a column with a constant default, without rewriting `workspaces`). These need a plan:
+
+| Migration | What waits | Plan |
+|---|---|---|
+| `0041` | Rewrites `browser_sessions` under a full table lock: every dashboard request and sign-in waits until it finishes. Inference is unaffected. | Sessions were never deleted before this release. Check `SELECT count(*) FROM browser_sessions` first, and plan a short window for a large table. |
+| `0040` | Builds an index on `oidc_login_attempts`: sign-in waits while it builds. | Sign-in attempts were never deleted either; expect it to take longer on an old installation. |
+| `0043` | Backfills sign-in times while holding row locks on `users`: admissions of the affected users' keys wait until it commits. | Traffic is already stopped in the procedure. |
+| `0047` | Builds two indexes on every `audit_events` month partition: audit writes wait while they build. | Takes a while on a large audit log. |
+| `0042`, `0048` | Use a 10 s lock timeout instead of queueing behind a long transaction. | If either times out, run `migrate` again. |
+
+From this release, the gateway's hourly maintenance deletes sessions that ended more than 30 days ago, at 10,000 rows an hour, so a large sessions table shrinks gradually. Expired sign-in attempts are deleted every minute.
+
+**Procedure:**
+
+1. **Back up** with `scripts/backup.py` and run `verify`.
+2. **Set the allowlists** above in your deployment.
+3. **Stop every gateway replica.** Mixed-schema replicas aren't supported.
+4. Run `open-model-gateway migrate` as the migrator.
+5. Run `open-model-gateway grants apply`, then `grants verify`. This range adds grants for sessions, legal holds, invitations, the audit export queue and state, and `stored_files.encryption_key_id`.
+6. Start the new replicas and wait for `/health/ready`.
+7. Send a test from Admin › Settings › Email, and sign in.
+
+With Helm, upgrade with `--set migrations.run=true` and the new values above.
+
+New in this release: if you ever restore a backup, run `scripts/backup.py reapply-revocations` afterwards, so access removed after the backup stays removed. See [Backups and restore](/docs/self-hosting/backups-and-restore).
+
+During a rolling upgrade, a replica still on v0.5.0 can deliver audit events without `seq`; if you turn on [audit export](/docs/self-hosting/audit-export), start gap checks on the receiver after the upgrade.
+
+### To v0.5.0
+
+**Migration `0037`**, which adds two indexes for per-user lookups and no grants. Reapply the grants anyway, as after every migration. Read [the release](/docs/releases/v0-5-0) first.
+
+**Breaking changes:**
+
+- **Messages streaming usage.** With `stream: true`, `message_start` now comes at once with `usage: {"input_tokens": 0}` as a placeholder; the observed counts arrive in `message_delta`. A client that reads usage only from `message_start` now sees 0.
+- **Responses streaming events.** Text now arrives as `response.output_text.delta` events as it's generated, instead of all at the end. Tool calls still arrive whole, after the text.
+- **Slow dashboard lists return `503`** after 10 s, instead of holding up other admin requests.
+- **Person pickers search on the server** and show the first 20 matches. People who are already members aren't listed.
+- **Helm values:** `migrations.grants.image` is removed (the gateway image applies the grants); `cnpg.cluster.backup.destinationPath` is removed, so put `destinationPath` inside `cnpg.cluster.backup.barmanObjectStore`; the loadtest profile's `loadtest.loadgen.requests` and `concurrency` are replaced by `rate`, `duration`, `warmup`, `keys` and `extraArgs`; `cnpg.cluster.smartShutdownTimeout` defaults to `15`.
+
+**Procedure:**
+
+1. **Back up** with `scripts/backup.py` (now optionally encrypted with `--encrypt-to`) and run `verify`.
+2. **Stop every gateway replica.**
+3. Run `open-model-gateway migrate` as the migrator.
+4. Run `open-model-gateway grants apply` as the migrator, then `open-model-gateway grants verify` with a role that can `SET ROLE gateway_runtime`. They replace applying `deploy/staging/runtime-grants.sql` by hand, and the chart's migration Job now runs `grants apply` too.
+5. Start the new replicas and wait for `/health/ready`.
+
+With Helm, a first install with `--set migrations.run=true` is now one step (see [With Helm](#with-helm)); upgrades that ship a migration still use `--set migrations.run=true`.
+
+### To v0.4.1
+
+- No migrations and no new runtime grants. Rolling back to v0.4.0 is a redeploy of its digest.
+- The v0.4.1 Helm chart still defaults `image.tag` to `v0.4.0`: set `image.tag` or `image.digest` yourself.
 
 ### To v0.4.0
 
