@@ -19,25 +19,25 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
-    "fumadocs-core": "16.15.17",
-    "fumadocs-mdx": "15.4.5",
-    "fumadocs-ui": "16.15.17",
-    "lucide-react": "1.48.0",
-    "next": "16.3.7",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "shiki": "4.4.3"
+    "fumadocs-core": "16.17.7",
+    "fumadocs-mdx": "15.4.8",
+    "fumadocs-ui": "16.17.7",
+    "lucide-react": "1.60.0",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "shiki": "4.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/mdx": "2.0.14",
-    "@types/node": "22.20.4",
+    "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "postcss": "8.5.28",
+    "postcss": "8.5.31",
     "serve": "14.2.6",
     "sharp": "0.35.5",
     "tailwindcss": "4.3.3",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
