@@ -1,6 +1,6 @@
 ---
 title: Usage, logs and cost centers
-description: Installation-wide usage and costs, logs for Teams and Projects, storage usage and chargeback with cost centers.
+description: Installation-wide usage and costs, aged holds, scheduled reports, provider-reported cost reconciliation, logs for Teams and Projects, storage usage and chargeback with cost centers.
 ---
 
 The **Usage & spend** group in Admin covers the whole installation. Platform Admins and Auditors see the same figures.
@@ -16,11 +16,48 @@ Admin's **Usage & costs** has the same **Overview** and **Explore** views as a w
 - Filter by workspace, model, key, member, status, cost center or service account. Periods are 1 to 93 UTC days.
 - The **By workspace** row menu has shortcuts: assign a future cost center, assign a direct model, replace catalog availability, set custom limits, and reset catalog or policy inheritance.
 
+From v0.9.0 Admin's Usage & costs also has the **Holds**, **Scheduled reports** and, from v0.10.0, **Provider reconciliation** tabs below.
+
+### Holds
+
+**Holds** lists requests whose cost has been **unknown for 24 hours or more**, oldest first, across every Team and Project: the workspace, model, provider, how long it has been unknown, and the known floor of the hold (at least this much; not an upper limit). Holds with no known upper limit say **Unbounded**. Personal workspaces appear only as one combined row, **Personal workspaces, combined**, with no workspace, owner or request; a small count can still describe one person.
+
+<Screenshot slot="admin-holds" />
+
+The tab only reads. For a finished request with a pinned price, a Platform Admin can choose **Reconcile** to record the provider's usage as evidence and resolve its cost ([Pricing](/docs/administration/pricing#cost-evidence-and-reconciliation)). Nothing here refunds, releases or writes off a hold. The built-in [aged unknown-hold alert](/docs/administration/alerts#built-in-alerts) links here.
+
+### Scheduled reports
+
+**Scheduled reports** emails a link to a weekly or monthly cost report. In Admin, Platform Admins schedule reports for the whole installation or one cost center (up to 100 such schedules in total); Auditors can read them but not change them. Workspace owners and admins schedule their own Team or Project reports, and people their personal ones, from the workspace's Usage & costs ([Usage and costs](/docs/using/usage-and-costs)).
+
+<Screenshot slot="admin-scheduled-reports" />
+
+- A schedule starts **paused**. Choose weekly or monthly, a time zone and a local time for the email, and up to 50 recipients, picked by their user id; then resume it. The time only decides when the email goes out: the reported period is always a whole UTC week (Monday to Monday) or calendar month.
+- The email holds a link only: no amounts, names or attachments. Every recipient must sign in, and every view and download checks their access again.
+- A report is an aggregate snapshot of the period's estimated cost, holds and unresolved requests, with up to 100 rows per breakdown and the untruncated totals. Personal workspaces are combined into one row. **Download aggregate CSV** exports the snapshot, up to 1,000 rows.
+- Snapshots expire after 90 days.
+- Sending needs the [email relay](/docs/administration/settings#email) and an HTTPS public URL set by the operator. If the operator sets `GATEWAY_ALERT_INTERVAL_SECONDS=0`, reports are still generated but not emailed.
+- Admin API tokens can't use scheduled reports.
+
+### Provider reconciliation
+
+**Provider reconciliation** compares what a provider reported charging with the gateway's own estimates, for a closed period. In v0.10.0 it supports **Anthropic** cost reports in US dollars only. It's a check on your configured prices, not a verified invoice or a payable balance. Platform Admins and Auditors read frozen comparisons; only Platform Admins see **Upload & manage provider costs**. Admin API tokens can't use it.
+
+1. **Upload report**: the Anthropic Cost Report JSON for a complete, closed period, up to 5 MiB and 50,000 lines. Uploading the same file again returns the existing import.
+2. **Mappings**: bind each provider workspace to one Anthropic connection for a UTC date range, with an evidence reference, and attest the whole mapping revision. A provider workspace fed by several connections must stay shared and unallocated. Saving creates permanent history.
+3. **Freeze reconciliation** for the period. The frozen comparison never changes afterwards: later usage, mappings and imports don't recompute it, and it changes no costs, holds, budgets or prices.
+
+A comparison shows the provider's charges and the variance (credits can make them negative), with **Unknown** or **Incomplete** where a comparison isn't possible, never an invented zero. Holds, unresolved coverage and personal totals (combined, without identities) are listed separately and never added to the charges.
+
 ## Logs
 
 Admin's **Logs** is the same view as a workspace's [Logs](/docs/using/logs), over every Team and Project, with a **Workspace** column and filter. **Finish reason** is hidden by default; turn it on under **Columns**. Personal workspaces never appear as rows: their activity stays in Usage & costs totals. **Batches** lists Team and Project batches, with running, finished and failed totals for personal workspaces.
 
 <Screenshot slot="admin-logs" />
+
+- **Refresh** (from v0.8.0) reloads the current tab's rows and totals with the same filters; Logs doesn't poll on its own.
+- A request's page shows a **Trace ID** (from v0.8.0). If the operator has turned on [tracing](/docs/self-hosting/metrics-and-monitoring#opentelemetry-exports), copy it to find the request's trace in your trace store; an id alone doesn't mean the request was sampled.
+- The **Sessions** tab, when empty, explains that requests without a session id are under **Requests**.
 
 Remember that session ids sent by clients (`X-Session-Id`, or the `user` field) are visible here for Teams and Projects.
 

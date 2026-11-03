@@ -44,7 +44,7 @@ It runs with the migrator's database access. It gives the email the Admin role a
 ## How sign-in works
 
 - People are identified by the issuer and subject, not their email. Changing an email at the identity provider doesn't move anyone to another account.
-- Group claims are read at every sign-in, from the signature-checked ID token. A missing or malformed groups claim refuses sign-in without removing anything.
+- Group claims are read at every sign-in, from the signature-checked ID token. A missing or malformed groups claim refuses sign-in without removing anything. From v0.10.0 a group value containing a control character counts as malformed (`403`).
 - Sessions are stored as hashes and end after a lifetime or an idle period ([below](#sessions)). The `omg_session` cookie is `HttpOnly` and `SameSite=Lax`; `omg_csrf` is `SameSite=Strict`. Every change in the dashboard must also send a matching `Origin` and CSRF header.
 - The gateway doesn't call the userinfo endpoint and doesn't keep the identity provider's access or refresh tokens.
 - Signing out ends the gateway session only, not the identity provider's.
@@ -92,7 +92,7 @@ GATEWAY_TRUSTED_PROXIES=10.42.0.0/16
 - For a request from a trusted proxy, the client is the right-most `X-Forwarded-For` entry that isn't itself a trusted proxy. An untrusted client's own `X-Forwarded-For` is ignored.
 - List every layer-7 hop in front of the gateway: a CDN, a cloud load balancer, then the ingress controller. In Kubernetes, that is usually the cluster's pod network (Helm: `gateway.trustedProxies`).
 - A layer-4 load balancer hides client addresses unless it preserves them, for example with `externalTrafficPolicy: Local` or the PROXY protocol to the ingress.
-- It affects these limits only.
+- It affects these limits, and the IP allowlists of [admin API tokens](/docs/administration/admin-api-tokens), only.
 
 ## Sessions
 
@@ -116,6 +116,15 @@ Helm: `gateway.sessionLifetime` and `gateway.sessionIdleTimeout`.
 - A Platform Admin sees how many sessions a person has, never which devices. **Sign out all sessions…** on the person ends them all at once without suspending them; their API keys keep working. It's audited as `user.sessions_revoked`.
 - A signed-out session stops working on its next request, on every replica. Signing sessions out never touches API keys.
 
+## Admin API tokens
+
+From v0.8.0 a Platform Admin can create [admin API tokens](/docs/administration/admin-api-tokens) for scripts that call the management API. They follow their owner's live authority:
+
+- Every request rechecks the token and its owner against the database: not revoked or expired, the owner active and still a Platform Admin.
+- When the owner loses their last Platform Admin grant (manual or from a group), is suspended, is deactivated by SCIM or is cleaned up, their tokens are revoked in the same transaction. Getting Admin back doesn't restore them.
+- Signing a person out of their sessions doesn't revoke their tokens; revoke tokens in Admin › Settings › **Admin API tokens**.
+- A token's IP allowlist is checked against the client address, resolved through `GATEWAY_TRUSTED_PROXIES` as above.
+
 ## Suspension and reactivation
 
 From v0.6.0, suspending a person in the dashboard is audited as `user.suspended`, with the reason, and reactivating them as `user.reactivated`. Before, both were `user.updated` without detail. `user.updated` now notes whether the email or the sign-in link changed, never the values, and is written only when something changed.
@@ -124,4 +133,4 @@ These events matter after a restore: see [Backups and restore](/docs/self-hostin
 
 ## At the edge
 
-The gateway's own sign-in limits work per replica. You can still rate-limit `/api/v1/auth/*` and `/scim` at your proxy. Keep callback query strings, cookies and `Authorization` headers out of logs. IdP-initiated logout (back-channel or front-channel) is not implemented: signing out at the identity provider doesn't end a gateway session.
+The gateway's own sign-in limits work per replica. You can still rate-limit `/api/v1/auth/*` and `/scim` at your proxy. Keep callback query strings, cookies and `Authorization` headers out of logs. Don't let a proxy add an `Authorization` header to `/api/v1/` requests: from v0.8.0 the management API refuses them with `401`. IdP-initiated logout (back-channel or front-channel) is not implemented: signing out at the identity provider doesn't end a gateway session.

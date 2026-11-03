@@ -17,7 +17,7 @@ Type tabs (Text, Embeddings, Images, Speech to text, Text to speech, Rerank, Sys
 
 | Section | Fields |
 |---|---|
-| **Identity** | **Type**, **API model name** (the global name callers use, such as `example/chat`; letters, digits and `/ - _ . :`, up to 200 characters), **Display name**, **Description**. |
+| **Identity** | **Type**, **API model name** (the global name callers use, such as `example/chat`; letters, digits and `/ - _ . :`, up to 200 characters), **Display name**, **Description** (from v0.10.0 without control characters other than tab and line breaks). |
 | **Source** | **Connection** and **Upstream model ID**, the provider's id for the model. |
 | **Add price now (optional)** | The first [price](/docs/administration/pricing) for the route. |
 | **Availability** | Whether it is enabled, and which [catalogs](/docs/administration/catalogs) it goes into. |
@@ -57,7 +57,7 @@ A text model only needs each route to serve **one** of its protocols. A Chat Com
 |---|---|
 | Text: Chat Completions | OpenAI, Anthropic, Amazon Bedrock, OpenRouter, OpenAI-compatible, vLLM, SGLang, Ollama |
 | Text: Responses | OpenAI |
-| Text: Messages | Anthropic, Amazon Bedrock |
+| Text: Messages | Anthropic, Amazon Bedrock; from v0.9.0 also OpenAI, OpenRouter, OpenAI-compatible, vLLM, SGLang and Ollama, translated through Chat Completions |
 | Embeddings | OpenAI, OpenRouter, OpenAI-compatible, vLLM, SGLang, Ollama |
 | Images | OpenAI, OpenRouter |
 | Speech to text, Text to speech | OpenAI, OpenRouter |
@@ -76,7 +76,7 @@ Routes created before v0.3.2 are kept as they are. Readiness (below) shows them.
 | Section | What's there |
 |---|---|
 | **Overview** | Status, type, display name and description, readiness. |
-| **Routes** | Each route's connection, upstream model, status, priority and weight. **Add route** adds another. A route's page also has its [batch scheduling](/docs/administration/batch-scheduling). |
+| **Routes** | Each route's connection, upstream model, status, priority and weight. **Add route** adds another. A route's page also has its [batch scheduling](/docs/administration/batch-scheduling) and, from v0.9.0, its **History** ([below](#route-history-and-change-review)). |
 | **Pricing** | The current price lines of each route; **Price history** lists every version. |
 | **Routing** | The model's routing policy (below). |
 | **Availability** | The catalogs it is in and the workspaces it is assigned to directly. |
@@ -122,6 +122,19 @@ How failover behaves:
 - Every attempt is admitted, limited and charged on its own.
 
 Residency labels are your own assertions (for example `eu`), not something the gateway verifies.
+
+## Route history and change review
+
+From v0.9.0:
+
+- **Review changes.** Before you enable, disable or retire a route, Platform Admins see what it would change: the route's enabled state before and after, routes that start or stop serving, any model that would lose its last serving route (**Last serving route lost**), and the active Teams and Projects whose selected models are affected (the first 100, with a total). Personal workspaces are left out. Nothing is applied until you choose **Continue to confirmation** and confirm. It's an estimate of the configuration, not a test of the provider or prices; **Refresh preview** if something changed meanwhile.
+- **History.** A route's **History** tab lists every change to whether it is enabled: before and after, who made it (a person, an [admin API token](/docs/administration/admin-api-tokens) or System), when, and the route's revision, with **Older changes** and **Newer changes**. Platform Admins and Auditors can read it. Changes from before v0.9.0 show **Values unavailable**: nothing is reconstructed from today's settings. It doesn't cover prices or routing policy, and has no restore action.
+
+<Screenshot slot="admin-route-review" />
+
+<Screenshot slot="admin-route-history" />
+
+Both are dashboard-only: admin API tokens can't use them.
 
 ## Disable or retire
 

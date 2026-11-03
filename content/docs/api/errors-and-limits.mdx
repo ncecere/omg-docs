@@ -20,9 +20,9 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 | 400 | `unsupported_capability` | Images, audio, rerank, System One, realtime, files, batches and videos: no route can serve this request. | No |
 | 401 | | Missing, repeated or invalid key, or a disabled, revoked or expired one. | No |
 | 403 | `file_not_owned`, `batch_not_owned`, `video_not_owned` | From v0.6.0. Deleting a file or video, or cancelling a batch, that this key can see but didn't create, in a Team or Project, without being an owner's or admin's key or a service-account key. Type `permission_error`. | No |
-| 404 | `model_not_found` | No such model, or not available to this key. (A model whose routes are only cooling down answers `503 model_temporarily_unavailable` instead, from v0.3.1.) | No |
+| 404 | `model_not_found` | No such model, or not available to this key. From v0.7.0 also a model name with control characters or longer than 2,704 bytes. (A model whose routes are only cooling down answers `503 model_temporarily_unavailable` instead, from v0.3.1.) | No |
 | 404 | `not_found` | A file, batch or video id that doesn't exist, belongs to another workspace or, from v0.6.0, is hidden from this key by its Team's or Project's [visibility setting](/docs/api/files#visibility). Also for such a file used as `input_file_id`. | No |
-| 413 | `payload_too_large`, `file_too_large`, `storage_quota_exceeded` | The body, file or workspace storage is over its limit. | No |
+| 413 | `payload_too_large`, `file_too_large`, `storage_quota_exceeded` | The body, file or workspace storage is over its limit. A body whose declared `Content-Length` is over the limit is refused earlier, on every route, with a plain-text `length limit exceeded`. | No |
 | 429 | `rate_limit_error` | A per-minute or at-once limit, or the provider's rate limit. | Yes, later |
 | 429 | `job_limit_exceeded` | A "jobs at once" limit (batches, videos). | Yes, when a job ends |
 | 429 | `token_reservation_exceeds_limit` | The model's input plus output ceiling is larger than a tokens-per-minute limit. | No |
@@ -40,11 +40,17 @@ Messages are fixed strings. They never contain provider error text, amounts, ide
 
 ### Don't retry what can't succeed
 
-`budget_exceeded`, `unresolved_usage`, `token_reservation_exceeds_limit` and `price_unbounded` responses carry `x-should-retry: false`. The official OpenAI and Anthropic SDKs honour it and don't retry. Errors from the Files API, except 503s, carry it too.
+`budget_exceeded`, `unresolved_usage`, `token_reservation_exceeds_limit` and `price_unbounded` responses carry `x-should-retry: false`, and from v0.7.1 so does `unsupported_capability` (`400` or `501`). The official OpenAI and Anthropic SDKs honour it and don't retry. Errors from the Files API, except 503s, carry it too.
+
+From v0.7.2, a Chat Completions or Messages request that every usable Anthropic or Bedrock route would always reject (for example a `strict` function tool, or a temperature out of range) is refused before it is admitted: it takes no budget hold and calls no provider.
 
 ### Which scope refused
 
 A limit denial names the scope kind: this API key or this workspace (there is no installation-wide budget or rate limit to refuse from v0.4.0). When several refuse at once, the narrowest is reported (key, then workspace), and budget denials come before rate limits.
+
+### Messages errors
+
+`/v1/messages` uses Anthropic's error shape for every error, including authentication and body-size errors. A prompt longer than the model's context is `400 invalid_request_error` ("prompt is too long"); a busy provider is `529 overloaded_error`; rate limits stay `429 rate_limit_error`. A refused `anthropic-beta` value is `400` with Anthropic's own "Unexpected value(s)" message, which Claude Code recognizes and retries without ([Messages](/docs/api/messages#headers)).
 
 Before v0.3.2, a budgeted request on a price that couldn't bound it was reported as `429 budget_exceeded`. It is now `503 price_unbounded`, because the cause is the price's configuration, not anyone's spending. Without any budget, such a request still runs, and its cost may be recorded as unknown.
 
@@ -74,7 +80,13 @@ Reasons added in recent releases:
 | 400 | `route_unsupported_capability` | From v0.3.2. Creating a route, enabling one, or changing a model's protocols would leave an enabled route on a connection whose profile can't serve the model. The message names the profile, the model's type and what the profile serves. See [Models and routes](/docs/administration/models-and-routes#routes-must-be-servable). |
 | 400 | `price_meters_incomplete` | From v0.3.2. A published price leaves out a meter the route can use. `missing_meters` lists them. See [Pricing](/docs/administration/pricing#every-meter-must-be-stated). |
 | 409 | `personal_workspace_visibility_fixed` | From v0.6.0. Setting `object_visibility` on a personal workspace, which has no such setting. |
+| 409 | `report_schedule_limit_reached` | From v0.9.0. Creating or resuming a scheduled report beyond the limit (10 per personal owner, 50 per Team or Project, 100 installation and cost-center schedules). |
+| 412 | `precondition_failed` | From v0.9.0. An SSO group mapping changed after the preview whose `If-Match` digest you sent. |
+| 429 | `key_issuance_limit_exceeded` | From v0.9.0. Creating or rotating a key beyond a [key issuance limit](/docs/administration/limits-and-budgets#key-issuance-limits). Carries `Retry-After`, `scope`, `operation` and `retry_after_seconds`. |
+| 429 | `access_request_rate_limited` | From v0.9.0. Too many pending or recent [access requests](/docs/administration/teams-and-projects#access-requests). Carries `Retry-After` and `retry_after_seconds`. |
 | 410 | `installation_limits_removed` | From v0.4.0. `GET`/`PUT /platform/installation/policy` no longer exists: there is no installation-wide budget or rate limit. Use workspace-type defaults, platform overrides or key limits, and an [Installation spend alert](/docs/administration/alerts#installation-spend) to watch total spend. See [Limits and budgets](/docs/administration/limits-and-budgets). |
+
+Other management changes callers may notice are in [Denial responses](/docs/api/management-api#denial-responses).
 
 ## Size limits
 
@@ -87,7 +99,8 @@ Unless the operator changed them:
 | Transcription upload | 25 MiB file, 26 MiB request |
 | Files API upload | 200 MiB |
 | Batch input | 50,000 lines, 4 MiB each |
-| Provider response | 4 MiB (images: 20 MiB) |
+| Provider response | 4 MiB (images: 20 MiB; Messages output, from v0.9.0: 16 MiB) |
+| Images in a Messages request (native Anthropic) | 20 images, 5 MiB each decoded, within the 2 MiB request body |
 | Embeddings | 128 inputs, 1 MiB of text in total |
 | Request deadline | 120 seconds |
 

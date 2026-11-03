@@ -23,16 +23,16 @@ Responses is served by models whose route is on an **OpenAI** connection. The ga
 | Field | Supported |
 |---|---|
 | `model` | Required. |
-| `input` | A string, or a non-empty list of items: messages (`user`, `assistant`, `system`, `developer` with text or input text; assistant output text is accepted), function calls (`call_id`, `name`, `arguments` as a string) and function call outputs (`call_id`, `output` as a string). |
+| `input` | A string, or a non-empty list of items: messages (`user`, `assistant`, `system`, `developer` with text or input text; assistant output text is accepted), function calls (`call_id`, `name`, `arguments` as a string) and function call outputs (`call_id`, `output` as a string). From v0.7.1, items may carry the `id` and `status` they had in a response, and output text may carry empty `annotations`, so you can send a response's `output` back as the next `input`. Tool results are matched by `call_id`, not `id`. |
 | `instructions` | Supported. |
-| `max_output_tokens` | The output maximum; needed on a priced model. |
-| `temperature`, `stream` | Supported. |
-| `store` | Absent or `false`. `true` is refused. |
+| `max_output_tokens` | The output maximum. From v0.7.1 it's optional, also on a priced model: without it, the gateway holds and sends the output ceiling of the price pinned at admission. |
+| `temperature`, `stream` | Supported. `stream` omitted or `null` means not streaming (from v0.7.2). |
+| `store` | Absent, `null` or `false`: nothing is stored. `true` is refused. |
 | `tools`, `tool_choice` | Flat function tools only. Strict schemas are passed through. |
 | `text` | Only `{"format": {"type": "text"}}`. |
 | `user`, `metadata` | [Logs labels](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only. |
 
-Not supported, and refused: `previous_response_id`, background and other stateful operations, hosted tools, structured output, reasoning items, images and audio, and annotations.
+Not supported, and refused: `previous_response_id`, background and other stateful operations, hosted tools, structured output, reasoning items, images and audio, non-empty annotations, and SDK-only fields such as `parsed`. `tools: null` is refused; other supported options that are `null` mean the same as leaving them out.
 
 ## Response
 

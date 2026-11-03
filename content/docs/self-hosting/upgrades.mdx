@@ -12,7 +12,7 @@ Every release can change the database schema. The gateway never migrates itself,
 
 ### Read the release notes
 
-Check the [release](/docs/releases) for migrations, new settings and grant changes. If you're skipping releases, read the notes below for each one you cross: one `migrate` with the new binary applies every migration you're missing, but each release's settings changes still apply. Build or pull the image and note its digest.
+Check the [release](/docs/releases) for migrations, new settings and grant changes. If you're skipping releases, read the notes below for each one you cross: one `migrate` with the new binary applies every migration you're missing, but each release's settings changes still apply. From v0.6.x straight to v0.10.0, follow [Skipping from v0.6.x to v0.10.0](#skipping-from-v06x-to-v0100). Build or pull the image and note its digest.
 
 </Step>
 <Step>
@@ -26,7 +26,7 @@ Take a backup and `verify` it. For releases with migrations, run a [restore dril
 
 ### Stop traffic
 
-Stop the proxy's traffic, then every gateway replica. Mixed-release replicas are not supported.
+Stop the proxy's traffic, then every gateway replica, and pause any scheduled `open-model-gateway alerts evaluate --once` job. Mixed-release replicas are not supported, and from v0.8.0 an old replica left running can re-send alert email or break migrations ([To v0.8.0](#to-v080), [To v0.9.0](#to-v090)).
 
 </Step>
 <Step>
@@ -37,6 +37,8 @@ As the migrator, run `open-model-gateway migrate` with the **new** binary, then 
 
 `grants apply` and `grants verify` are new in v0.5.0. Before that, apply the SQL file with `psql` as the migrator, and check it with `deploy/staging/verify-privileges.sql`.
 
+From v0.9.0, `grants apply` also revokes `TEMPORARY` on the connected database from `PUBLIC` and `gateway_runtime`, and `grants verify` tries `CREATE TEMP TABLE` as the runtime role and requires it to be refused. Give the gateway its own database: every role that relied on `PUBLIC`'s temporary-table right loses it there.
+
 `migrate` and `grants apply` take a session-level lock, so connect them to PostgreSQL directly, never through a transaction-mode connection pooler.
 
 </Step>
@@ -44,7 +46,7 @@ As the migrator, run `open-model-gateway migrate` with the **new** binary, then 
 
 ### Start and check
 
-Start the new release. Wait for `/health/ready` to show `schema: ok`, then check the metrics, a sign-in, and one small request.
+Start the new release, by its verified digest. Wait for `/health/ready` to show `schema: ok`, then check the metrics, a sign-in, and one small request. After a release with migrations, run `open-model-gateway budget verify` too.
 
 </Step>
 </Steps>
@@ -60,16 +62,194 @@ The chart's migration Job runs `migrate` and `grants apply` with the gateway ima
     --set migrations.run=true --wait --timeout 10m
   ```
 
-- **Upgrades that ship a migration:** `helm upgrade … --set migrations.run=true --wait`. The Job then runs before any new gateway pod starts. Mixed-schema replicas still aren't supported, so scale the gateway to 0 first.
+- **Upgrades that ship a migration:** `helm upgrade … --set migrations.run=true --wait`. The Job then runs before any new gateway pod starts, but while the old ones still exist. Mixed-schema replicas aren't supported, so scale the gateway to 0 first.
+- The Job applies the grants but doesn't run `grants verify`. Run it yourself with a role that can `SET ROLE gateway_runtime`.
 
 See [Kubernetes](/docs/self-hosting/kubernetes). The chart is **beta**.
 
 ## Rolling back
 
 - If **no migration ran**, redeploy the previous image by its digest.
-- If a migration ran, restore the pre-upgrade backup **into a new database** and switch to it. There are no down migrations, and an older binary refuses a newer schema.
+- If a migration ran, restore the pre-upgrade backup **into a new database** and switch to it. There are no down migrations, and an older binary refuses a newer schema. Never run an older release's workers against the new schema.
 
 ## Release notes
+
+Newest first. Each release's full notes are on its [release page](/docs/releases).
+
+| Release | Migrations | Runtime grants | Schema after |
+|---|---|---|---|
+| v0.10.0 | `0068` | No change | `0068` |
+| v0.9.1, v0.9.2, v0.9.3 | None | No change | `0067` |
+| v0.9.0 | `0053` to `0067` | Changed, and `TEMPORARY` revoked | `0067` |
+| v0.8.0 | `0049` to `0052` | Changed | `0052` |
+| v0.6.1, v0.7.0, v0.7.1, v0.7.2 | None | No change | `0048` |
+
+### Skipping from v0.6.x to v0.10.0
+
+One `migrate` with the v0.10.0 binary applies `0049` to `0068`. Do everything each release below asks for before you start, then:
+
+1. **Prepare the configuration** while v0.6.x still runs:
+   - remove reserved names from the credential allowlists ([To v0.7.0](#to-v070));
+   - replace any `GATEWAY_LOCAL_UPSTREAMS` approval in a special-use range ([To v0.9.0](#to-v090)), or v0.10.0 won't start;
+   - make sure nothing in front of the dashboard adds an `Authorization` header to `/api/v1/…` requests ([To v0.8.0](#to-v080));
+   - leave `default_transaction_isolation` at `read committed` on the gateway's database and roles;
+   - update automation that depends on management denial codes ([To v0.7.0](#to-v070), [To v0.9.0](#to-v090)).
+2. **Back up**, `verify` the backup and run a restore drill.
+3. **Stop every replica** and any `alerts evaluate --once` job. This covers the alert-worker rule of `0050`, the evaluator rule of `0059` and the replica rule of `0067`.
+4. As the migrator: `open-model-gateway migrate`, then `grants apply`. Then `grants verify` with a role that can `SET ROLE gateway_runtime`.
+5. **Start v0.10.0** by its verified digest. Wait for `/health/ready` to report `schema: ok`, then check sign-in, one small request and `open-model-gateway budget verify`.
+
+The base image and its CA trust store changed in v0.9.1: check your outbound TLS integrations against v0.10.0 first ([To v0.9.1](#to-v091)). With chart-managed CloudNativePG, also read [To v0.9.0](#to-v090) for the database ACL change and [To v0.9.3](#to-v093) for the durability policy.
+
+### To v0.10.0
+
+**Migration `0068`**, with no runtime grant changes. It widens the stored result of the last email test to the delivery error categories, without rewriting data. After it, the schema has 67 migration records, the latest `0068`. Run `migrate`, then `grants apply` and `grants verify` as after every migration. Read [the release](/docs/releases/v0-10-0) first.
+
+With Helm, chart 0.10.0 defaults `image.tag` to `v0.10.0`. Pin `image.digest` to the verified digest.
+
+**Behaviour changes.** Input that used to fail with a `5xx` or an undocumented `409` now gets a `400`, or a recorded result:
+
+- Control characters in list searches (`q`, and the file list's `search`), in SSO group-mapping issuers (which also refuse whitespace), and in model and catalog descriptions (tab, line feed and carriage return are still allowed). SCIM list filters with one answer `invalidFilter`.
+- An identity provider groups claim containing a control character refuses the sign-in, like any malformed claim.
+- List cursors (logs, sessions, holds, route history) outside PostgreSQL's date range.
+- Manual cost reconciliation with incoherent token counts, or output tokens on an embeddings or rerank hold.
+- An email test to a relay that isn't on `GATEWAY_SMTP_HOST_ALLOWLIST` is recorded as a failed test, `host_not_allowed`, instead of answering `409`.
+- A support or logo URL's 2,048-character limit applies to its stored, percent-encoded form. A URL that normalizes to at most 2,048 characters is accepted even when what you typed was longer; a longer one is `400`.
+- `/v1/embeddings` answers an oversized streamed body with the OpenAI `payload_too_large` error.
+
+**Check before you upgrade:**
+
+- An existing SSO group mapping whose issuer contains a control character or whitespace can't be updated until you correct the issuer. Deleting it still works.
+- A catalog whose stored description contains a control character other than tab, line feed or carriage return must have its description corrected on its next update.
+
+Also new: drift-checked OpenAPI 3.1 documents for the management API and the supported inference API ([Management API](/docs/api/management-api#openapi-documents)), and the **Provider reconciliation** view in Admin › Usage & costs ([Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers#provider-reconciliation)).
+
+### To v0.9.3
+
+- No migrations and no runtime grant changes (schema `0067`). Replace the image and the chart.
+- The chart has new, optional `cnpg.cluster.synchronous` values for the chart-managed CloudNativePG cluster. Without them nothing changes: two instances and the legacy `minSyncReplicas`/`maxSyncReplicas` of 1. Adopting the recommended production policy is a deliberate values change; see [Production durability policy](/docs/self-hosting/kubernetes#production-durability-policy).
+
+### To v0.9.2
+
+- No migrations and no runtime grant changes (schema `0067`). Replace the image.
+- `grants verify` uses its own synthetic history, so it no longer collides with real open incidents, such as an aged-hold alert or the SCIM last-admin alert. It still changes nothing.
+
+### To v0.9.1
+
+- No migrations and no runtime grant changes (schema `0067`). Replace the image.
+- The runtime image moves from Debian 12 to a supported Debian 13 distroless image, with OpenSSL fixed for CVE-2026-84782. Its system libraries and **CA trust store** change: before you deploy, check your outbound TLS integrations against it (providers, identity provider, S3, SMTP, audit export), especially private or legacy certificate chains. The user (`10001:10001`), the missing shell and the read-only root filesystem are unchanged.
+
+### To v0.9.0
+
+**Migrations `0053` to `0067`**, and new runtime grants. Read [the release](/docs/releases/v0-9-0) first: one change stops startup.
+
+**Before you start:**
+
+1. **Check `GATEWAY_LOCAL_UPSTREAMS`.** An approval that pins an address in one of these ranges now stops `serve` at startup, before it connects to the database (v0.8.0 only warned):
+
+   | Range | Category |
+   |---|---|
+   | `198.18.0.0/15`, `2001:2::/48` | Benchmarking |
+   | `192.0.0.0/24` | IETF protocol assignments |
+   | `192.88.99.0/24` | Deprecated 6to4 relay |
+   | `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32`, `3fff::/20` | Documentation |
+   | `fd00:ec2::/32` (all of it, over HTTP or HTTPS) | AWS IPv6 metadata |
+
+   An address carrying an IPv4 address (IPv4-mapped, 6to4, Teredo) is judged by that address. Approvals of public or RFC 1918 addresses aren't affected. Replace the address with the model server's real public or private address, or remove the approval. The error names the approval's host, address and category, and the setting. Only `serve` reads approvals, so `migrate` and `grants` still run. A replica that fails this way never becomes ready, so a rolling deployment keeps the old replicas.
+2. **Stop every v0.8.x (or older) alert evaluator**, including any scheduled `alerts evaluate --once` job, before `0059`. An older evaluator under `0059` can fail an evaluation and miss a short-lived incident.
+3. **Stop every older replica before `0067`.** An older replica that changes a route after `0067` still has its change recorded, but attributed to System, with a second history entry.
+4. With **chart-managed CloudNativePG**, read [Database ACLs](/docs/self-hosting/kubernetes#database-acls) if your cluster was created before v0.9.0.
+
+**Operator order:**
+
+1. Record the running digest and configuration. Back up, `verify` and run a restore drill.
+2. Drain and stop every old replica and any `alerts evaluate --once` job.
+3. As the migrator: `open-model-gateway migrate` (`0053` to `0067`). With Helm, `helm upgrade … --set migrations.run=true --wait` runs `migrate` and `grants apply` in the pre-upgrade Job.
+4. As the migrator: `open-model-gateway grants apply`.
+5. `open-model-gateway grants verify`, with a role that can `SET ROLE gateway_runtime`. It now also requires that the runtime role can't `CREATE TEMP TABLE`.
+6. Start v0.9.0 by its verified digest. Wait for `/health/ready` with `schema: ok`.
+7. Check sign-in, one small request and `open-model-gateway budget verify`.
+
+**Migrations to plan for:**
+
+| Migration | What waits | Plan |
+|---|---|---|
+| `0055` | Holds an exclusive lock on `alert_deliveries` while it tags every pending alert email with its workspace. | Takes longer with a large email backlog: plan a window. |
+| `0065` | Alters the same table and builds indexes on it in a transaction. | As `0055`. |
+| `0054`, `0056`, `0060`, `0062` | Build indexes `CONCURRENTLY`, outside a transaction, and wait for older transactions to end. | An interrupted build leaves an invalid index; the next `migrate` drops and rebuilds it. |
+
+**Breaking and behaviour changes:**
+
+- **Local-upstream approvals in special-use ranges are refused** (above). `/health/ready`'s `checks.local_upstream_approvals` now always reports `ok` when a replica answers.
+- **`TEMPORARY` is revoked** on the gateway's database from `PUBLIC` and `gateway_runtime` by `grants apply`, and `grants verify` checks it ([Migrate and grant](#migrate-and-grant)).
+- **Fresh chart-managed CloudNativePG clusters restrict database access** from their first start. Existing clusters keep their access until you change it by hand ([Database ACLs](/docs/self-hosting/kubernetes#database-acls)).
+- **Plain-HTTP telemetry and audit exports are loopback-only after DNS** (development only). With `GATEWAY_ENV=development`, plain-HTTP OTLP traces, metrics and operational logs, audit OTLP logs and audit webhooks connect only if every resolved address is loopback. Production never allowed plain HTTP.
+- **Another person's personal workspace answers `404`** on every `/api/v1/workspaces/{ws}` route, exactly like an unknown id, including for Platform Admins and Auditors (it was `403`). Non-admins still get `403` first on Platform-Admin-only workspace writes.
+- New additive fields in API responses and the audit export. Consumers that reject unknown fields need updating.
+
+**New, optional settings:** the alert webhook allowlists `GATEWAY_ALERT_WEBHOOK_URL_ALLOWLIST` and `GATEWAY_ALERT_WEBHOOK_SECRET_ENV_ALLOWLIST`, OTLP metrics (`GATEWAY_METRICS_OTLP_*`) and OTLP operational logs (`GATEWAY_LOGS_OTLP_*`). See [Configuration](/docs/self-hosting/configuration). `GATEWAY_ALERT_INTERVAL_SECONDS=0` now also stops scheduled-report email and alert webhooks, but not report generation.
+
+The runtime grants add column grants for key issuance limits, alert email buckets and limits, webhooks, scheduled reports and access requests, and `SELECT` and `INSERT` on route configuration history. Nothing lets the runtime role delete or rewrite history.
+
+Also new: [scheduled cost reports](/docs/administration/usage-logs-and-cost-centers#scheduled-reports), [signed alert webhooks](/docs/administration/alerts#webhooks), [key issuance limits](/docs/administration/limits-and-budgets#key-issuance-limits) (50 keys per person and 500 per workspace in 24 hours by default), aged unknown-hold alerts and the **Holds** tab, [access requests](/docs/administration/teams-and-projects#access-requests), [route history and change review](/docs/administration/models-and-routes#route-history-and-change-review), [SSO group-mapping review](/docs/administration/sso-groups#review-changes), and Claude Code's fields on [Messages](/docs/api/messages).
+
+### To v0.8.0
+
+**Migrations `0049` to `0052`**, and new runtime grants. The procedure is the same from v0.7.1 or v0.7.2 (both on `0048`). Read [the release](/docs/releases/v0-8-0) first.
+
+**Before you start:**
+
+1. **Management requests with an `Authorization` header are refused** with `401`. If a reverse proxy, SSO gateway or anything else in front of the dashboard adds an `Authorization` header, stop it doing so for `/api/v1/…`. Inference (`/v1/…`) is unaffected.
+2. **Check `GATEWAY_LOCAL_UPSTREAMS`** against the ranges in [To v0.9.0](#to-v090). v0.8.0 logs a warning for each and reports `checks.local_upstream_approvals: "warning"` on `/health/ready`, without failing readiness; v0.9.0 refuses to start.
+3. **Keep `default_transaction_isolation` at `read committed`** on the gateway's database and roles. Creating an admin API token refuses any other isolation level.
+4. With Helm, leave `cnpg.cluster.backup.method` alone unless you mean to switch backup methods ([Backups](/docs/self-hosting/kubernetes#backups)).
+
+**Operator order:**
+
+1. Record the running digest and configuration. Back up, `verify` and run a restore drill.
+2. **Stop the old alert email workers before anything touches the database.** Every v0.7.x `serve` replica runs one, and so does `alerts evaluate --once`. Scale the old gateway to zero and pause any such job. If an old replica must keep running, set `GATEWAY_ALERT_INTERVAL_SECONDS=0` on it and restart it: **unsetting the variable doesn't stop the worker**, because unset means the default, 60 seconds. An old worker left running after `0050` re-sends the same alert email to every recipient on every interval.
+3. As the migrator: `open-model-gateway migrate` (`0049` to `0052`). With Helm, scale to zero first, then `helm upgrade … --set migrations.run=true --wait`.
+4. As the migrator: `open-model-gateway grants apply`. Without it, the new features fail at run time.
+5. `open-model-gateway grants verify`.
+6. Start v0.8.0 by its verified digest. Wait for `/health/ready` with `schema: ok`.
+7. Check sign-in, one small request, `checks.local_upstream_approvals` and that `gateway_alert_email_deliveries` appears on the metrics listener.
+
+`0049` changes constraints and builds indexes on `alert_events` and `api_keys`, and `0052` builds an index on every `audit_events` month partition: run them in a quiet period on a large installation.
+
+**Behaviour changes:**
+
+- Management routes accept exactly one credential: a browser session or an [admin API token](/docs/administration/admin-api-tokens). A duplicate `Authorization` header, or an `Authorization` header together with the session cookie, is refused before either is examined.
+- Alert email is retried, up to five times in 24 hours ([Alerts](/docs/administration/alerts#email)). Old replicas don't show or send the new key-expiry reminders.
+- Logs responses add `trace_id`; audit events, in the dashboard and the [audit export](/docs/self-hosting/audit-export), add `admin_token_id`. Consumers that reject unknown fields need updating.
+- Addresses in `3ff0::/12` outside `3fff::/20` are no longer refused as outbound destinations.
+
+**New, optional settings:** OpenTelemetry traces (`GATEWAY_TRACES_OTLP_URL`, `GATEWAY_TRACES_SAMPLE_RATIO`, `GATEWAY_TRACES_OTLP_HEADERS_ENV`), and the chart's `cnpg.cluster.backup.method`. Also new: [admin API tokens](/docs/administration/admin-api-tokens), key-expiry reminders, budget headroom and **Refresh** on Logs. Restoring a backup: `scripts/backup.py reapply-revocations` now also covers admin API tokens.
+
+The runtime grants add the alert email outbox and its delivery progress columns, admin API tokens and their audit records (insert and narrow updates only), and the token helper functions.
+
+### To v0.7.2 and v0.7.1
+
+No migrations, runtime grants or settings (schema `0048`). Replace the image. Coming from v0.6.1, first follow [To v0.7.0](#to-v070). Both are compatibility fixes; see [the API reference](/docs/api) for what they accept:
+
+- **v0.7.1:** optional output maximum on priced Chat Completions and Responses requests and batch lines; base64 embeddings; reusing Responses output items as input; `x-should-retry: false` on permanent `unsupported_capability` refusals; Anthropic `refusal` and `model_context_window_exceeded` stop reasons.
+- **v0.7.2:** function tools without `parameters`; omitted tool-result content on Messages; `stream: null`, `store: null` and `refusal: null`; requests that an Anthropic or Bedrock route would always reject are refused before they take a budget hold.
+
+### To v0.7.0
+
+No migrations or runtime grants (schema `0048`), but three changes can stop startup or break automation. Read [the release](/docs/releases/v0-7-0) first.
+
+- **Reserved credential names stop startup.** `GATEWAY_SECRET_ENV_ALLOWLIST` and `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` refuse the gateway's own names, even when listed: `DATABASE_URL`, `DATABASE_URL_FILE`, every `GATEWAY_*`, `AWS_*`, `PG*` and `OTEL_*` name, the proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, in either case) and every variable a gateway secret pointer selects (such as the one `GATEWAY_SCIM_TOKEN_ENV` names). Check the names, not the values, before you roll out. Give providers and SMTP their own dedicated variables, and update the connection or SMTP reference. Never copy a gateway secret into a provider variable to get round it. See [Configuration](/docs/self-hosting/configuration#reserved-names).
+- **`OPENAI_API_KEY` and `ANTHROPIC_API_KEY`** stay usable on the provider list, with a startup warning, but never on the SMTP list.
+- **Management denial codes change** ([Management API](/docs/api/management-api#denial-responses)). Review automation that depends on them.
+- **Local approvals:** an HTTPS approval of a 6to4 or Teredo IPv6 address is judged by the IPv4 address inside it. Embedded metadata or link-local addresses are refused, and embedded loopback works only in development. An approval that fails validation stops startup.
+- **Model names** with control characters, or longer than 2,704 bytes, answer `404 model_not_found` without a database lookup. Provider job and file ids made only of dots are refused.
+
+New, optional: `GATEWAY_INFERENCE_BASE_URL` (Helm `gateway.inferenceBaseUrl`), the inference address shown to people when inference has its own host ([Configuration](/docs/self-hosting/configuration#core)).
+
+### To v0.6.1
+
+- No migrations, settings or API changes. Replace the image.
+- A security fix for every outbound TLS connection: the bundled roots no longer include `emSign ECC Root CA - G3`, and certificate chains through the distrusted emSign intermediates are refused (RUSTSEC-2026-0381, RUSTSEC-2026-0382).
 
 ### To v0.6.0
 

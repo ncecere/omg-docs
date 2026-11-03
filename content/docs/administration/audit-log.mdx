@@ -9,7 +9,7 @@ description: Every administrative change and sign-in synchronisation, recorded i
 
 ## What is recorded
 
-Every change made through the dashboard, the management API or SCIM is written to the audit log in the same database transaction as the change itself, so a change can't happen without its record. Each entry has the time, the actor, the action, the target and typed details, such as a role, a period or a count. Entries never contain prompts, responses, credentials, email bodies or secret references.
+Every change made through the dashboard, the management API or SCIM is written to the audit log in the same database transaction as the change itself, so a change can't happen without its record. Each entry has the time, the actor, the action, the target and typed details, such as a role, a period or a count. From v0.8.0, a change made with an [admin API token](/docs/administration/admin-api-tokens) also records the token's id. Entries never contain prompts, responses, credentials, email bodies or secret references.
 
 Examples of actions, by area:
 
@@ -18,14 +18,18 @@ Examples of actions, by area:
 | People | `user.provisioned`, `user.updated` (whether the email or sign-in link changed, never the values), `user.suspended` (with the reason), `user.reactivated`, `user.cleaned`, `identity.groups_synchronized`, `identity.rebound` |
 | Sessions | `session.revoked` and `session.others_revoked` (someone signed out one or all of their other sessions, with the count), `user.sessions_revoked` (an admin signed a person out everywhere, with the count) |
 | Data controls | `subject.exported` (someone downloaded their own data), `user.exported` (an admin exported a person's record), `user.personal_data_removed`, `legal_hold.placed`, `legal_hold.released` |
-| Workspaces | `workspace.created`, `workspace.updated`, `workspace.manual_membership_set`, `workspace.manual_membership_revoked`, `invitation.created`, `invitation.accepted`, `invitation.revoked`, `service_account.created`, `service_account.updated` |
+| Workspaces | `workspace.created`, `workspace.updated`, `workspace.discoverability_set`, `workspace.manual_membership_set`, `workspace.manual_membership_revoked`, `invitation.created`, `invitation.accepted`, `invitation.revoked`, `service_account.created`, `service_account.updated` |
+| Access requests | `access_request.created`, `access_request.approved`, `access_request.denied`, `access_request.withdrawn`, `access_request.expired`, `access_request.applied` (never the reason text) |
 | Keys | `key.created`, `key.rotated`, `key.disabled`, `key.enabled`, `key.revoked` |
 | Models | `provider.created`, `provider.updated`, `model.created`, `model.updated`, `deployment.created`, `price.created`, `routing.model_updated`, `routing.deployment_updated`, `model.granted`, `model.grant_revoked` |
 | Catalogs | `catalog.created`, `catalog.updated`, `catalog.deleted`, `catalog.models_replaced`, `catalog.type_defaults_replaced`, `catalog.override_replaced`, `catalog.override_reset` |
 | Limits | `policy.type_updated`, `policy.override_updated`, `policy.override_reset`, `policy.local_updated`, `policy.key_updated`, `policy.installation_removed` (the v0.4.0 upgrade, one-time, recording the removed installation policy and budgets) |
-| Spending | `cost_center.created`, `cost_center.updated`, `cost_center.archived`, `alert_rule.created`, `alert_rule.updated`, `alert_rule.deleted` |
+| Spending | `cost_center.created`, `cost_center.updated`, `cost_center.archived`, `alert_rule.created`, `alert_rule.updated`, `alert_rule.deleted`, `provider_cost.imported`, `provider_cost.mapped`, `provider_cost.reconciled` |
+| Scheduled reports | `report_schedule.created`, `report_schedule.updated`, `report_schedule.paused`, `report_schedule.resumed`, `report_schedule.authority_paused`, `report_schedule.deleted`, `report.generated`, `report.generation_failed`, `report.delivery_outcome` |
+| Alert webhooks | `alert_webhook.created`, `alert_webhook.updated`, `alert_webhook.disabled`, `alert_webhook.deleted`, `alert_webhook.tested`, `alert_webhook.failed`, `alert_webhook.exhausted` |
+| Admin API tokens | `admin_token.created`, `admin_token.revoked` |
 | Files and batches | `file.uploaded`, `file.deleted`, `batch.cancelled` |
-| Settings | `settings.general_updated`, `settings.privacy_updated`, `settings.email_updated`, `settings.email_test`, `settings.storage_updated`, `settings.storage_test` |
+| Settings | `settings.general_updated`, `settings.privacy_updated`, `settings.email_updated`, `settings.email_test`, `settings.storage_updated`, `settings.storage_test`, `settings.logo_uploaded`, `settings.logo_removed` |
 | Audit export | `audit_export.enabled`, `audit_export.disabled` (the operator turned the export on or off, recorded even when changed directly in the database), `audit_export.tested` |
 | SCIM | `scim.user.created`, `scim.user.updated`, `scim.user.deactivated`, `scim.user.reactivated`, `scim.group.created`, `scim.group.updated`, `scim.group.deleted`, `scim.last_admin_protected` |
 

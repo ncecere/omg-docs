@@ -1,0 +1,166 @@
+---
+title: v0.9.0
+description: Scheduled cost reports, signed alert webhooks, bounded key issuance and fair alert email, aged unknown-hold alerts, OTLP metrics and logs, Claude Code on native Anthropic routes, route history and previews, and self-service membership requests.
+---
+
+Released 2026-10-25. Migrations `0053` to `0067`.
+
+A large feature release of Open Model Gateway. Cost reports can be scheduled and emailed as links. Alerts can go to signed webhooks, alert email is shared fairly between workspaces, and old unknown-cost holds raise an alert. Key creation is rate-limited per holder and per workspace. Metrics and operational events can go to an OpenTelemetry collector. Claude Code works on native Anthropic routes. Admins get route history, change previews and SSO mapping previews, and people can ask to join a Team or Project.
+
+There are breaking changes and fifteen migrations with ordering rules. Read [Before you upgrade](#before-you-upgrade) and the [Upgrade guide](#upgrade-guide) first.
+
+## Scheduled cost reports
+
+Weekly or monthly cost reports, in **Usage & costs › Scheduled reports**:
+
+- **Who can schedule what.** Platform Admins: the installation and cost centers. Team and Project owners and admins: their workspace. Personal owners: their own workspace.
+- **Periods are UTC:** Monday-to-Monday weeks or calendar months. A time zone and local time you choose control only when the email goes out.
+- **New schedules start paused.** Recipients are 1 to 50 people you pick, each rechecked for access at every send. Limits: 10 schedules per personal owner, 50 per shared workspace, 100 for the installation and cost centers together.
+- **Emails carry a link only,** never amounts, names or attachments. Reports go through the same SMTP relay, retries and fair dispatch as alert email, and need an HTTPS `GATEWAY_PUBLIC_URL`. `GATEWAY_ALERT_INTERVAL_SECONDS=0` stops report email but not report generation.
+- **Snapshots** are configured-rate estimates, not invoices, capped at 100 entries per breakdown (with full totals). Personal workspaces appear as one combined, anonymous figure in installation reports. Snapshots expire after 90 days. You can download an aggregate CSV of up to 1,000 rows.
+
+Report pages are browser-only: admin API tokens are refused. See [Usage and costs](/docs/using/usage-and-costs) and [Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers).
+
+## Signed alert webhooks
+
+Platform Admins can add up to 10 webhook destinations in **Admin › Settings › Alerts › Webhooks**. They start disabled.
+
+- A destination URL must be listed in `GATEWAY_ALERT_WEBHOOK_URL_ALLOWLIST`, and its signing secret is a reference (`env:NAME`) to a variable listed in `GATEWAY_ALERT_WEBHOOK_SECRET_ENV_ALLOWLIST`, 32 to 4,096 bytes. The dashboard never shows the secret.
+- Each event is an `omg.alert.v1` JSON envelope signed with HMAC-SHA256 over `<timestamp>.<body>`, in `X-OMG-Signature: t=…,v1=…`. During a key rotation of up to 24 hours, both signatures are sent.
+- Only installation incidents that notify Platform Admins are sent (and the built-in last-admin, missing-partitions and history-orphans alerts), never workspace rules, personal incidents, key-expiry reminders or Admission ceiling events. Enabling a destination sends only future events.
+- Any `2xx` succeeds. Connection failures, timeouts, `408`, `429` and `5xx` are retried after 1, 5 and 30 minutes and 2 hours, up to 5 attempts in 24 hours; other answers are final. **Send test** queues one fixed event (the destination must be enabled).
+- Receivers should check the signature in constant time, accept timestamps only within 300 seconds, and deduplicate by `X-OMG-Delivery`.
+
+See [Alerts](/docs/administration/alerts).
+
+## Bounded key issuance and fairer alerts
+
+- **Key issuance limits.** Creating or rotating a key counts, over a rolling 24 hours, against the holder (50 by default) and the workspace (500). Set them from 1 to 10,000 on workspace-type defaults, platform overrides and tighter workspace limits. When spent, creation returns `429 key_issuance_limit_exceeded` with `Retry-After`. The API keys page shows "X of Y issued in the last 24 h". See [API keys](/docs/using/api-keys) and [Limits and budgets](/docs/administration/limits-and-budgets).
+- **Fair alert email.** Email is shared between workspaces instead of first come, first served, so a quiet workspace no longer waits behind another's backlog. New gauges `gateway_alert_delivery_pending_buckets` and `gateway_alert_delivery_oldest_pending_age_seconds`.
+- **A daily email limit per workspace.** Each workspace (and the installation) generates at most 100 alert emails in a rolling 24 hours, across every rule and built-in alert, with no exception for critical alerts or key reminders. The rest aren't emailed: History shows **Not emailed — workspace notification limit**. In-app incidents and webhooks are unaffected.
+
+## Aged unknown-hold alerts
+
+A built-in alert fires when an unknown-cost hold is 24 hours old (warning) and escalates at 168 hours (critical): one incident per Team or Project, and one anonymous incident for all personal workspaces together. Platform Admins and Auditors see them all, and Team and Project owners and admins see their own. **Email goes to Platform Admins only.** Review the holds in **Usage & costs › Holds**. New metric `gateway_aged_hold_alerts_total`. See [Alerts](/docs/administration/alerts).
+
+## OTLP metrics and operational logs
+
+Two more opt-in OpenTelemetry exports, each independent of traces and of the Prometheus listener:
+
+| Setting | Meaning |
+|---|---|
+| `GATEWAY_METRICS_OTLP_URL` | The collector's full `/v1/metrics` URL. Sends the same metrics as the Prometheus listener. |
+| `GATEWAY_METRICS_OTLP_HEADERS_ENV` | Names a variable holding the collector's headers. |
+| `GATEWAY_METRICS_OTLP_TRAFFIC` | `off` by default. `on` adds traffic metrics, with personal workspaces only as anonymous totals. |
+| `GATEWAY_LOGS_OTLP_URL` | The collector's full `/v1/logs` URL. Sends seven fixed infrastructure events, such as an exporter failing or a background job failing. Never prompts, responses or request ids. |
+| `GATEWAY_LOGS_OTLP_HEADERS_ENV` | Names a variable holding the collector's headers. |
+| `GATEWAY_LOGS_OTLP_MIN_SEVERITY` | Default `warn`. |
+
+Neither retries nor affects readiness. When a collector's address is refused by the outbound address policy, the gateway now logs one warning when connectivity changes, without naming the collector, instead of a warning on every export. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring).
+
+## Claude Code on native Anthropic routes
+
+`/v1/messages` (including `?beta=true`) now accepts the fields Claude Code sends. On native Anthropic routes it keeps block-form system prompts, cache controls (including the 1-hour TTL), thinking, effort, signed assistant history, context management, deferred tools, task budgets and `tool_result.is_error`.
+
+- Beta headers are refused only for `context-1m-`, `code-execution-`, `web-search-`, `web-fetch-`, `files-api-`, `mcp-client-` and `computer-use-`, with Anthropic's own error message, so Claude Code retries without them. You can also set `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` in Claude Code.
+- Native Anthropic routes accept base64 PNG, JPEG, GIF and WebP images (5 MiB each, up to 20, within the 2 MiB request limit); image URLs are refused.
+- **Cache controls need a price that covers them.** A native request that uses prompt caching needs a v2 or v3 price that prices cache reads and every cache-write TTL it asks for.
+- Structured output, strict tools and server tools are still refused. The Messages output limit rises to 16 MiB.
+
+See [Messages](/docs/api/messages) and the repository's [Claude Code setup](https://github.com/ncecere/open-model-gateway/blob/v0.9.0/docs/claude-code.md).
+
+## Route history and previews
+
+- **Route history.** A route's page in Admin has a **History** tab: every enable and disable, with before and after, who did it (or which admin token), and when. Platform Admins and Auditors only, in the browser.
+- **Change previews.** Before you enable or disable a route, Platform Admins see what changes: routes gained or lost, warnings when a model loses its last serving route, and the Teams and Projects affected. Nothing is written until you confirm.
+- **SSO group mapping previews.** Creating, editing or deleting an SSO group mapping now goes through **Review changes**, which shows what's revoked at once and what changes at people's next sign-in or SCIM sync, using the same matching as the real change. A mapping changed by someone else in the meantime asks you to review again.
+
+See [Models and routes](/docs/administration/models-and-routes) and [SSO groups](/docs/administration/sso-groups).
+
+## Requests to join a Team or Project
+
+Platform Admins can make a Team or Project **discoverable** (off by default). People with access to the gateway can then find it in **Request access** and ask to join as a member. The workspace's owners and admins approve or deny in **Workspace Settings › Access requests**, and Platform Admins in **Admin › Access requests** (Auditors can read it). Approval adds a member grant; nobody can approve their own request. Each person can have at most 20 pending requests, 5 a minute and 50 a day, and a request expires after 7 days. See [Teams and Projects](/docs/administration/teams-and-projects).
+
+## Provider-reported cost reconciliation (API only)
+
+Platform Admins can upload closed **Anthropic Cost Report** JSON periods, map them to the gateway's routes, and freeze a comparison against the gateway's configured-rate estimates, through the management API only (browser session; admin tokens are refused). Uploads are capped at 5 MiB. This compares provider-reported costs; it isn't a verified invoice. The dashboard follows in [v0.10.0](/docs/releases/v0-10-0).
+
+## Before you upgrade
+
+- **Local endpoint approvals in special-use ranges stop startup.** v0.8.0 warned; now `serve` refuses to start if `GATEWAY_LOCAL_UPSTREAMS` approves an address in `198.18.0.0/15`, `2001:2::/48`, `192.0.0.0/24`, `192.88.99.0/24`, `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32`, `3fff::/20` or any of `fd00:ec2::/32` (over HTTP or HTTPS). Addresses with an IPv4 address inside are judged by that address. The error names each approval and the setting. Replace the address with the server's real public or private address, or remove the approval. Only `serve` is affected; a replica that fails never becomes ready, so a rolling deployment keeps the old replicas.
+- **The runtime role loses `TEMPORARY`.** `grants apply` now revokes it from `PUBLIC` and from the runtime role on the gateway's database, and `grants verify` checks that the runtime role can't create a temporary table. Any other role relying on PUBLIC's default `TEMPORARY` loses it too: use a dedicated database for the gateway.
+- **New chart-managed CloudNativePG clusters restrict database access.** A fresh install revokes PUBLIC `CONNECT` on `postgres` and `template1`, and PUBLIC `TEMPORARY` on the application database. Existing clusters and external databases are unchanged; the repository documents a [manual fix for existing clusters](https://github.com/ncecere/open-model-gateway/blob/v0.9.0/docs/postgresql-ha.md#existing-cnpg-cluster-acl-remediation-315).
+- **Development-only HTTP exports go only to loopback.** With `GATEWAY_ENV=development`, plain-HTTP OTLP traces, metrics and logs and audit webhooks and OTLP connect only if every resolved address is loopback. Use HTTPS to export to another host. Production installations never allowed plain HTTP and are unaffected.
+- **Another owner's personal workspace returns `404`** on workspace routes, the same as an unknown id, including for Platform Admins and Auditors (was `403`).
+- **Additive fields** on alert deliveries, workspaces (`discoverable`) and deployments (`revision`). Consumers that reject unknown fields need updating.
+
+## Upgrade guide
+
+Fifteen migrations, `0053` to `0067`, and new runtime grants.
+
+- **`0055`** locks `alert_deliveries` exclusively while it backfills pending deliveries, so the lock lasts longer with a larger backlog; **`0065`** alters the same table. Plan a window for a large queue.
+- **`0054`, `0056`, `0060` and `0062`** build indexes concurrently. If a build is interrupted, the next `migrate` drops and rebuilds it.
+- **`0059`** changes how alert evaluation locks: an older alert evaluator running during or after it can miss an incident. Stop every old evaluator and `alerts evaluate --once` job first.
+- **`0067`** records every route change. An older replica's change after it runs is recorded as by "System", with a second history entry.
+
+<Steps>
+<Step>
+
+### Back up
+
+Record the running image digest and configuration. Back up with `scripts/backup.py` and run `verify`.
+
+</Step>
+<Step>
+
+### Fix local approvals
+
+Check `GATEWAY_LOCAL_UPSTREAMS` against the ranges above. On v0.8.0, `/health/ready` reporting `checks.local_upstream_approvals: "warning"` means one needs changing.
+
+</Step>
+<Step>
+
+### Stop every old replica
+
+Stop every replica and any `alerts evaluate --once` job. Mixed-schema replicas aren't supported.
+
+</Step>
+<Step>
+
+### Migrate and grant
+
+As the migrator, run `open-model-gateway migrate`, then `open-model-gateway grants apply`, then `grants verify` with a role that can `SET ROLE gateway_runtime`.
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new release by digest and wait for `/health/ready` to report `schema: ok`. Check sign-in, one inference request, and run `open-model-gateway budget verify`.
+
+</Step>
+</Steps>
+
+With Helm, upgrade with `--set migrations.run=true --wait` after scaling the old pods down. There are no down migrations; going back means restoring the backup. See [Upgrades](/docs/self-hosting/upgrades).
+
+Coming from an earlier release, first follow the [v0.8.0 upgrade guide](/docs/releases/v0-8-0#upgrade-guide).
+
+## Also in this release
+
+- **Clearer access refusals in the dashboard.** A refused page refreshes your access once, then shows a permission notice instead of retrying.
+- **Key dialogs** can't repeat an action from a stale submit, and a key created just before a dialog closes can still be found and revoked.
+- **Management OpenAPI groundwork.** A checked-in OpenAPI 3.1 document lists every management route and its access rules; its request and response schemas are incomplete (completed in v0.10.0).
+- **Rust 1.99.1** is pinned everywhere it's built.
+
+## Known limitations
+
+- Membership requests cover joining a Team or Project only; requesting models, notifications and onboarding templates are planned.
+- Provider-reported cost reconciliation is API-only and Anthropic Cost Report JSON only.
+- Admin token attempts still aren't exported to a SIEM.
+- Structured output, strict tools and server tools are refused on every adapter, and the broader client compatibility work is incomplete.
+- SCIM is tested with Authentik only, not Okta or Entra.
+- Carried over: independent security review, steady-load stalls and the second write outage after a two-instance failover are open; there's no certified capacity number. Guardrails are designed but not built, sign-out started by the identity provider isn't implemented, and the Helm chart is still **beta**.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.9.0@sha256:fb4ac91bae8aeeed8da5f1203d610c03c0202b60fe236db69e2470a2d816fb39`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.9.0) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

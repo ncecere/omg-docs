@@ -24,15 +24,25 @@ The error names the variable and the reason, such as `secret configuration: OPEN
 |---|---|---|
 | `DATABASE_URL` | (required) | PostgreSQL connection URL. Use the runtime role for `serve` and the migrator role for `migrate`. Or set `DATABASE_URL_FILE` ([secrets from files](#secrets-from-files)). |
 | `GATEWAY_LISTEN` | `127.0.0.1:8080` (container: `0.0.0.0:8080`) | Address and port to listen on. |
-| `GATEWAY_ENV` | `production` | `production` or `development`. Development allows plain-HTTP sign-in on loopback addresses only. |
-| `GATEWAY_PUBLIC_URL` | unset | The browser-visible origin, such as `https://ai.example.edu`. Needed for sign-in; also used in invitation and alert emails. |
+| `GATEWAY_ENV` | `production` | `production` or `development`. Development allows plain HTTP on loopback addresses only: for sign-in, the inference base URL, alert webhooks and telemetry and audit exports. |
+| `GATEWAY_PUBLIC_URL` | unset | The browser-visible origin of the dashboard, such as `https://ai.example.edu`. Needed for sign-in; also used in invitation, alert and scheduled-report emails. Scheduled reports can only be resumed with an HTTPS public URL. |
+| `GATEWAY_INFERENCE_BASE_URL` | unset (the dashboard's origin plus `/v1`) | The inference address shown to signed-in people on key and model pages, such as `https://api.example.edu/v1`, when inference has its own host. New in v0.7.0. Helm: `gateway.inferenceBaseUrl`. [Details below](#separate-inference-host). |
 | `GATEWAY_WEB_DIR` | unset (container: `/app/web`) | Directory of the built dashboard. Unset serves the APIs only. An invalid directory stops startup. |
 | `GATEWAY_ENV_FILE` | unset | Load this file instead of `./.env`. |
 | `GATEWAY_DATABASE_MAX_CONNECTIONS` | `10` | Database pool size per replica, 2 to 500. |
 | `GATEWAY_MAX_CONCURRENT_REQUESTS` | `128` | Inference requests at once per replica, 1 to 10,000. Beyond it: `429`. |
 | `GATEWAY_REQUEST_TIMEOUT_SECONDS` | `120` | Inference deadline, 1 to 3,600 seconds, including time waiting for admission. |
 | `GATEWAY_METRICS_ADDR` | unset (off) | Separate Prometheus listener, such as `127.0.0.1:9464`. Must differ from `GATEWAY_LISTEN`. |
-| `RUST_LOG` | `open_model_gateway=info` | Log filter. Logs are JSON on standard error. |
+| `RUST_LOG` | `open_model_gateway=info` | Log filter. Logs are JSON on standard error. Don't turn on debug logging for other targets (such as `RUST_LOG=debug` or `reqwest=debug`) in production: the HTTP libraries' own debug logs name every host and address the gateway connects to. |
+
+### Separate inference host
+
+Set `GATEWAY_INFERENCE_BASE_URL` when inference is published on a different host from the dashboard, for example `https://api.example.edu/v1` beside a dashboard at `https://ai.example.edu`.
+
+- It must be an absolute HTTPS URL whose path ends in `/v1`, without credentials, query or fragment; one trailing slash is removed. Plain HTTP is accepted only on loopback with `GATEWAY_ENV=development`. Anything else, or an empty value, stops startup.
+- It only changes what people are shown: the OpenAI-compatible base URL, the Anthropic SDK base (the same URL without the final `/v1`, because that SDK adds `/v1/messages`), and the realtime, Files and Batches addresses. Prefixes and ports are kept.
+- It doesn't configure your proxy, ingress or routing: publish the inference host yourself. The dashboard still calls the API on its own origin.
+- Keep `GATEWAY_PUBLIC_URL` on the dashboard's origin, for sign-in and CSRF.
 
 ## Scaling
 
@@ -80,12 +90,26 @@ See [Identity setup](/docs/self-hosting/identity).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GATEWAY_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of environment variables that connections may reference as `env:NAME`. Anything not listed is refused. From v0.6.0 the email password has its own list ([below](#email)). |
-| `GATEWAY_LOCAL_UPSTREAMS` | unset | JSON list of approved self-hosted endpoints and their pinned IP addresses: `[{"endpoint":"http://models.example.internal:8000/v1","addresses":["10.10.1.20"]}]`. Up to 64 endpoints, 16 addresses each. |
+| `GATEWAY_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of environment variables that connections may reference as `env:NAME`. Anything not listed is refused, and [reserved names](#reserved-names) stop startup. From v0.6.0 the email password has its own list ([below](#email)). |
+| `GATEWAY_LOCAL_UPSTREAMS` | unset | JSON list of approved self-hosted endpoints and their pinned IP addresses: `[{"endpoint":"http://models.example.internal:8000/v1","addresses":["10.10.1.20"]}]`. Up to 64 endpoints, 16 addresses each. An approval that fails validation stops `serve`, including, from v0.9.0, an address in a special-use range ([Provider credentials](/docs/self-hosting/provider-credentials#self-hosted-model-servers)). |
 | `GATEWAY_AWS_PROFILE_ALLOWLIST` | empty | Comma-separated AWS profile names that Bedrock connections and the file store may use. |
 | `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST` | empty | Comma-separated HTTPS origins of Bedrock VPC endpoints that connections may use. |
 
 The provider keys themselves are ordinary variables with names of your choice, such as `OPENAI_API_KEY`, listed in the allowlist. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` can also come from files with `_FILE` ([secrets from files](#secrets-from-files)). See [Provider credentials](/docs/self-hosting/provider-credentials).
+
+### Reserved names
+
+Three allowlists name variables that something configured in the dashboard may read: `GATEWAY_SECRET_ENV_ALLOWLIST` (provider connections), `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` (the SMTP password) and `GATEWAY_ALERT_WEBHOOK_SECRET_ENV_ALLOWLIST` (alert webhook signing secrets). From v0.7.0, startup stops if any of them lists a name the gateway keeps for itself, even on purpose:
+
+- `DATABASE_URL` and `DATABASE_URL_FILE`;
+- every name starting with `GATEWAY_`, `AWS_`, `PG` or `OTEL_`;
+- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY`, in upper or lower case;
+- the variable that any of these settings names: `GATEWAY_SCIM_TOKEN_ENV`, `GATEWAY_S3_ACCESS_KEY_ID_ENV`, `GATEWAY_S3_SECRET_ACCESS_KEY_ENV`, `GATEWAY_FILE_ENCRYPTION_KEYS_ENV`, `GATEWAY_AUDIT_WEBHOOK_SECRET_ENV`, `GATEWAY_AUDIT_OTLP_HEADERS_ENV`, `GATEWAY_TRACES_OTLP_HEADERS_ENV`, `GATEWAY_METRICS_OTLP_HEADERS_ENV` and `GATEWAY_LOGS_OTLP_HEADERS_ENV`;
+- on the SMTP and webhook lists, also `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
+
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` stay usable on the provider list, but each logs a startup warning: a connection with a custom endpoint that references one receives that key. Prefer dedicated variables.
+
+The three lists must not share a name. The error names the setting, the refused names and any setting that selects them, never a value. Remove the entry, give the provider, SMTP or webhook its own variable, update the reference in the dashboard, and restart. Never copy a gateway secret into a provider variable to get round the check.
 
 ## Outbound connections
 
@@ -95,7 +119,7 @@ New in v0.6.0.
 |---|---|---|
 | `GATEWAY_EGRESS_PRIVATE_ALLOW` | unset (none) | Private networks the gateway may connect to, as comma-separated CIDRs or single addresses, such as `10.20.0.0/16,fd00:1::/32`. |
 
-Every outbound connection follows one address policy: metadata, link-local and reserved addresses are always refused, loopback is allowed only with `GATEWAY_ENV=development`, and private addresses (RFC 1918, `100.64.0.0/10`, IPv6 unique-local) only inside this list. Public addresses are allowed. Approved self-hosted model servers in `GATEWAY_LOCAL_UPSTREAMS` keep their own pinned approval and need no entry here.
+Every outbound connection follows one address policy: metadata, link-local and reserved addresses are always refused, loopback is allowed only with `GATEWAY_ENV=development`, and private addresses (RFC 1918, `100.64.0.0/10`, IPv6 unique-local) only inside this list. Public addresses are allowed. Approved self-hosted model servers in `GATEWAY_LOCAL_UPSTREAMS` keep their own pinned approval and need no entry here; from v0.9.0 an approval in a reserved, documentation or benchmarking range stops startup, as such an address is refused everywhere else.
 
 - The list is read before every command, `healthcheck` included. An invalid address or prefix, host bits set, or an IPv4 network written in IPv6 form stops them all.
 - List an identity provider, S3-compatible store or AWS private endpoint on a private network, or sign-in (at startup) and those requests fail with a message that names this variable.
@@ -115,7 +139,59 @@ New in v0.6.0. The relay itself (host, port, TLS, username and password referenc
 - Hosts are compared without regard to case, a trailing dot or IPv6 spelling. Entries are hosts, not ports.
 - An unlisted relay never gets a connection or the password. Settings › Email shows `host_not_allowed`.
 - A listed relay on the same machine (`localhost`, `127.0.0.1`, `::1`) is allowed outside development too.
-- Startup fails if a name is on both `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` and `GATEWAY_SECRET_ENV_ALLOWLIST`, or if the SMTP list names `DATABASE_URL`, `GATEWAY_OIDC_CLIENT_SECRET`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or anything starting with `AWS_` or `GATEWAY_`.
+- Startup fails if a name is on both `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` and `GATEWAY_SECRET_ENV_ALLOWLIST`, or if the SMTP list names a [reserved name](#reserved-names), including `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
+
+## Alert webhooks
+
+New in v0.9.0. Platform Admins save signed webhook receivers for installation alerts in Admin › Settings › Alerts › **Webhooks** ([Alerts](/docs/administration/alerts#webhooks)). These two settings decide what they may use; with neither set, no webhook can be saved.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_ALERT_WEBHOOK_URL_ALLOWLIST` | empty | Comma-separated receiver URLs, compared exactly after normalization. HTTPS, or plain HTTP on loopback in development only; no credentials, query or fragment; up to 2,048 characters. Approval doesn't bypass the [outbound address policy](#outbound-connections): a private receiver also needs `GATEWAY_EGRESS_PRIVATE_ALLOW`. |
+| `GATEWAY_ALERT_WEBHOOK_SECRET_ENV_ALLOWLIST` | empty | Comma-separated names of variables a webhook's signing reference (`env:NAME`) may read. Each secret must be 32 to 4,096 bytes. Must not share a name with the provider or SMTP list, and refuses [reserved names](#reserved-names). Set the variables on every replica; they have no `_FILE` form. |
+
+An invalid URL stops startup. Saving a webhook never contacts the receiver or reads the secret.
+
+## Telemetry
+
+Three OpenTelemetry exports, each off until you set its URL. They send OTLP/HTTP JSON (not protobuf or gRPC) and never read the standard `OTEL_*` variables. Each URL is the collector's full path, which isn't added for you; it must be HTTPS with public certificate roots, without credentials, query or fragment (plain HTTP only on loopback in development, and from v0.9.0 only when every resolved address is loopback). Collectors follow the [outbound address policy](#outbound-connections), with no proxy, redirects or retries. A collector outage never affects readiness or requests.
+
+The `_HEADERS_ENV` settings name a variable holding `Key=Value,Key2=Value2` (at most 16 headers and 4 KiB), such as an `Authorization` header for the collector. Use a dedicated variable for each: it must not be on any credential allowlist or be selected by another setting. Invalid settings stop startup, without printing values.
+
+### Traces
+
+New in v0.8.0. Traces of Chat Completions, Responses and Messages requests: the request, routing, admission, each upstream attempt and settlement. Only requests admitted in a Team or Project are exported, never personal ones; Logs shows the `trace_id` to look them up by.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_TRACES_OTLP_URL` | unset (off) | The collector's `/v1/traces` URL. |
+| `GATEWAY_TRACES_SAMPLE_RATIO` | `0.01` | Share of requests traced, 0 to 1. |
+| `GATEWAY_TRACES_OTLP_HEADERS_ENV` | unset | The **name** of the variable holding the collector's headers. |
+
+Incoming `traceparent` headers are ignored, and nothing is forwarded to providers. Export never waits for the collector: spans beyond what one replica can send (about 64 a second) are dropped and counted. See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring#opentelemetry-exports).
+
+### OTLP metrics
+
+New in v0.9.0. Pushes the same metrics as the [Prometheus listener](/docs/self-hosting/metrics-and-monitoring#metrics), independently of it.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_METRICS_OTLP_URL` | unset (off) | The collector's `/v1/metrics` URL. |
+| `GATEWAY_METRICS_OTLP_INTERVAL_SECONDS` | `60` | Seconds between pushes, 10 to 300. |
+| `GATEWAY_METRICS_OTLP_TRAFFIC` | `off` | `off` pushes only system-health metrics (database pool, background jobs, partitions, audit export, the exporters themselves). `on` adds the traffic metrics (HTTP requests, inference, admission, batches, files, alert email and webhooks), which include personal workspaces' activity as totals without identities. |
+| `GATEWAY_METRICS_OTLP_HEADERS_ENV` | unset | The **name** of the variable holding the collector's headers. |
+
+The three optional settings need the URL. Each replica pushes at most 300 series per metric, 2,000 points and 1 MiB per push, with no retries or disk spool.
+
+### OTLP operational logs
+
+New in v0.9.0. Seven fixed infrastructure events: an exporter going down and recovering, a refused outbound connection, a lost background-job lease, the configuration listener going down, a failed accounting write that needs reconciliation, and a failed background job. Never ordinary log lines, prompts, responses or request ids.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_LOGS_OTLP_URL` | unset (off) | The collector's `/v1/logs` URL. Must not be the same as `GATEWAY_AUDIT_OTLP_URL`: keep audit and operational logs in separate pipelines. |
+| `GATEWAY_LOGS_OTLP_HEADERS_ENV` | unset | The **name** of the variable holding the collector's headers. Needs the URL. |
+| `GATEWAY_LOGS_OTLP_MIN_SEVERITY` | `warn` | `info`, `warn` or `error`. Recoveries are `info`. Needs the URL. |
 
 ## Audit export
 
@@ -135,8 +211,8 @@ Startup stops if:
 
 - two of the three URLs are set, including `off` in one and a destination in another;
 - a setting belongs to a transport that isn't in use, such as the webhook secret with only the syslog URL;
-- a URL isn't HTTPS (plain HTTP is allowed only to loopback in development), or contains credentials or a fragment;
-- the secret or headers variable is lower case, isn't set, is on `GATEWAY_SECRET_ENV_ALLOWLIST` or `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, is one of the four [secrets from files](#secrets-from-files), or starts with `AWS_` or `GATEWAY_`;
+- a URL isn't HTTPS (plain HTTP is allowed only to loopback in development, and from v0.9.0 only when every resolved address is loopback), or contains credentials or a fragment;
+- the secret or headers variable is lower case, isn't set, is on a credential allowlist, is one of the four [secrets from files](#secrets-from-files), or is otherwise [reserved](#reserved-names);
 - a syslog PEM file is missing, unreadable or over 1 MiB, or only one of the client certificate and key is set;
 - the OTLP headers are malformed: more than 16, an invalid name, `Content-Type`, `Host` or `Content-Length`, or a value with anything other than visible ASCII and spaces.
 
@@ -180,7 +256,7 @@ See [File storage](/docs/self-hosting/file-storage).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GATEWAY_ALERT_INTERVAL_SECONDS` | `60` | How often alerts are evaluated, 0 to 86,400. `0` turns the evaluator off. |
+| `GATEWAY_ALERT_INTERVAL_SECONDS` | `60` | How often alerts are evaluated and email and webhooks dispatched, 0 to 86,400. `0` turns off alert evaluation and every automatic send: alert email, scheduled-report email and alert webhooks. Scheduled reports are still generated. Unset means the default, not off. |
 | `GATEWAY_JOB_POLL_INTERVAL_SECONDS` | `30` | How often provider jobs (native batches, videos) are polled, 0 to 3,600. `0` turns polling off, and native batches stop being processed. |
 | `GATEWAY_BATCH_WORKERS` | `4` | Gateway-run batch lines at once per process, 0 to 256. `0` turns the batch runner off. |
 | `GATEWAY_BATCH_CONCURRENCY` | `2` | Lines of one batch at once, 1 to 64. |

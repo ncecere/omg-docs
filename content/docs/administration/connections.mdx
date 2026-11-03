@@ -11,7 +11,7 @@ A **connection** is an upstream provider and how to reach it. **Admin › Connec
 
 You never paste an API key into the dashboard. A connection stores a **reference** to a secret that the operator puts in the server's environment:
 
-- **Secret in an environment variable**: you enter the variable's name, such as `OPENAI_API_KEY`. The operator must also list that name in `GATEWAY_SECRET_ENV_ALLOWLIST`, or the gateway refuses to use it.
+- **Secret in an environment variable**: you enter the variable's name, such as `OPENAI_API_KEY`. The operator must also list that name in `GATEWAY_SECRET_ENV_ALLOWLIST`, or the gateway refuses to use it. The gateway's own variables (such as `DATABASE_URL` or anything starting with `GATEWAY_` or `AWS_`) can never be listed there ([Reserved names](/docs/self-hosting/configuration#reserved-names)), so ask the operator for a dedicated variable per provider.
 - **No authentication**: only for approved self-hosted servers. Cloud connections always need a credential.
 - **AWS identities** for Amazon Bedrock (below).
 
@@ -26,6 +26,8 @@ The reference is never shown again after saving, and API keys sent by callers ar
 | **OpenRouter** | Fixed: `https://openrouter.ai/api/v1` | Chat Completions, embeddings, image generation, speech to text, text to speech, rerank, System One |
 | **Amazon Bedrock** | AWS region, optional VPC endpoint | Chat Completions and Messages (text and tools, via Converse) |
 | **OpenAI-compatible**, **vLLM**, **SGLang**, **Ollama** | An approved local endpoint | Chat Completions and embeddings; rerank and System One on some profiles (see [below](#what-each-profile-serves)) |
+
+From v0.9.0 every profile in the table can also serve [Messages](/docs/api/messages) (`/v1/messages`): Anthropic natively, Bedrock through Converse, and the others by translating to Chat Completions. A text model offers Messages when you include it in its protocols.
 
 Each profile supports a tested subset of requests, not every option of the provider. See the [API reference](/docs/api) for what each endpoint accepts.
 
@@ -51,7 +53,7 @@ A route's upstream model on Bedrock is a model id (`anthropic.claude-…`), an i
 
 ## Self-hosted servers
 
-Self-hosted servers (OpenAI-compatible, vLLM, SGLang, Ollama) can use plain HTTP on a private network, but only at addresses the operator has approved in `GATEWAY_LOCAL_UPSTREAMS`, each pinned to its IP addresses. Enter the approved base URL, ending in `/v1`, such as `http://models.example.internal:8000/v1`. The form can't approve a new address.
+Self-hosted servers (OpenAI-compatible, vLLM, SGLang, Ollama) can use plain HTTP on a private network, but only at addresses the operator has approved in `GATEWAY_LOCAL_UPSTREAMS`, each pinned to its IP addresses. Enter the approved base URL, ending in `/v1`, such as `http://models.example.internal:8000/v1`. The form can't approve a new address. From v0.9.0 the gateway won't start with an approval in a reserved, documentation or benchmarking address range ([Provider credentials](/docs/self-hosting/provider-credentials#self-hosted-model-servers)).
 
 - Choose **No authentication**, or a secret in an environment variable that is sent as a bearer token to that server only.
 - Ollama's embeddings use its native `/api/embed` on the same address, with truncation off.
@@ -68,7 +70,7 @@ Every self-hosted profile serves Chat Completions and embeddings. From v0.3.1, s
 | **SGLang** | Yes | Yes | Yes: SGLang's `/rerank` | No |
 | **Ollama** | Yes | Yes, native `/api/embed`, without `dimensions` | No: Ollama has no rerank API | Yes: Ollama v0.35.0 or newer |
 
-No self-hosted profile serves Responses, Messages, images, audio, realtime or video.
+No self-hosted profile serves Responses, images, audio, realtime or video. From v0.9.0 they serve Messages, translated to Chat Completions.
 
 **Add model** offers only the types a connection's profile serves. From v0.3.2, the gateway also refuses a route that its connection can't serve with `400 route_unsupported_capability`, for example a System One model on a vLLM connection. Such routes created before v0.3.2 make their model **Not serving** or **Needs attention**; see [Readiness](/docs/administration/models-and-routes#readiness).
 

@@ -1,0 +1,66 @@
+---
+title: Scheduled reports
+description: Weekly or monthly cost reports for a Team, Project or personal workspace, with an email link when each is ready.
+---
+
+A scheduled report is a snapshot of a workspace's costs for one week or one month, made automatically when the period ends. The people you choose get an email with a link to it. Reports are in **Usage & costs › Scheduled reports**.
+
+## Who can use them
+
+| Workspace | Who can create, change and read reports | Who can receive them |
+|---|---|---|
+| Team or Project | Its owners and admins | 1 to 50 of its current owners and admins |
+| Personal | Its owner | The owner only |
+
+Members of a Team or Project don't see the tab. A platform role alone gives no access to a workspace's reports. Platform Admins have their own reports for the installation and for cost centers in **Admin › Usage & costs**.
+
+A Team or Project can have up to 50 schedules, and a person up to 10 for their personal workspace.
+
+## Create a schedule
+
+1. Open **Usage & costs**, then **Scheduled reports**, and choose **Create schedule**.
+2. Fill in the form:
+
+   | Field | What it does |
+   |---|---|
+   | **Cadence** | **Weekly** (Monday to Monday) or **Monthly** (calendar months). Periods are always in UTC. |
+   | **IANA time zone** | The time zone for delivery, such as `America/New_York`. It changes when the email goes out, not which days the report covers. |
+   | **Local delivery time** | `HH:MM`, 24-hour time. The email goes out at the first such time after the period ends. |
+   | **Recipient user IDs** | Team or Project only: 1 to 50 people's user IDs (not email addresses), separated by commas or new lines. Your own ID is filled in. To find someone's, open **Settings › Members** and choose **Copy user ID** in their row. |
+   | **Historical cost center ID** | Team or Project only, optional: report only the requests that were attributed to that cost center when they were made. It can't be changed later. |
+
+3. Choose **Create schedule**. Every schedule starts **Paused**.
+4. Check the schedule in the list, then choose **Resume** to make it **Active**.
+
+A schedule only makes reports for periods that end after you resume it: there is no catch-up of earlier periods. **Edit schedule** changes the cadence, time zone, delivery time and recipients for future reports. **Pause** stops new reports and unsent emails; **Delete** is final, and links to its reports stop working.
+
+<Callout title="Email must be set up">
+  Reports are emailed only when a Platform Admin has set up email (**Admin › Settings › Email**). Until then, the tab shows **Email delivery unavailable**; reports are still made and readable here, with the delivery status **Email not configured**.
+</Callout>
+
+## Read a report
+
+The list shows each schedule's next report and state. Under **Recent runs**, choose a schedule to see its last 20 reports, with their UTC period, delivery status (such as **Delivered**, **Delivery pending** or **Email not configured**) and when each expires. Select a period to open the report.
+
+<Screenshot slot="scheduled-reports" />
+
+A report shows:
+
+- **Full totals**: the settled configured-rate estimate, the held floor (money still on hold), and attempt counts, including unresolved attempts;
+- **Coverage**: how many attempts were priced, settled, pending or unknown;
+- breakdowns, such as by model, provider and cost center, up to 100 entries each (the totals above always cover everything);
+- measures a report can't compute, marked **Unavailable**, never as zero.
+
+**Download aggregate CSV** saves the same figures as a spreadsheet. **Refresh report** checks your access again.
+
+<Screenshot slot="scheduled-report-run" />
+
+- A report is a fixed snapshot. Later corrections to costs don't change it.
+- Its amounts are estimates from configured prices, not invoices, and held amounts are floors, not extra charges.
+- Reports and their CSV files are kept for 90 days, then only their dates and status remain.
+
+## What the email contains
+
+Only a notice that a report is ready, the UTC period and a link. It never contains amounts, names, the recipient list or an attachment. Opening the link needs you to sign in, and the gateway checks again that you may read the report: a forwarded link doesn't give anyone access. If you have since lost access, for example by leaving the workspace, the report is unavailable to you.
+
+Recipients who lose their access stop receiving the emails. If the person who created a schedule loses access, the schedule stops making reports.

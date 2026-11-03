@@ -37,7 +37,7 @@ Admin and Auditor include User. Neither role lets anyone see another person's pe
 A **workspace** owns keys, usage and limits. There are three kinds:
 
 - **Personal**: created automatically when an entitled person first signs in. It is private to its owner: nobody else can see its keys or requests, Platform Admins included. Admins and Auditors see only its cost totals.
-- **Team** and **Project**: shared workspaces that only Platform Admins create. They are equivalent siblings: a Project does not belong to a Team, and being in one Team gives nothing in another.
+- **Team** and **Project**: shared workspaces that only Platform Admins create. They are equivalent siblings: a Project does not belong to a Team, and being in one Team gives nothing in another. A Platform Admin can make a Team or Project **discoverable**, so that people can ask to join it; see [Joining a Team or Project](/docs/using/joining-a-workspace).
 
 Members of a shared workspace are **owners**, **admins** or **members**. Owners and admins manage members, service accounts and local limits, and see everyone's activity. Members see their own activity only. See [Workspace settings](/docs/using/workspace-settings).
 
@@ -45,11 +45,13 @@ Members of a shared workspace are **owners**, **admins** or **members**. Owners 
 
 An **API key** belongs to one workspace, and the gateway works out the workspace from the key alone. Keys start with `omg_` and are shown once, when they are made. They:
 
-- expire after 1 to 365 days (the installation may set a lower maximum for people's own keys);
+- expire after 1 to 365 days (the installation may set a lower maximum for people's own keys), with reminders 7 days and 1 day before;
 - can be limited to some of the workspace's models, and given their own budgets and rate limits, when they are created;
 - can be rotated (a new secret, same limits and history), disabled (reversible) or revoked (permanent).
 
 A key belongs either to a person (a **human key**) or to a **service account** of a Team or Project, for applications that should not stop working when someone leaves. API keys never sign in to the dashboard. See [API keys](/docs/using/api-keys).
+
+Platform Admins can also create **admin API tokens** (`omg_admin_…`) for scripts that manage the installation. They are a separate kind of credential: an admin token can't call models, and an API key can't reach the management API.
 
 ## Connections, routes and models
 
@@ -74,7 +76,7 @@ Limits are set in **layers**, and every layer that applies is enforced:
 
 There is no installation-wide limit: workspaces may use more in total than any single reference amount you watch. An optional, non-blocking **Installation spend** alert notifies on total spend across every workspace; it never denies a request.
 
-Each layer can set requests per minute, tokens per minute, requests at once, **jobs at once** (batch and video jobs) and up to one **budget** per period: day, ISO week, month and lifetime, all in UTC. Workspace layers also set a **storage** quota for files. A missing limit in a lower layer inherits; it never removes a higher one. Raising a limit never resets what was already spent. See [Limits and budgets](/docs/administration/limits-and-budgets).
+Each layer can set requests per minute, tokens per minute, requests at once, **jobs at once** (batch and video jobs) and up to one **budget** per period: day, ISO week, month and lifetime, all in UTC. Workspace layers also set a **storage** quota for files and **key issuance** limits: how many keys one person (or service account), and the whole workspace, may create or rotate in a rolling 24 hours (50 and 500 unless changed). A missing limit in a lower layer inherits; it never removes a higher one. Raising a limit never resets what was already spent. See [Limits and budgets](/docs/administration/limits-and-budgets).
 
 ## Costs are exact estimates
 
@@ -82,7 +84,7 @@ Each route has **prices**: lines such as "$0.40 per million input tokens" or "$0
 
 - Amounts are **integer micro-US-dollars** (millionths of a dollar), with no floating point anywhere.
 - Before a request is sent, the gateway **holds** the most it could cost, from the price and the request's token ceilings, and checks it against every budget. When the provider reports usage, the hold is replaced by the actual estimate.
-- **Unknown is never zero.** If usage is missing or a price line is missing, the cost stays unknown and the hold stays in place until someone resolves it.
+- **Unknown is never zero.** If usage is missing or a price line is missing, the cost stays unknown and the hold stays in place until a Platform Admin resolves it with evidence. Holds that stay unknown for 24 hours or more are listed under **Usage & costs › Holds**.
 - Costs are **estimates** from configured prices, not invoices.
 
 See [Usage and costs](/docs/using/usage-and-costs) and [Pricing](/docs/administration/pricing).

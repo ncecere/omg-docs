@@ -15,7 +15,7 @@ These pages are for **Platform Admins**, who run the installation, and **Platfor
     Platform roles, suspension, the 30-day lifecycle and the last-admin safeguard.
   </Card>
   <Card title="Teams and Projects" href="/docs/administration/teams-and-projects">
-    Creating shared workspaces, their owners, overrides and cost centers.
+    Creating shared workspaces, their owners, access requests, overrides and cost centers.
   </Card>
   <Card title="SSO groups and SCIM" href="/docs/administration/sso-groups">
     Mapping identity-provider groups to roles and memberships, and pushing changes with SCIM.
@@ -27,13 +27,19 @@ These pages are for **Platform Admins**, who run the installation, and **Platfor
     Which models each kind of workspace can use.
   </Card>
   <Card title="Limits and budgets" href="/docs/administration/limits-and-budgets">
-    Stacked layers of rate limits, jobs at once, storage and budgets.
+    Stacked layers of rate limits, jobs at once, storage, key issuance and budgets.
+  </Card>
+  <Card title="Alerts" href="/docs/administration/alerts">
+    Alert rules, built-in reminders, email delivery and signed webhooks.
   </Card>
   <Card title="Records" href="/docs/administration/audit-log">
-    The audit log, key safety, logs, usage and cost centers.
+    The audit log, key safety, logs, usage, scheduled reports, provider reconciliation and cost centers.
   </Card>
   <Card title="Data controls" href="/docs/administration/data-controls">
     Exporting and removing a person's data, legal holds, and how long each kind of data is kept.
+  </Card>
+  <Card title="Admin API tokens" href="/docs/administration/admin-api-tokens">
+    Scoped, expiring credentials for scripts that call the management API.
   </Card>
 </Cards>
 
@@ -41,8 +47,8 @@ These pages are for **Platform Admins**, who run the installation, and **Platfor
 
 Platform roles give authority over the installation, not over people's private work:
 
-- **Personal workspaces** stay private. Admins and Auditors see their cost and usage **totals** in reports, never their keys or requests.
+- **Personal workspaces** stay private. Admins and Auditors see a personal workspace's owner, its usage, cost and storage **totals** in reports, and the limits and catalogs set for it, never its keys, requests, sessions or files. Holds, scheduled reports and provider reconciliation combine personal workspaces into one row without identities. On the workspace's own pages, another person's personal workspace answers as if it didn't exist.
 - **Teams and Projects**: admins and Auditors see their configuration, members and cost totals. Admin › Logs shows their requests' metadata. Their keys and request details inside the workspace's own pages need a membership, like anyone else.
 - **Making a key** in a Team or Project needs a real membership, even for a Platform Admin.
 
-Auditors see every Admin page read-only: no buttons that change anything, and the API refuses changes.
+Auditors see every Admin page read-only, except **Admin API tokens**, which they can't open: no buttons that change anything, and the API refuses changes.

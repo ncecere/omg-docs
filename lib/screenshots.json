@@ -1,4 +1,9 @@
 {
+  "admin-access-requests": {
+    "src": "/images/admin-access-requests.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-add-model": {
     "src": "/images/admin-add-model.webp",
     "width": 1440,
@@ -19,8 +24,23 @@
     "width": 1440,
     "height": 900
   },
+  "admin-alert-webhooks": {
+    "src": "/images/admin-alert-webhooks.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-alerts": {
     "src": "/images/admin-alerts.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-api-token-created": {
+    "src": "/images/admin-api-token-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-api-tokens": {
+    "src": "/images/admin-api-tokens.webp",
     "width": 1440,
     "height": 900
   },
@@ -49,6 +69,11 @@
     "width": 1440,
     "height": 900
   },
+  "admin-holds": {
+    "src": "/images/admin-holds.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-key-safety": {
     "src": "/images/admin-key-safety.webp",
     "width": 1440,
@@ -62,7 +87,7 @@
   "admin-limits": {
     "src": "/images/admin-limits.webp",
     "width": 1440,
-    "height": 900
+    "height": 1040
   },
   "admin-logs": {
     "src": "/images/admin-logs.webp",
@@ -89,6 +114,21 @@
     "width": 1440,
     "height": 1600
   },
+  "admin-route-history": {
+    "src": "/images/admin-route-history.webp",
+    "width": 1440,
+    "height": 1100
+  },
+  "admin-route-review": {
+    "src": "/images/admin-route-review.webp",
+    "width": 1440,
+    "height": 1100
+  },
+  "admin-scheduled-reports": {
+    "src": "/images/admin-scheduled-reports.webp",
+    "width": 1440,
+    "height": 1000
+  },
   "admin-settings-audit-export": {
     "src": "/images/admin-settings-audit-export.webp",
     "width": 1440,
@@ -102,7 +142,7 @@
   "admin-settings-general": {
     "src": "/images/admin-settings-general.webp",
     "width": 1440,
-    "height": 900
+    "height": 1040
   },
   "admin-settings-privacy": {
     "src": "/images/admin-settings-privacy.webp",
@@ -119,8 +159,18 @@
     "width": 1440,
     "height": 900
   },
+  "admin-sso-mapping-review": {
+    "src": "/images/admin-sso-mapping-review.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-team-detail": {
     "src": "/images/admin-team-detail.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-team-discovery": {
+    "src": "/images/admin-team-discovery.webp",
     "width": 1440,
     "height": 900
   },
@@ -172,7 +222,12 @@
   "key-detail": {
     "src": "/images/key-detail.webp",
     "width": 1440,
-    "height": 1380
+    "height": 1680
+  },
+  "key-limits-headroom": {
+    "src": "/images/key-limits-headroom.webp",
+    "width": 1440,
+    "height": 1600
   },
   "logs-requests": {
     "src": "/images/logs-requests.webp",
@@ -187,7 +242,12 @@
   "model-compare": {
     "src": "/images/model-compare.webp",
     "width": 1440,
-    "height": 900
+    "height": 1000
+  },
+  "model-how-to-call": {
+    "src": "/images/model-how-to-call.webp",
+    "width": 1440,
+    "height": 1100
   },
   "notifications": {
     "src": "/images/notifications.webp",
@@ -199,10 +259,25 @@
     "width": 1170,
     "height": 2532
   },
+  "request-access": {
+    "src": "/images/request-access.webp",
+    "width": 1440,
+    "height": 900
+  },
   "request-detail": {
     "src": "/images/request-detail.webp",
     "width": 1440,
     "height": 1660
+  },
+  "scheduled-report-run": {
+    "src": "/images/scheduled-report-run.webp",
+    "width": 1440,
+    "height": 1400
+  },
+  "scheduled-reports": {
+    "src": "/images/scheduled-reports.webp",
+    "width": 1440,
+    "height": 1000
   },
   "sign-in": {
     "src": "/images/sign-in.webp",
@@ -214,10 +289,20 @@
     "width": 1440,
     "height": 900
   },
+  "usage-holds": {
+    "src": "/images/usage-holds.webp",
+    "width": 1440,
+    "height": 900
+  },
   "usage-overview": {
     "src": "/images/usage-overview.webp",
     "width": 1440,
     "height": 2160
+  },
+  "workspace-access-requests": {
+    "src": "/images/workspace-access-requests.webp",
+    "width": 1440,
+    "height": 900
   },
   "workspace-alerts": {
     "src": "/images/workspace-alerts.webp",
@@ -227,7 +312,7 @@
   "workspace-limits": {
     "src": "/images/workspace-limits.webp",
     "width": 1440,
-    "height": 900
+    "height": 1000
   },
   "workspace-members": {
     "src": "/images/workspace-members.webp",

@@ -1,6 +1,6 @@
 ---
 title: Embeddings
-description: POST /v1/embeddings, string input and float vectors, on OpenAI, OpenRouter and self-hosted routes.
+description: POST /v1/embeddings, string input and float or base64 vectors, on OpenAI, OpenRouter and self-hosted routes.
 ---
 
 ```http
@@ -17,14 +17,14 @@ POST /v1/embeddings
 |---|---|
 | `model` | Required. |
 | `input` | A non-empty string or list of strings. Token-id arrays are refused. |
-| `encoding_format` | Absent or `float`. `base64` is refused; the OpenAI SDKs ask for it unless you pass `float`. |
+| `encoding_format` | `float` (also when absent or `null`) or, from v0.7.1, `base64`: each vector as standard padded base64 of little-endian 32-bit floats. The OpenAI SDKs ask for `base64` by default and decode it for you. |
 | `dimensions` | Only where the route's profile supports it (below). |
 
-Not streamed. Up to 128 inputs and 1 MiB of text in total; `dimensions` up to 16,384.
+Not streamed. Up to 128 inputs and 1 MiB of text in total; `dimensions` up to 16,384. From v0.10.0 a request body streamed past the size limit gets the OpenAI `payload_too_large` error. [Batch](/docs/api/batches) embedding lines are float only and refuse `base64`.
 
 ## Response
 
-The OpenAI list shape, with one finite float vector per input, all the same length, in input order. `usage` holds the input tokens when the provider reported them, and is left out otherwise.
+The OpenAI list shape, with one finite vector per input, all the same length, in input order, as floats or base64. `usage` holds the input tokens when the provider reported them, and is left out otherwise. The provider is always asked for floats; the encoding is applied by the gateway. Vectors and the response size are checked before the request is settled, so an invalid upstream answer fails the request without being charged as a success.
 
 ## Providers
 

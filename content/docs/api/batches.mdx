@@ -38,6 +38,10 @@ A batch the key can't see answers `404 not_found` and isn't listed. In both mode
 
 Up to 50,000 lines, each up to 4 MiB. Blank lines are skipped. Each body is checked like an interactive request to the endpoint, without streaming. Chat Completions lines may use `max_tokens` or `max_completion_tokens`, or both with equal values, as interactive requests do.
 
+- From v0.7.1, Chat Completions and Responses lines may leave out their output maximum. The batch then records the route's price and output ceiling when it is created, and keeps them while it waits, even if the price changes. If a new price is published between checking the file and admitting the batch, creation fails with `503 provider_configuration_error` and nothing is created: submit the same file again.
+- Messages lines still need `max_tokens`.
+- Embeddings lines are float only: `encoding_format: "base64"` is refused.
+
 ## Validation report
 
 ```json
@@ -45,7 +49,7 @@ Up to 50,000 lines, each up to 4 MiB. Blank lines are skipped. Each body is chec
  "errors": {"object": "list", "data": [{"code": "duplicate_custom_id", "message": "custom_id must be unique within the file.", "line": 3, "param": null}]}}
 ```
 
-Up to 20 problems, by physical line number. Codes: `invalid_json`, `invalid_line`, `invalid_custom_id`, `duplicate_custom_id`, `invalid_method`, `invalid_url`, `invalid_body`, `unsupported_feature`, `missing_max_tokens`, `model_not_found`, `model_unsupported`, `model_not_priced`, `max_tokens_too_large`, `line_too_large`, `too_many_lines`, `empty_file`. Batches without the file store's **Batch files** allowed fail with `400 batch_files_disabled`.
+Up to 20 problems, by physical line number. Codes: `invalid_json`, `invalid_line`, `invalid_custom_id`, `duplicate_custom_id`, `invalid_method`, `invalid_url`, `invalid_body`, `unsupported_feature`, `model_not_found`, `model_unsupported`, `model_not_priced`, `max_tokens_too_large`, `line_too_large`, `too_many_lines`, `empty_file`. Batches without the file store's **Batch files** allowed fail with `400 batch_files_disabled`.
 
 ## Modes
 
@@ -69,7 +73,7 @@ Up to 20 problems, by physical line number. Codes: `invalid_json`, `invalid_line
 ## Limits and errors
 
 - Each batch takes one **jobs at once** slot (`429 job_limit_exceeded` when none is free). Batches don't count toward per-minute limits.
-- The whole batch's maximum cost is checked against every budget when it is created (`429 budget_exceeded`).
+- The whole batch's maximum cost is checked against every budget when it is created (`429 budget_exceeded`). From v0.8.0, lines that every route would always reject (as an Anthropic or Bedrock route rejects a `strict` tool) aren't counted in it; they are refused one by one, and a batch with such lines is never sent to a provider's native batch API.
 - A line refused for budget stops the batch: it ends `failed` with `budget_exceeded`.
 - Gateway-run lines start only when their route has capacity ([batch scheduling](/docs/administration/batch-scheduling)); while waiting, the batch stays `in_progress`.
 - At the end of its window no new line starts; running lines finish and the batch ends `expired`, with lines that never ran listed as `batch_expired` at no cost.

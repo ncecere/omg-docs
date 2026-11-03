@@ -2,7 +2,7 @@
 
 The user, administrator and operator documentation for [Open Model Gateway](https://github.com/ncecere/open-model-gateway), the self-hosted AI model gateway for one enterprise. It's published at <https://docs.omg.bitop.dev>; the product's website is <https://omg.bitop.dev>. Both addresses, the repositories and the release the docs describe are in `lib/site.ts`.
 
-These pages are for the people who call models through the gateway, the administrators who run an installation, and the operators who host it. The Open Model Gateway repository's own `docs/` folder stays the engineering record (contracts, design notes and runbooks). The docs describe **Open Model Gateway v0.3.0**, which is not yet released: they follow the `main` branch until it is tagged.
+These pages are for the people who call models through the gateway, the administrators who run an installation, and the operators who host it. The Open Model Gateway repository's own `docs/` folder stays the engineering record (contracts, design notes and runbooks). The docs describe **Open Model Gateway v0.10.0**, released 2026-11-02.
 
 A static site: [Fumadocs](https://fumadocs.dev) on Next.js with `output: "export"`, TypeScript and Tailwind CSS v4, served by nginx in a container. Search is Fumadocs' built-in static index, searched in the browser. No tracking, no cookies, no external fonts or CDNs: Inter is self-hosted.
 

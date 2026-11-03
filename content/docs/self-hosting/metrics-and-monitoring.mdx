@@ -1,6 +1,6 @@
 ---
 title: Metrics and monitoring
-description: Liveness and readiness checks, the Prometheus metrics listener, example alert rules and dashboard, and what to do when they fire.
+description: Liveness and readiness checks, the Prometheus metrics listener, OpenTelemetry traces, metrics and logs, example alert rules and dashboard, and what to do when they fire.
 ---
 
 ## Health checks
@@ -13,12 +13,13 @@ Both are on the public port, need no authentication and never return error detai
 | `GET /health/ready` | `200` only when every check passes, `503` otherwise. Use it for load-balancer membership and the container health check. |
 
 ```json
-{"status": "ready", "checks": {"database": "ok", "schema": "ok", "web": "ok"}}
+{"status": "ready", "checks": {"database": "ok", "schema": "ok", "web": "ok", "local_upstream_approvals": "ok"}}
 ```
 
 - `database`: a pooled connection answered within 2 seconds.
 - `schema`: the database's migrations match this binary exactly (`unknown` if the database is unreachable). A release whose migrations haven't been applied stays unready.
 - `web`: `disabled` without `GATEWAY_WEB_DIR`; otherwise the dashboard's files are still there.
+- `local_upstream_approvals`: added in v0.8.0, and never part of the ready decision. In v0.8.0 it said `warning` when a `GATEWAY_LOCAL_UPSTREAMS` approval was in a range v0.9.0 refuses. From v0.9.0 such an approval stops startup instead, so a replica that answers always says `ok`.
 
 Inside the container, which has no shell or `curl`, the image's health check runs `open-model-gateway healthcheck`, which asks `/health/ready` over loopback and exits 0 or 1. Kubernetes can probe the two endpoints directly with `httpGet`. See [Container health checks](/docs/self-hosting/container#health-checks).
 
@@ -66,14 +67,28 @@ Labels are deliberately few: route templates (not raw paths), provider kinds and
 | `gateway_batch_route_lines` | gauge | `provider`, `state` (`waiting`, `running`) |
 | `gateway_batch_paused_routes` | gauge | `reason` |
 | `gateway_batch_route_pauses_total` | counter | `reason` |
-| `gateway_egress_denied_total` | counter | `purpose` (`provider`, `oidc`, `storage`, `catalog`, `smtp`, `audit`). Outbound connections the [address policy](/docs/self-hosting/security#the-outbound-address-policy) refused, counted when no allowed address remains. New in v0.6.0. |
+| `gateway_egress_denied_total` | counter | `purpose` (`provider`, `oidc`, `storage`, `catalog`, `smtp`, `audit`; from v0.9.0 also `audit_otlp`, `telemetry` and `alert_webhook`). Outbound connections the [address policy](/docs/self-hosting/security#the-outbound-address-policy) refused, counted when no allowed address remains. New in v0.6.0. |
 | `gateway_auth_throttled_total` | counter | `endpoint` (`login`, `callback`), `reason` (`client_rate`, `pending_cap`). Sign-in steps refused by the [abuse controls](/docs/self-hosting/identity#sign-in-abuse-controls). No addresses or identities. New in v0.6.0. |
 | `gateway_audit_export_deliveries_total` | counter | `outcome` (`delivered`, `failed`, `skipped`). Audit export requests; `skipped` counts events whose month was archived before they were delivered. New in v0.6.0. |
 | `gateway_audit_export_rejected_records_total` | counter | Audit events an OTLP collector refused for good. They aren't retried. Resets when the replica restarts. New in v0.6.0. |
 | `gateway_audit_export_queued` | gauge | Audit events waiting for the receiver to accept them. New in v0.6.0. |
 | `gateway_audit_export_oldest_seconds` | gauge | Age of the oldest waiting audit event (0 when none). New in v0.6.0. |
+| `gateway_alert_email_attempts_total` | counter | `outcome` (`sent`, `transient_failure`, `permanent_failure`). Alert email sends to one recipient. New in v0.8.0. |
+| `gateway_alert_email_deliveries` | gauge | `state` (`retrying`, `failed`, `exhausted`, `suppressed`). Alert emails waiting in the last 24 hours, or ending in failure or suppression. `failed` and `exhausted` overlap: don't add them. `suppressed` means a workspace's daily email allowance was full. New in v0.8.0. |
+| `gateway_alert_delivery_pending_buckets`, `gateway_alert_delivery_oldest_pending_age_seconds` | gauge | Workspaces with alert email waiting, and the oldest waiting email's age. New in v0.9.0. |
+| `gateway_alert_webhook_attempts_total` | counter | `outcome`. Alert webhook sends. New in v0.9.0. |
+| `gateway_alert_webhook_deliveries` | gauge | `state` (`waiting`, `leased`, `sent`, `failed`, `exhausted`, `ineligible`). Active webhook deliveries, and those that ended in the last 24 hours. New in v0.9.0. |
+| `gateway_alert_webhook_oldest_waiting_seconds` | gauge | Age of the oldest waiting webhook delivery. New in v0.9.0. |
+| `gateway_aged_hold_alerts_total` | counter | `result` (`fired`, `escalated`, `cleared`, `deferred`, `suppressed`). Aged unknown-hold alerts. New in v0.9.0. |
+| `gateway_key_issuance_refused_total` | counter | `operation`, `scope`. Key creations and rotations refused by a [key issuance limit](/docs/administration/limits-and-budgets#key-issuance-limits). New in v0.9.0. |
+| `gateway_report_due_backlog`, `gateway_report_due_backlog_capped`, `gateway_report_oldest_due_lag_seconds` | gauge | Scheduled reports due and not yet generated (counted up to 1,024; `capped` is 1 when that limit is reached), and how late the oldest is. New in v0.9.0. |
+| `gateway_report_generation_outcomes_total` | counter | `category` (`success`, `timeout`, `snapshot_too_large`, `history_unavailable`, `authority_lost`, `other`). New in v0.9.0. |
+| `gateway_report_email_attempts_total` / `gateway_report_email_recipients` | counter / gauge | `outcome` / `state`. Scheduled-report email sends, and the recipients of recent report emails by state. New in v0.9.0. |
+| `gateway_trace_dropped_spans_total`, `gateway_trace_deliveries_total`, `gateway_trace_rejected_spans_total` | counter | `reason` / `outcome` / none. Trace export ([below](#opentelemetry-exports)). New in v0.8.0. |
+| `gateway_otlp_metrics_pushes_total`, `gateway_otlp_metrics_dropped_total`, `gateway_otlp_metrics_rejected_points_total` | counter | `outcome` / `reason` / none. OTLP metrics export. New in v0.9.0. |
+| `gateway_otlp_logs_pushes_total`, `gateway_otlp_logs_dropped_total`, `gateway_otlp_logs_rejected_records_total`, `gateway_otlp_logs_suppressed_total` | counter | `outcome` / `reason` / none / `event`. OTLP operational logs export. New in v0.9.0. |
 
-Counters and most gauges are per replica: `sum` them. `gateway_reservations_held` counts the whole installation, so take the `max` across replicas.
+Counters and most gauges are per replica: `sum` them. `gateway_reservations_held` and the alert, webhook and report gauges count the whole installation and are exported by one replica at a time, so take the `max` across replicas.
 
 ## Alert rules and a dashboard
 
@@ -83,7 +98,7 @@ The repository's `deploy/monitoring/` has:
 - `prometheus-rules.yml`: example alerts for metrics down, 5xx rate, p95 latency, held settlements, growing unknown reservations, a stuck pending floor, budget denials, capacity saturation, upstream failure rate, time to first token, pool saturation, alert-evaluator failures and collector errors (validated with `promtool`; thresholds are starting points);
 - `grafana-dashboard.json`: a Grafana dashboard with overview, HTTP, inference, accounting and internals rows.
 
-From v0.5.0 the `GatewaySettlementHeld` example alert also fires on settlement writes that time out. The example files have no rules yet for the v0.6.0 metrics: add the ones below yourself.
+From v0.5.0 the `GatewaySettlementHeld` example alert also fires on settlement writes that time out. From v0.8.0, `GatewayAlertEmailPersistentFailure` fires when alert email has failed or run out of retries in the last 24 hours, for 15 minutes; send it through a channel other than the gateway's own email. The example files have no rules yet for the v0.6.0 sign-in, egress and audit export metrics: add the ones below yourself.
 
 ## Sign-in, egress and audit export
 
@@ -98,6 +113,21 @@ Starting points for the metrics new in v0.6.0:
 
 The gateway's own database credentials could stop the audit export, so also alert at the receiver, on gaps and on silence. See [Audit export to a SIEM](/docs/self-hosting/audit-export#what-receivers-should-alert-on).
 
+## OpenTelemetry exports
+
+Besides Prometheus scraping, the gateway can push to an OpenTelemetry collector over OTLP/HTTP JSON. Each export is off until you set its URL; see [Configuration](/docs/self-hosting/configuration#telemetry).
+
+| Export | From | What it sends |
+|---|---|---|
+| Traces | v0.8.0 | Spans of Chat Completions, Responses and Messages requests: the request, routing, admission, each upstream attempt and settlement. Only requests admitted in a Team or Project, never personal ones. Embeddings, images, audio, realtime, batches and other jobs aren't traced. |
+| Metrics | v0.9.0 | The Prometheus metrics, every 60 seconds by default. System health only, unless you turn on traffic metrics. |
+| Operational logs | v0.9.0 | Seven fixed events, such as an exporter outage, a refused outbound connection, a lost background lease or a failed background job. |
+
+- **Finding a trace.** Open the request in Logs and copy its **Trace ID**, then search your trace store (such as Grafana Tempo) by it. The id is derived from the request's own id, so a request has one even when it wasn't sampled or its spans were dropped. Personal requests show none.
+- **Nothing waits for the collector.** A full queue drops spans, metrics or log records and counts them; there are no retries or disk spool, and an outage never affects readiness or requests. Each export has its own counters (above): alert on `increase(gateway_trace_dropped_spans_total[15m])`, failed pushes, and on silence at the collector.
+- **Refusals are logged once.** From v0.9.0, when the address policy refuses a collector, the gateway logs one warning without the host when connectivity changes, not on every attempt. `gateway_egress_denied_total{purpose="telemetry"}` still counts every refusal.
+- The audit export's OTLP logs are a separate destination, with separate settings ([Audit export to a SIEM](/docs/self-hosting/audit-export#otlp-logs)).
+
 ## When something fires
 
 - **Held settlements**: the gateway couldn't record a result, or the write took over 3 seconds. Holds are kept, never refunded as zero. Fix the database first; expired holds become unknown, then review unknown usage. During a database failover this is expected: see [Kubernetes](/docs/self-hosting/kubernetes#failover-timing).
@@ -108,4 +138,4 @@ The gateway's own database credentials could stop the audit export, so also aler
 
 ## Logs
 
-The gateway logs JSON to standard error: request ids, methods, status and timing. Never prompts, bodies, query strings or credentials. Don't turn on trace-level logging of the AWS SDK or HTTP clients in production.
+The gateway logs JSON to standard error: request ids, methods, status and timing. Never prompts, bodies, query strings or credentials. With the default filter (`RUST_LOG` unset) only the gateway's own logs appear. Don't turn on debug or trace logging of the AWS SDK or HTTP clients in production (such as `RUST_LOG=debug` or `reqwest=debug`): their own logs name every host and address the gateway connects to.

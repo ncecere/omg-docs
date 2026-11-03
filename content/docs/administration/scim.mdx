@@ -23,7 +23,7 @@ In the identity provider, use HTTP header authentication (`Authorization: Bearer
 
 The subset of SCIM 2.0 that Okta and Microsoft Entra ID use:
 
-- **Users**: list (with one `eq` filter on `userName`, `externalId`, `id` or `emails.value`), create, read, replace, patch, and delete (which deactivates).
+- **Users**: list (with one `eq` filter on `userName`, `externalId`, `id` or `emails.value`), create, read, replace, patch, and delete (which deactivates). From v0.10.0 a filter containing a control character is answered with `400` `invalidFilter`.
 - **Groups**: list (filters on `displayName`, `externalId` or `id`), create, read, replace, patch and delete.
 - `ServiceProviderConfig`, `ResourceTypes` and `Schemas`.
 - Pages of up to 200. No sorting, ETags, bulk operations or passwords.
@@ -53,6 +53,23 @@ SCIM never removes access from the last active Platform Admin. A change that wou
 
 The gateway also records `scim.last_admin_protected` in the audit log and opens a built-in alert, "SCIM tried to remove the last Platform Admin", for Platform Admins and Auditors (emailed to Platform Admins). It clears when a second active Platform Admin exists. Grant Admin to someone else, then let the identity provider retry.
 
+## Authentik
+
+Authentik 2025.10's SCIM provider was run against the gateway (v0.7.1): matching existing users, one pushed group, deactivating and reactivating. It needs three changes from its defaults:
+
+- **Send the email as `userName`.** The default user mapping sends Authentik's username, so an existing account isn't matched and creating the user fails with `409`. Use a custom SCIM user mapping that returns `"userName": request.user.email`.
+- **Push only the groups you map.** The provider's group filter limits users only; Authentik still pushes every group. Use a custom group mapping that skips the others:
+
+  ```python
+  if group.name != "ai-gateway-users":
+      raise SkipObject
+  return {"displayName": group.name}
+  ```
+
+- **Leave out `emails` for reserved test domains** (`.invalid`, `.test`, `.example`): Authentik refuses to send them and stops the whole sync at that account.
+
+Authentik's dry-run mode shows the requests it would send before you turn it on.
+
 ## Status of this feature
 
-SCIM is tested with local requests. It has not yet been accepted against a real Okta or Entra tenant: try it in a test tenant first.
+SCIM is tested with local requests and has been accepted against Authentik. It has not yet been accepted against a real Okta or Entra tenant: try it in a test tenant first.

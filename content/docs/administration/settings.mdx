@@ -1,26 +1,28 @@
 ---
 title: Settings
-description: Installation settings in Admin, for general settings, defaults and limits, data and privacy (including file storage), email, alerts, audit export and sign-in.
+description: Installation settings in Admin, for general settings, defaults and limits, data and privacy (including file storage), email, alerts and webhooks, audit export, sign-in and admin API tokens.
 ---
 
 **Admin › Settings** holds installation-wide settings. Platform Admins change them; Auditors read them. Every change is written to the [audit log](/docs/administration/audit-log), with typed details only, never addresses, URLs or credentials.
 
 | Page | Holds |
 |---|---|
-| **General** | Name, support URL, logo URL, maximum lifetime of people's keys |
-| **Defaults & limits** | The installation ceiling and the Personal, Team and Project defaults; see [Limits and budgets](/docs/administration/limits-and-budgets) |
+| **General** | Name, support URL, logo, maximum lifetime of people's keys |
+| **Defaults & limits** | The Personal, Team and Project defaults (there are no installation-wide limits); see [Limits and budgets](/docs/administration/limits-and-budgets) |
 | **Data & privacy** | OpenRouter data collection, request log retention, prompt storage, and the file store |
-| **Email** | The SMTP relay for invitations and alerts |
-| **Alerts** | Installation rules and history, including **Installation spend** (a non-blocking notification on total spend) and **Admission ceiling**; see [Alerts](/docs/administration/alerts) |
+| **Email** | The SMTP relay for invitations, alerts and scheduled reports |
+| **Alerts** | Installation rules, their history, and signed **Webhooks** (from v0.9.0); see [Alerts](/docs/administration/alerts) |
 | **Audit export** | Read-only status of the audit log's stream to your SIEM, and a test delivery |
 | **Sign-in** | Read-only identity configuration, signing-key status and SCIM status |
+| **Admin API tokens** | Credentials for scripts that call the management API (from v0.8.0); see [Admin API tokens](/docs/administration/admin-api-tokens). Platform Admins only. |
 
 ## General
 
 <Screenshot slot="admin-settings-general" />
 
 - **Display name**: 1 to 120 characters, shown as the installation's name in the sidebar.
-- **Support URL** and **logo URL**: optional `https://` addresses shown to signed-in users. The gateway never fetches them.
+- **Support URL**: an optional `https://` address shown to signed-in users, without credentials or fragment. The gateway never fetches it. From v0.10.0 its 2,048-character limit applies to the stored, percent-encoded form: an address with non-ASCII characters can be refused even when it looks shorter, and one that normalizes to 2,048 characters or fewer is accepted.
+- **Logo**: upload a PNG, JPEG or WebP image, up to 512 KiB and 16 to 4,096 pixels a side (square and at least 64 pixels is best; SVG is never accepted). It replaces the Open Model Gateway mark in the sidebar and on the sign-in page. It's kept in the encrypted [file store](/docs/self-hosting/file-storage), so the store must be configured. The older external logo URL is no longer shown.
 - **Maximum key lifetime**: 1 to 365 days (365 by default) for keys people create or rotate for themselves. Existing keys keep their expiry. Service-account keys can always last up to 365 days.
 - **Time zone**: UTC, fixed. Budget windows, reports and dates all use UTC.
 
@@ -61,7 +63,7 @@ Below it, one row per kind of file, with whether it is **Allowed**, how long to 
 
 <Screenshot slot="admin-settings-email" />
 
-An SMTP relay sends invitation codes and alert emails. Without one, workspace admins send invite codes themselves, and alerts appear in the dashboard only. Turning **Send email** off clears the relay settings.
+An SMTP relay sends invitation codes, alert emails and scheduled-report links. Without one, workspace admins send invite codes themselves, alerts appear in the dashboard only, and scheduled reports aren't emailed. Turning **Send email** off clears the relay settings.
 
 | Field | Notes |
 |---|---|
@@ -79,9 +81,9 @@ The status reads:
 | **Password unavailable** | The password's variable is unset, or isn't on `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`. |
 | **Ready** | Email can be sent. |
 
-**Send test email** sends a fixed message to your own verified address and reports a category on failure (host not allowed, credential, address, connection, TLS, authentication, rejected, timeout). It is limited to 2 a minute per admin and 20 an hour for the installation.
+**Send test email** sends a fixed message to your own verified address and reports a category on failure (host not allowed, credential, address, connection, TLS, authentication, rejected, timeout). It is limited to 2 a minute per admin and 20 an hour for the installation. From v0.10.0, a test to a relay the operator hasn't approved is recorded as a failed test, **host not allowed**, instead of being refused.
 
-Each message uses its own connection, with no retries. Message bodies and recipients are never logged. Invitation emails contain the code, not a link with the code; they point people to `/invitations/accept` when the public URL is configured.
+Invitation emails and tests use one connection per message, with no retries. From v0.8.0, alert and scheduled-report emails are retried on temporary failures, up to five times in 24 hours ([Alerts](/docs/administration/alerts#email)). Message bodies and recipients are never logged. Invitation emails contain the code, not a link with the code; they point people to `/invitations/accept` when the public URL is configured.
 
 ## Audit export
 

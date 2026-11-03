@@ -1,6 +1,6 @@
 ---
 title: Messages
-description: POST /v1/messages, the text and tool subset of Anthropic's Messages API, for Anthropic and Amazon Bedrock routes.
+description: POST /v1/messages, the supported subset of Anthropic's Messages API, including the fields Claude Code sends, natively on Anthropic and translated on other providers.
 ---
 
 ```http
@@ -18,40 +18,65 @@ x-api-key: omg_...
 }
 ```
 
-Messages is served by models whose route is on an **Anthropic** or **Amazon Bedrock** connection. Point the Anthropic SDK at the gateway's address (without `/v1`); it sends the right version header.
+Messages is served by text models that include the Messages protocol. Point the Anthropic SDK, or Claude Code, at the gateway's address without `/v1` (the SDK adds `/v1/messages`); it sends the right version header. When inference has its own host, the key and model pages show the exact Anthropic base to use. `/v1/messages?beta=true`, as Claude Code sends, is the same endpoint.
+
+| Route on | How it's served |
+|---|---|
+| Anthropic | Natively: the request's validated blocks, signatures and supported options are passed through. |
+| Amazon Bedrock | Through Converse. |
+| OpenAI, OpenRouter, OpenAI-compatible, vLLM, SGLang, Ollama | From v0.9.0, translated to Chat Completions. Anthropic-only options are checked, then dropped or refused (below). |
 
 ## Headers
 
-- `anthropic-version` must be exactly `2023-06-01`. Beta headers (`anthropic-beta`) are refused.
+- `anthropic-version` must be exactly `2023-06-01`, sent once.
 - Authenticate with `x-api-key` **or** `Authorization: Bearer`, not both.
+- `anthropic-beta`: from v0.9.0, beta names are accepted, and forwarded unchanged on Anthropic routes only (never to other providers). Names starting with `context-1m-`, `code-execution-`, `web-search-`, `web-fetch-`, `computer-use-`, `files-api-` or `mcp-client-` are refused with `400` and Anthropic's own message, `Unexpected value(s) … for the anthropic-beta header`, so Claude Code retries without them. At most 16 header values and 32 names. Accepting a beta name doesn't enable any field this page refuses. Before v0.9.0 every beta header was refused.
+
+To stop Claude Code sending experimental betas at all, set `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` where Claude Code runs.
 
 ## Request fields
 
-| Field | Supported |
-|---|---|
-| `model`, `messages` | Required. Text content and text blocks; assistant `tool_use` with object input; user `tool_result` with text. |
-| `max_tokens` | Required, positive. |
-| `system` | Supported. |
-| `temperature` | 0 to 1. |
-| `stream` | Supported (see below). |
-| `tools`, `tool_choice` | Supported: `auto`, `none`, `any` or a named tool, within each provider's limits. |
-| `metadata.user_id` | A [Logs label](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only. Other `metadata` fields are refused. |
+| Field | Anthropic | Other providers |
+|---|---|---|
+| `model`, `messages` | Required. Text, tool use and tool results; order kept. | Required. Text is joined per message. |
+| `max_tokens` | Required, positive. | Required. |
+| `system` | A string or text blocks, kept as sent. | Kept as text. |
+| `temperature` (0 to 1), `top_p` (0 to 1), `stop_sequences` | Supported. | Mapped. |
+| `top_k` | Supported. | Refused (`400`). |
+| `stream` | Supported (below). | Supported. |
+| `tools`, `tool_choice` | `auto`, `none`, `any` or a named tool. | Within each provider's limits. |
+| `tool_result` without `content` | Read as empty text (from v0.7.2). | The same. |
+| `tool_result.is_error` | Kept as sent (from v0.9.0). | `false` accepted; `true` is `501`. |
+| `metadata.user_id` | A [Logs label](/docs/using/calling-the-api#label-sessions-and-apps-for-logs) only, up to 256 characters; never forwarded. | The same. |
+| `cache_control` on system, message, tool and tool-result blocks; `ttl` `5m` or `1h` | Forwarded, if the price covers it ([below](#prompt-caching)). | Checked, then dropped. |
+| `thinking` (`adaptive`, `enabled` with `budget_tokens`, `disabled`) | Forwarded. `budget_tokens` must be at least 1,024 and below `max_tokens`. | Checked, then dropped. |
+| Earlier `thinking` and `redacted_thinking` blocks | Kept exactly, with their signatures. | Removed. |
+| `output_config.effort`, `output_config.task_budget`, `context_management.edits`, tool `defer_loading` | Forwarded. | Checked, then dropped. |
+| Images, in messages or tool results | Base64 PNG, JPEG, GIF or WebP, up to 5 MiB each decoded and 20 per request (within the 2 MiB request body). URL sources are refused. | Refused (`400`). |
 
-Refused: extended thinking, images and audio, cache-control settings, tool results marked as errors, and unknown fields. The gateway accounts for prompt caching when the provider reports it, but you can't ask for caching through it.
+From v0.9.0, refused on every route: structured output (`output_config.format`), `strict` on tools, server tools such as web search or code execution (their extra charges aren't priced), `tool_choice.disable_parallel_tool_use`, and unknown fields, including nested ones and unknown fields set to `null`. Errors name the field. Before v0.9.0, thinking, images, cache settings and tool results marked as errors were refused everywhere.
+
+### Prompt caching
+
+On Anthropic routes, a request with `cache_control` hints needs its route's price to state **cache read tokens** and the cache write for each time-to-live it asks for (5 minutes by default, or 1 hour). Otherwise it's refused with `400` naming `cache_control`, before anything is held or sent, even without a budget. Ask an administrator to publish such a price ([Pricing](/docs/administration/pricing#prompt-caching-on-anthropic-routes)). Batch lines with cache hints run gateway-side rather than as a native Message Batch.
+
+The gateway always accounts for prompt caching when the provider reports it.
 
 ## Streaming
 
-`"stream": true` works with the SDK's stream helpers. From v0.5.0, text streams as it is generated:
+`"stream": true` works with the SDK's stream helpers. Text streams as it is generated (from v0.5.0):
 
 1. `message_start` is sent as soon as the upstream stream opens, before any usage is known. Its `usage` is the placeholder `{"input_tokens": 0}`.
-2. Text is sent as `text_delta` events in content block 0 as it arrives.
+2. Text is sent as `text_delta` events as it arrives. On Anthropic routes, thinking blocks and their signatures stream too (from v0.9.0).
 3. Tool calls are sent whole, as `tool_use` blocks, after the text.
 4. `message_delta` carries the observed usage: input tokens, cache counts and output tokens. The Anthropic SDKs apply it. `message_stop` follows.
 
-Read usage from `message_delta`, not `message_start`: a client that reads only `message_start` sees 0 input tokens. If the provider never reports input tokens, the placeholder 0 is all a client gets; the gateway itself records the count as unknown, not zero. Other counts that weren't reported are left out. The output is still limited to 4 MiB, and an error before completion sends only an `error` event.
+Read usage from `message_delta`, not `message_start`: a client that reads only `message_start` sees 0 input tokens. If the provider never reports input tokens, the placeholder 0 is all a client gets; the gateway itself records the count as unknown, not zero. Other counts that weren't reported are left out. The output is limited to 16 MiB (4 MiB before v0.9.0), and an error before completion sends only an `error` event.
 
-Before v0.5.0, the gateway collected the whole response first, and `message_start` carried the input and cache counts.
+## Stop reasons
+
+From v0.7.1, Anthropic's `refusal` and `model_context_window_exceeded` stop reasons are passed through as they are, in JSON and streams, even for an empty refusal. The same response on Chat Completions reads `content_filter` and `length`.
 
 ## Amazon Bedrock
 
-On Bedrock routes the request goes through Converse: system messages only at the start, no assistant prefill, function tools with object schemas (no strict mode), and `tool_choice: none` is refused. Tool results are passed as text exactly as sent.
+On Bedrock routes the request goes through Converse: system messages only at the start, no assistant prefill, function tools with object schemas (no strict mode), and `tool_choice: none` is refused. Tool results are passed as text exactly as sent. From v0.7.2, a request Bedrock or Anthropic would always reject is refused before it takes a budget hold.

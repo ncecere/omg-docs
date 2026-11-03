@@ -1,0 +1,94 @@
+---
+title: v0.10.0
+description: OpenAPI 3.1 documents for the whole management API and the supported inference API, checked against the real gateway, clearer 400 errors for bad input, and the provider-reported cost reconciliation dashboard.
+---
+
+Released 2026-11-02. Migration `0068`.
+
+This release publishes OpenAPI 3.1 documents for the management API and the supported inference API, each checked against the running gateway. Input that used to come back as a `5xx` or an undocumented `409` now gets a clear `400`, or a recorded result. Admin **Usage & costs** gains the provider-reported cost reconciliation dashboard.
+
+## OpenAPI documents
+
+Two documents are in the repository at `docs/openapi/`:
+
+- **[Management API](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/openapi/management.openapi.json)**: every management route (251 operations), generated from the gateway's route policies, with each route's access rules, admin-token scopes and error responses. Every documented response is checked against real responses, and request limits are tested over HTTP against a running gateway.
+- **[Inference API](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/openapi/inference.openapi.json)**: the supported inference subset (27 operations): models, embeddings, rerank, System One, images, Chat Completions, Responses and Messages (JSON and streaming, tools, usage and refusals), audio, files, batches, the legacy videos route and the realtime WebSocket. The documented examples are replayed through the official OpenAI and Anthropic SDKs. Each protocol keeps its own error format.
+
+**Integers must be JSON integer literals.** Request integers can't have a fraction, an exponent or be `-0` (pagination `offset` accepts `-0` as zero). JSON Schema can't express this, so both documents declare `x-omg-integer-encoding: "json-integer-literal"`; a generic validator accepts `1.0`, but the gateway refuses it. Rules like this that a schema can't state are described in each operation and in the `x-omg-*` extensions, which SDK generators don't use.
+
+See [Management API](/docs/api/management-api) and the [API reference](/docs/api).
+
+## Provider-reported cost reconciliation dashboard
+
+[v0.9.0](/docs/releases/v0-9-0#provider-reported-cost-reconciliation-api-only)'s API-only reconciliation now has a dashboard: **Admin › Usage & costs › Provider reconciliation**. Platform Admins and Auditors see the frozen comparisons between provider-reported costs and the gateway's configured-rate estimates, and Platform Admins upload Anthropic Cost Report JSON and manage mappings with **Upload & manage**. It compares provider-reported costs; it isn't a verified invoice or a complete balance due. See [Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers).
+
+## Clearer errors for bad input
+
+- **Control characters** now return `400` instead of a `5xx`: in list searches (`q`) and the file search, in SSO group mapping issuers (which also refuse whitespace), in model and catalog descriptions (tab, line feed and carriage return are still allowed), and in SCIM list filters (answered with `invalidFilter`). A groups claim from the identity provider that contains a control character is refused like any malformed claim (sign-in `403`).
+- **Testing email against a relay that isn't allowed** records a failed test with `host_not_allowed`, instead of answering `409`. This needs migration `0068`.
+- **Support and logo URLs** in settings: the 2,048-character limit applies to the stored, percent-encoded form (`400` when longer), so a path with multibyte characters no longer fails with `409`.
+- **List cursors** (logs, sessions, holds, route history) outside PostgreSQL's date range return `400` instead of `503`.
+- **Manual cost reconciliation** of a hold refuses incoherent token usage, and output tokens on an embeddings or rerank hold, with `400` instead of `503`. The hold is unchanged.
+- **Report runs** read the clock once, so a run's `expired` and its snapshot always agree at the expiry moment.
+- **`/v1/embeddings`** answers a streamed body over the size limit with OpenAI's `payload_too_large` error. A declared `Content-Length` over the limit is still refused with a plain-text `413` on every route.
+
+## Before you upgrade
+
+- **SSO group mappings with a control character or whitespace in the issuer** can no longer be updated until you correct the issuer. You can still delete them. See [SSO groups](/docs/administration/sso-groups).
+- **A catalog whose description has a control character** other than tab, line feed or carriage return must have it corrected on its next update. See [Catalogs](/docs/administration/catalogs).
+- **Settings URLs** that normalize to 2,048 characters or fewer are accepted even when what you typed was longer (dot segments, default ports).
+
+## Upgrade guide
+
+One migration, `0068`, widens the recorded email-test error to the same categories as alert email. It rewrites no data and adds no runtime grants.
+
+<Steps>
+<Step>
+
+### Back up
+
+Back up with `scripts/backup.py` and run `verify`.
+
+</Step>
+<Step>
+
+### Stop every replica
+
+Mixed-schema replicas are not supported.
+
+</Step>
+<Step>
+
+### Migrate
+
+As the migrator, run `open-model-gateway migrate`. There are no grant changes, but running `grants apply` and `grants verify` does no harm.
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new replicas by digest and wait for `/health/ready` to report `schema: ok`.
+
+</Step>
+</Steps>
+
+With Helm, upgrade the image and chart with `--set migrations.run=true`. See [Upgrades](/docs/self-hosting/upgrades). Coming from an earlier release, first follow the [v0.9.3 upgrade guide](/docs/releases/v0-9-3#upgrade-guide) and the guides it links.
+
+## Also in this release
+
+- **Personal workspaces and admins.** The rule is now stated and tested: Platform Admins and Auditors see a personal workspace's usage and cost totals only, never its keys or request details.
+- **Realtime** uses tokio-tungstenite 0.30 for its upstream WebSocket.
+- **Dependencies:** hyper 1.12.0, tokio 1.54.1 and webpki-roots 1.0.11; Node 22.23.4 and a refreshed Rust 1.99.1 build image. The SDK tests use `openai` 7.45.0.
+
+## Known limitations
+
+- **Current Anthropic SDKs are refused by `/v1/messages`.** It accepts only `anthropic-version: 2023-06-01`. The newest major Anthropic SDKs (for example `@anthropic-ai/sdk` 1.0 and Python `anthropic` 2.0) send API version 2026-10-21 by default. Pin an earlier SDK, or set the `anthropic-version` header to `2023-06-01`. See [Messages](/docs/api/messages).
+- The OpenAPI documents are in the repository; publishing them on a site is separate.
+- Provider-reported cost reconciliation reads Anthropic Cost Report JSON only, uploaded by hand.
+- Content guardrails are designed but not built, sign-out started by the identity provider isn't implemented, and the Helm chart is still **beta**.
+- Independent security review, steady-load stalls and certified capacity are still open. SCIM is tested with Authentik only.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.10.0@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.10.0) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

@@ -1,0 +1,105 @@
+---
+title: v0.7.0
+description: An assurance release. Gateway-owned names are refused on the credential allowlists, management denials are checked before the body, every route has an explicit policy, and key and model pages can show a separate inference host.
+---
+
+Released 2026-10-21. No migrations.
+
+This release tightens boundaries rather than adding features. Every management route now has an explicit authorization policy. Gateway-owned variable names can no longer be used as provider or SMTP credentials. Local endpoint approvals, model names and provider job ids get stricter checks. Image publication is separated from verification. The work was prompted by incidents in other projects; it isn't evidence of a compromise of Open Model Gateway, and it isn't an independent security certification.
+
+Read [Before you upgrade](#before-you-upgrade) first: a misconfigured allowlist or local approval now stops startup.
+
+## A separate inference host
+
+If you publish inference on a different host from the dashboard, set `GATEWAY_INFERENCE_BASE_URL` (Helm `gateway.inferenceBaseUrl`), for example `https://api.example.edu/v1`. It must be an absolute HTTPS URL ending in `/v1`, with no credentials, query or fragment; plain HTTP is allowed only on loopback in development. When it's unset, pages use the browser's current origin plus `/v1`.
+
+Key and model pages then show separate copyable base URLs for OpenAI-compatible clients and for Anthropic SDKs (without the final `/v1`, since the SDK adds `/v1/messages`). Realtime shows a `wss://` address, and Files and Batches have their own copies.
+
+The setting only changes what the dashboard displays: it doesn't configure ingress or routing. Keep `GATEWAY_PUBLIC_URL` on the dashboard's origin for sign-in. See [Calling the API](/docs/using/calling-the-api) and [Configuration](/docs/self-hosting/configuration).
+
+## Explicit route policies
+
+Every route the gateway serves now has its own authorization policy, matched by exact method and path, never by prefix. A management route without a declared policy is refused even to Platform Admins. Handlers still make their own live checks, and authorization now happens before the request body is read, which changes some denial codes (below). See [Management API](/docs/api/management-api).
+
+## Before you upgrade
+
+### Reserved names on the credential allowlists stop startup
+
+`GATEWAY_SECRET_ENV_ALLOWLIST` (providers) and `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST` (SMTP) now refuse names the gateway owns, even if you list them:
+
+- `DATABASE_URL`, `DATABASE_URL_FILE`, every `GATEWAY_*` and `AWS_*` name, the PostgreSQL client `PG*` variables, `OTEL_*`, and `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` (in either case).
+- The variables the gateway's own secret pointers select: `GATEWAY_SCIM_TOKEN_ENV`, `GATEWAY_S3_ACCESS_KEY_ID_ENV`, `GATEWAY_S3_SECRET_ACCESS_KEY_ENV`, `GATEWAY_FILE_ENCRYPTION_KEYS_ENV`, `GATEWAY_AUDIT_WEBHOOK_SECRET_ENV` and `GATEWAY_AUDIT_OTLP_HEADERS_ENV`.
+
+The two lists must still have no name in common. The startup error names the setting and entry, never a secret value.
+
+**What to do:** check the names (not the values) on both lists before rolling out. Remove reserved entries, give providers and SMTP their own dedicated variables, and update the connections or SMTP password reference that used them. Don't copy a gateway secret into a provider variable to get around the refusal.
+
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` stay allowed on the provider list (never the SMTP list), with a startup warning: a custom-endpoint connection that references them receives that credential. Prefer dedicated variables. See [Provider credentials](/docs/self-hosting/provider-credentials).
+
+### Management denial codes change
+
+Clients and scripts that check status codes may see:
+
+- A workspace member who isn't an admin, rotating someone else's key: `404` in every state (was `403` for an active key). Workspace admins get `403`, now also for a disabled key (was `key_disabled`).
+- Auditors who aren't members of a workspace: `403` instead of `404` on its key-policy routes.
+- Non-admins calling a Platform-Admin-only workspace action: `403` before the workspace is looked up.
+- Malformed workspace or key ids in a management path: `404`.
+
+None of these grants more access.
+
+### Local endpoints, model names and provider ids
+
+- **Local endpoint approvals.** An HTTPS approval in `GATEWAY_LOCAL_UPSTREAMS` that uses a 6to4 or Teredo IPv6 address is now judged by the IPv4 address inside it: metadata and link-local addresses are refused, and loopback works only with `GATEWAY_ENV=development`. An approval that fails this check stops startup, so check the setting before you roll out.
+- **Model names.** A model name with control characters (including NUL), or longer than the 2,704-byte stored limit, returns `404 model_not_found` instead of a `503`. Other names still match exactly.
+- **Provider job and file ids** made only of dots, such as `.` and `..`, are refused. Ids with dots inside them still work.
+
+## Upgrade guide
+
+No migrations and no new runtime grants: the schema still ends at `0048`.
+
+<Steps>
+<Step>
+
+### Back up
+
+Record the running image digest and configuration, and take a backup you have verified.
+
+</Step>
+<Step>
+
+### Fix the allowlists and approvals
+
+Resolve the [credential allowlist](#reserved-names-on-the-credential-allowlists-stop-startup) and [local approval](#local-endpoints-model-names-and-provider-ids) changes, and review automation that depends on management denial codes.
+
+</Step>
+<Step>
+
+### Roll the image
+
+Deploy the new image by digest. There's no `migrate` or `grants apply` to run, though deployment automation may still check the schema and grants.
+
+</Step>
+<Step>
+
+### Check
+
+Wait for `/health/ready`, then check sign-in, the expected denials and your integrations.
+
+</Step>
+</Steps>
+
+Coming from a release before v0.6.0, first follow the [v0.6.0 upgrade guide](/docs/releases/v0-6-0#upgrade-guide).
+
+## Also in this release
+
+- **Image publication is isolated.** Native amd64 and arm64 builds push by digest; read-only jobs then pull each exact digest for version, staging and vulnerability checks, and only then is it tagged and signed. Tools downloaded in CI are checksum-verified. The image, signature, SBOM and provenance are unchanged.
+- **Inference steering tests.** Request bodies, headers and model strings are tested against approved and hostile mock upstreams; no way was found for a client to choose the upstream destination or credential.
+- **Your profile › Your data** spaces its date fields and download button consistently.
+
+## Known limitations
+
+Unchanged from [v0.6.0](/docs/releases/v0-6-0#known-limitations): independent security review, live SCIM acceptance, steady-load stalls and the second write outage after a two-instance failover are open; there's no certified capacity number. Guardrails are designed but not built, sign-out started by the identity provider isn't implemented, and the Helm chart is still **beta**. This release adds no provider capabilities.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.7.0@sha256:341d104ccb90e5fcda58856240b3b38413bfb0299dfcca532b67302592b200d3`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.7.0) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

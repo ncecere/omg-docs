@@ -13,7 +13,7 @@ description: Map identity-provider groups to platform roles and to Team or Proje
 
 | Field | Meaning |
 |---|---|
-| **OIDC issuer** | Your identity provider's issuer, as configured on the server. |
+| **OIDC issuer** | Your identity provider's issuer, as configured on the server. From v0.10.0 it can't contain whitespace or control characters; an existing mapping whose issuer does can't be updated until you correct it, but can still be deleted. |
 | **Verified group-claim value** | The group exactly as it appears in the token's groups claim, for example `ai-gateway-users`. |
 | **Mapping target** | **Platform role** or **Team or Project membership**. |
 | **Platform role** | For a platform target: Platform user, Platform auditor or Platform admin. |
@@ -33,8 +33,20 @@ Example mappings for Example University:
 - **At sign-in.** The groups claim is read from the signature-checked ID token each time someone signs in. New matches add grants; grants from groups the person has left are removed.
 - **Separate from manual access.** A grant from a group is recorded as such. Removing it never touches a manual grant or membership for the same person, and a manual grant doesn't stop a group grant from being removed.
 - **Missing or malformed claims fail safe.** An empty list (`[]`) is a valid "no groups". A missing or malformed claim refuses the sign-in without removing anything.
-- **Editing or deleting a mapping** removes the grants it made, at once. New grants from a changed mapping arrive when people next sign in (or at the next SCIM change to that group).
+- **Editing or deleting a mapping** removes the grants it made, at once, even if the new definition would give them back. Removing a Team or Project membership this way also revokes the person's keys there, for good. New grants from a changed mapping arrive when people next sign in (or at the next SCIM change to that group).
 - The last Platform Admin's grant is protected: a change that would remove it is refused.
+
+## Review changes
+
+From v0.9.0, creating, editing or deleting a mapping first shows **Review changes**, a dry run of what it would do, using the same matching as the real change:
+
+- **Applied immediately, not at next sign-in**: grants revoked the moment you save (**Platform role revoked now**, **Workspace membership revoked now**), and anyone who would be suspended because it was their last platform role.
+- **Gained / lost at next sign-in**: the change in people's effective roles once sign-in or SCIM catches up (**Platform role gained** or **lost**, **Workspace membership gained** or **lost**). Someone who keeps the same role through another grant isn't listed.
+- A change that would leave no active Platform Admin is flagged: the real request would be refused.
+
+Lists show up to 200 people each and say when they're truncated; a very large roster gives an **Incomplete preview**. If the mapping changed after you reviewed it, saving is refused (`412`) instead of acting on an out-of-date review. Nothing is written until you confirm. Platform Admins only, in the dashboard.
+
+<Screenshot slot="admin-sso-mapping-review" />
 
 <Callout type="warn" title="Without SCIM, removals wait for sign-in">
   Group changes reach the gateway when the person signs in. Someone removed from a group who never signs in again keeps their access until they do. Use [SCIM](/docs/administration/scim) to push changes as they happen, or suspend people by hand.

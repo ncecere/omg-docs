@@ -1,27 +1,46 @@
 ---
 title: Alerts and notifications
-description: Budget, spend-spike, error-rate and batch alerts for a workspace, built-in personal budget alerts, the notification bell and email.
+description: Budget, spend-spike, error-rate and batch alerts for a workspace, built-in personal budget alerts, key-expiry reminders, aged-hold alerts, the notification bell and email.
 ---
 
-Alerts tell people when a budget fills up, spend jumps, requests start failing or a batch fails or stalls. They only notify: a budget is enforced whether or not an alert exists.
+Alerts tell people when a budget fills up, spend jumps, requests start failing, a batch fails or stalls, a key is about to expire or a cost has stayed unknown too long. They only notify: a budget is enforced whether or not an alert exists.
 
 ## Notifications
 
-The bell in the top bar shows how many alerts are unread. **Notifications** lists your alerts from the last 90 days, newest first, with **Unread**, **Firing** and **Resolved** filters, and marks them read for you only.
+The bell in the top bar shows how many alerts are unread. **Notifications** lists your alerts from the last 90 days, newest first. **Show** switches between **All** and **Unread**, and **Mark all read** marks them read for you only.
 
 <Screenshot slot="notifications" />
+
+Each row's menu has **Mark as read** and, depending on the alert, **Open rule** (for workspace admins), **Open keys** (a key-expiry reminder) or **Open holds** (an aged-hold alert).
 
 You see an alert when you are allowed to see its subject right now:
 
 - workspace alerts, if you are an owner or admin of that Team or Project;
 - installation alerts, if you are a Platform Admin or Auditor;
-- your personal workspace's budget alerts, if it is yours.
+- your personal workspace's budget alerts, if it is yours;
+- key-expiry reminders, if you are one of their recipients (below).
 
 If you lose a role, its alerts leave your list.
 
 ## Personal workspaces
 
-Every personal workspace has built-in budget alerts at **80%** and **100%** of each budget that applies to it. They can't be changed, and nobody but the owner sees them, Platform Admins included. They are emailed to the owner when email is set up.
+Every personal workspace has built-in budget alerts at **80%** and **100%** of each budget that applies to it. They can't be changed, and nobody but the owner sees them, Platform Admins included. They are emailed to the owner when email is set up. The personal workspace's **Settings › Alerts** shows them and their history.
+
+## Key-expiry reminders
+
+Every active key with an expiry gets two built-in reminders: when it expires within 7 days and again within 1 day. A key first seen inside the last day gets only the second one. Rotating a key, or changing its expiry, starts over with the new expiry.
+
+| Key | Who is reminded |
+|---|---|
+| A personal workspace's key | Its owner only |
+| Your own key in a Team or Project | You, plus the workspace's current owners and admins |
+| A service account's key | The workspace's current owners and admins |
+
+Reminders appear in Notifications and are emailed when email is set up. They never name or identify the key: **Open keys** opens the workspace's key list. Disabled, revoked and already expired keys get no reminders. See [Expiry](/docs/using/api-keys#expiry).
+
+## Aged unknown holds
+
+When a request's cost has been unknown for **24 hours**, money stays on hold for it (see [Holds](/docs/using/usage-and-costs#holds)). A built-in alert then fires for the Team or Project, and turns critical at **7 days**. Its owners and admins see it in Notifications, with **Open holds**; it is emailed to Platform Admins only, who can resolve the holds. Members and personal owners get no alert, but see their own holds on the **Holds** tab.
 
 ## Workspace alert rules
 
@@ -29,15 +48,15 @@ Owners and admins of a Team or Project manage rules in **Settings › Alerts**. 
 
 | Kind | Fires when |
 |---|---|
-| **Budget threshold** | Spend in a budget's current window reaches one of up to five percentages (50%, 80% and 100% by default). Choose which layers to watch: the type default or override, the workspace's own budgets, and each key's. |
-
-Platform Admins have two more kinds, installation only: **Installation spend** (a non-blocking notification on total spend across every workspace) and **Admission ceiling** (one workspace or key nearing the request rate a single scope can sustain). See [Alerts](/docs/administration/alerts).
+| **Budget** | Spend in a budget's current window reaches one of up to five percentages (50%, 80% and 100% by default). Choose which layers to watch: the type default or override, the workspace's own budgets, and each key's. |
 | **Spend spike** | Spend in the last hour is at least a chosen multiple of the hourly average over the 7 days before, and above a minimum amount. |
 | **Error rate** | The share of failed requests in a window (5 to 1,440 minutes) reaches a percentage, with at least a minimum number of finished requests. |
 | **Batch failed** | A batch ended failed or expired. One alert per batch, closed 24 hours later. |
 | **Batch stalled** | An unfinished batch made no progress for a chosen time (5 to 1,440 minutes). Time spent waiting for capacity on its routes doesn't count. |
 
 <Screenshot slot="workspace-alerts" />
+
+Platform Admins have three more kinds, for the installation only: **Installation spend** (a non-blocking notification on total spend across every workspace), **Failing connection** and **Admission ceiling** (one workspace or key nearing the request rate a single scope can sustain). See [Alerts](/docs/administration/alerts).
 
 ## How alerts behave
 
@@ -49,4 +68,7 @@ Platform Admins have two more kinds, installation only: **Installation spend** (
 
 ## Email
 
-When a Platform Admin has set up email, alerts are emailed when they fire and when they clear. People whose accounts are disabled get nothing. If email isn't set up, alerts still appear in Notifications.
+When a Platform Admin has set up email, alerts are emailed when they fire and when they clear (key-expiry reminders and aged-hold alerts only when they fire). People whose accounts are disabled get nothing. If email isn't set up, alerts still appear in Notifications.
+
+- **Retries.** If the mail server can't be reached or fails temporarily, each recipient is retried, up to 5 attempts within 24 hours. **History**, under **Settings › Alerts**, shows each alert's email as **Waiting**, **Retrying**, **Sent**, **Partly sent**, **Exhausted** or **Failed**, with the next attempt's time.
+- **A daily limit per workspace.** Each workspace can send at most 100 alert emails in a rolling 24 hours, counting each alert firing and each clearing; urgent alerts count too. Over the limit, the alert still appears in Notifications and History, which show its email as **Not emailed — workspace notification limit**.

@@ -9,6 +9,8 @@ It works with models whose route is on an OpenAI connection. Other providers ret
 
 ## Connect
 
+The realtime model's page shows the full **Endpoint** to connect to, with `wss://` and your installation's inference address (which may differ from the dashboard's; see [the base URL](/docs/using/calling-the-api#the-base-url)).
+
 ```js
 // Server side (Node): the key in the Authorization header.
 import WebSocket from "ws";

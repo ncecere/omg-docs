@@ -28,8 +28,10 @@ Open a model to see:
 
 - **API model name**: the name to send as `model`, with a copy button.
 - **Type**, the protocols it serves and its **input price** and **output price** per million tokens (or per image, per character or per second, depending on the type).
-- **How to call it**: the headers and body for a request with a key from this workspace, and what isn't supported: anything not listed is refused, never silently dropped.
+- **How to call it**: the **OpenAI-compatible base URL** and **Anthropic SDK base URL** to use with a key from this workspace, then, for each protocol the model serves, the full **Endpoint** address (and a **Files endpoint** for batch models), the headers, the body, the key parameters and what isn't supported: anything not listed is refused, never silently dropped. See [Calling the API](/docs/using/calling-the-api).
 - **Usage**: your requests with this model, or the whole workspace's if you are an admin. **Requests with this model** opens them in [Logs](/docs/using/logs).
+
+<Screenshot slot="model-how-to-call" />
 
 Prices are the configured estimates the gateway uses for budgets and reports, not provider invoices. "Unknown" means no price is set: requests still run (unless a budget applies), but their cost is recorded as unknown, not as free.
 

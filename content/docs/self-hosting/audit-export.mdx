@@ -17,7 +17,7 @@ Each event's `metadata` holds only the audit log's safe fields: flags, counts an
 
 ## Choose a transport
 
-There is one destination at a time: set exactly one of the three URLs. Setting two, or `off` in one and a destination in another, stops startup. All three follow the [outbound address policy](/docs/self-hosting/security#the-outbound-address-policy), use no proxy, follow no redirects and time out after 10 seconds. Every variable is listed in [Configuration](/docs/self-hosting/configuration#audit-export).
+There is one destination at a time: set exactly one of the three URLs. Setting two, or `off` in one and a destination in another, stops startup. All three follow the [outbound address policy](/docs/self-hosting/security#the-outbound-address-policy), use no proxy, follow no redirects and time out after 10 seconds. Plain HTTP (webhook and OTLP) is allowed only with `GATEWAY_ENV=development`, and from v0.9.0 only when every address the name resolves to is loopback. Every variable is listed in [Configuration](/docs/self-hosting/configuration#audit-export).
 
 | | Webhook | Syslog over TLS | OTLP logs |
 |---|---|---|---|
@@ -34,7 +34,7 @@ GATEWAY_AUDIT_WEBHOOK_SECRET_ENV=AUDIT_WEBHOOK_SECRET
 AUDIT_WEBHOOK_SECRET=$(openssl rand -hex 32)
 ```
 
-The secret must be at least 32 bytes. Its variable's name must be upper case, and must not be on `GATEWAY_SECRET_ENV_ALLOWLIST` or `GATEWAY_SMTP_SECRET_ENV_ALLOWLIST`, be one of the gateway's own credentials, or start with `AWS_` or `GATEWAY_`: otherwise a Platform Admin could read it through a connection or the SMTP relay and forge deliveries.
+The secret must be at least 32 bytes. Its variable's name must be upper case, and must not be on any credential allowlist (providers, SMTP or alert webhooks), be one of the gateway's own credentials, or start with `AWS_` or `GATEWAY_`: otherwise a Platform Admin could read it through a connection, the SMTP relay or a webhook and forge deliveries.
 
 Each delivery is a `POST` with `Content-Type: application/json` and two headers:
 
@@ -74,7 +74,8 @@ AUDIT_OTLP_HEADERS="Authorization=Bearer …"
 ```
 
 - The URL is the collector's full logs endpoint; the path isn't added for you.
-- It's a separate destination from your operational telemetry: the audit export never reads `OTEL_*` variables.
+- It's a separate destination from your operational telemetry: the audit export never reads `OTEL_*` variables, and from v0.9.0 `GATEWAY_LOGS_OTLP_URL` (the gateway's [operational logs](/docs/self-hosting/configuration#otlp-operational-logs)) must not be the same URL. Route the two through separate pipelines and credentials.
+- From v0.9.0, when the address policy refuses the collector, the gateway logs one warning without the host each time connectivity changes, rather than on every delivery. `gateway_egress_denied_total{purpose="audit_otlp"}` still counts each refusal.
 - Headers are optional: `Key=Value,Key2=Value2`, at most 16, values without commas. The headers variable follows the webhook secret's naming rules. Values never appear in logs, errors or status.
 - Each event is one log record. Its body is the same event object the webhook sends, as a JSON string; parse it to read the event. `event.name` is the action, and `omg.audit.id` and `omg.audit.seq` are attributes.
 - If the collector's reply reports `rejectedLogRecords` in `partialSuccess`, those events are refused for good, and OTLP says not to send them again. The gateway doesn't: it counts them in `gateway_audit_export_rejected_records_total`, shows **Collector refusing events**, and receivers see a `seq` gap.
@@ -89,12 +90,13 @@ Every transport carries the same event objects, format `omg.audit.v1`. A webhook
 {"schema":"omg.audit.v1","installation_id":"…","sent_at":"…","events":[
   {"id":"…","occurred_at":"…","action":"key.revoked","resource":{"type":"key","id":"…"},
    "actor":{"id":"…","label":"Alex Doe"},"workspace":{"id":"…","name":"Product","kind":"team"},
-   "metadata":{"count":1},"seq":42}]}
+   "admin_token_id":null,"metadata":{"count":1},"seq":42}]}
 ```
 
 - `id` identifies the event. Use it to drop duplicates.
 - `seq` is its number in the export ([below](#gap-detection-and-heartbeats)).
 - `actor` and `workspace` may be `null`. The actor's label is read when the event is delivered.
+- `admin_token_id`, added in v0.8.0, is the id of the [admin API token](/docs/administration/admin-api-tokens) that made the change, or `null` for a change made in the dashboard. It is never the token itself. A receiver that rejects unknown fields needs updating.
 - A test delivery has `"test": true` and no events.
 
 ## Delivery

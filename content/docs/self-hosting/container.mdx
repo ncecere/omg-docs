@@ -9,9 +9,9 @@ The repository's `Dockerfile` builds everything into one small image:
 
 1. Node builds the dashboard.
 2. Rust builds the `open-model-gateway` binary (with `--locked`); migrations are compiled into it.
-3. A distroless runtime (`gcr.io/distroless/cc-debian12`, pinned by digest) holds the binary, the built dashboard in `/app/web`, the C runtime libraries and CA certificates. Nothing else: no shell, package manager, `curl`, Node or Cargo.
+3. A distroless runtime (`gcr.io/distroless/cc-debian13`, pinned by digest) holds the binary, the built dashboard in `/app/web`, the C runtime libraries and CA certificates. Nothing else: no shell, package manager, `curl`, Node or Cargo.
 
-From v0.3.1 the image is about 25 MB compressed (it was 52 MB on the Debian slim base of earlier releases).
+The image has been distroless since v0.3.1. v0.9.1 moved it from Debian 12 to Debian 13, which also changed its CA trust store: when you upgrade across v0.9.1, check your outbound TLS connections (providers, identity provider, S3, SMTP, audit export), especially to private or legacy certificate chains.
 
 ### Release images
 
@@ -19,23 +19,25 @@ From v0.3.0, each release publishes a signed image to `ghcr.io/ncecere/open-mode
 
 | Tag | Points to |
 |---|---|
-| `vX.Y.Z`, such as `v0.6.0` | That release. |
-| `vX.Y`, such as `v0.6` | The newest patch release of that minor version. |
+| `vX.Y.Z`, such as `v0.10.0` | That release. |
+| `vX.Y`, such as `v0.10` | The newest patch release of that minor version. |
 | `latest-release` | The newest release. |
 
 Images are signed with cosign keyless signing from the repository's GitHub Actions workflow. Check the signature with **cosign v3.0 or newer** (cosign v2 reports "no signatures found": from v0.4.0, signatures are stored in cosign v3's bundle format), then pin the image by its digest:
 
 ```sh
-cosign verify ghcr.io/ncecere/open-model-gateway@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 \
-  --certificate-identity https://github.com/ncecere/open-model-gateway/.github/workflows/image.yml@refs/tags/v0.6.0 \
+cosign verify ghcr.io/ncecere/open-model-gateway@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6 \
+  --certificate-identity https://github.com/ncecere/open-model-gateway/.github/workflows/image.yml@refs/tags/v0.10.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 The tags move; a digest doesn't. Promote the digest you tested, and roll back to a previous digest, never to a rebuilt tag:
 
 ```sh
-docker pull ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393
+docker pull ghcr.io/ncecere/open-model-gateway:v0.10.0@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6
 ```
+
+Each release also publishes the digest as an asset, `open-model-gateway-vX.Y.Z.digest.txt`, with `checksums.txt` and an SBOM per platform. Check the assets with `sha256sum -c checksums.txt`, then verify the signature of the digest the file names. A checksum or a passing readiness check is not a signature check.
 
 Before publishing, release images are scanned for known vulnerabilities (fixable high and critical findings block the release) and get an SBOM and build provenance. See [Security](/docs/self-hosting/security#how-releases-are-checked).
 
@@ -44,8 +46,8 @@ Before publishing, release images are scanned for known vulnerabilities (fixable
 ```sh
 git clone https://github.com/ncecere/open-model-gateway.git
 cd open-model-gateway
-git checkout v0.6.0        # the release you want
-docker build -t open-model-gateway:v0.6.0 .
+git checkout v0.10.0       # the release you want
+docker build -t open-model-gateway:v0.10.0 .
 ```
 
 The repository's manual publishing workflow also pushes a tested image of `main` to `ghcr.io/ncecere/open-model-gateway`, tagged with the full commit SHA, for staging.
@@ -75,11 +77,11 @@ It runs exactly the command you give it and **never migrates the database or cre
 ```sh
 # One-off: create or upgrade the schema, as the migrator role.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 migrate
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.10.0@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6 migrate
 
 # One-off: name the first Platform Admin.
 docker run --rm -e DATABASE_URL_FILE=/run/secrets/migrator_url \
-  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393 \
+  -v ./secrets:/run/secrets:ro ghcr.io/ncecere/open-model-gateway:v0.10.0@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6 \
   provision-user --email morgan.lee@example.edu --platform-admin
 ```
 
@@ -90,7 +92,7 @@ Other one-off commands you're likely to run in a container:
 | Command | Does |
 |---|---|
 | `grants apply` | Applies the runtime role's grants (`deploy/staging/runtime-grants.sql`, embedded in the binary), as the migrator. Run it after every `migrate`. From v0.5.0. |
-| `grants verify` | Checks the runtime role's privileges with probes that roll back. Needs a role that can `SET ROLE gateway_runtime`. From v0.5.0. |
+| `grants verify` | Checks the runtime role's privileges with probes that roll back. Needs a role that can `SET ROLE gateway_runtime`. From v0.5.0; from v0.9.0 it also requires that the runtime role can't create temporary tables. |
 | `wait-for-database [--schema] [--timeout-seconds N]` | Waits until PostgreSQL accepts connections (with `--schema`, until this binary's schema and grants are in place), then exits 0; exits 1 after the timeout (600 s by default). For init containers. From v0.5.0. |
 | `files verify` | Compares stored-file records with the file store; also reports the active encryption key and any retired keys still in use. |
 | `files rekey --from <old> --to <new> [--dry-run]` | Re-wraps every stored file's data key under another master key, so the old key can be removed. Resumable, and safe while the gateway serves. From v0.6.0. See [File storage](/docs/self-hosting/file-storage). |
@@ -164,7 +166,7 @@ The shape of the gateway service, if you write your own Compose file:
 ```yaml
 services:
   gateway:
-    image: ghcr.io/ncecere/open-model-gateway:v0.6.0@sha256:49b4f2dbe2777060a82c9567431d5e3fe757244dc9ffb968ff75a15ba8787393
+    image: ghcr.io/ncecere/open-model-gateway:v0.10.0@sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6
     read_only: true
     tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
     cap_drop: [ALL]
@@ -193,7 +195,10 @@ Put an HTTPS proxy in front of port 8080. It must:
 - pass server-sent events through without buffering (Caddy: `flush_interval -1`);
 - allow WebSocket upgrades on `/v1/realtime`;
 - keep query strings, cookies and `Authorization` headers out of its access logs (sign-in callbacks carry codes);
+- never add an `Authorization` header to requests for `/api/v1/…`: from v0.8.0 the management API answers `401` to a dashboard request that carries one, so an SSO proxy that injects its own token breaks the dashboard (only [admin API tokens](/docs/administration/admin-api-tokens) use that header there);
 - not expose the metrics listener.
+
+If inference has its own host name, route it to the same gateway and set `GATEWAY_INFERENCE_BASE_URL` so key and model pages show it ([Configuration](/docs/self-hosting/configuration#separate-inference-host)).
 
 The gateway sends no CORS headers and isn't meant to be called from other origins' pages.
 

@@ -1,0 +1,70 @@
+---
+title: Claude Code
+description: Use Claude Code with a workspace API key and the gateway's model names, and what works on each kind of route.
+---
+
+Claude Code talks to Open Model Gateway through `/v1/messages`, like the Anthropic SDK. Its requests use your workspace's key, models, budgets and limits like any other request, and appear in [Logs](/docs/using/logs) and [Usage and costs](/docs/using/usage-and-costs).
+
+## Before you start
+
+- A model whose administrator enabled **Messages** for it, priced and available in your workspace. Check **Models** in the workspace; the model's page lists **Messages** under **How to call it**.
+- An [API key](/docs/using/api-keys) from that workspace. It is a gateway key, not a provider key and not a dashboard login. Keep it in your secret manager; never commit it.
+- The **Anthropic SDK base URL** from your key's page: your gateway's inference address without the final `/v1`.
+
+## Set it up
+
+Set the base URL, your key and the gateway's model names, then start Claude Code:
+
+```sh
+export ANTHROPIC_BASE_URL="https://ai.example.edu"
+export ANTHROPIC_AUTH_TOKEN="$OMG_API_KEY"   # from your secret manager
+export ANTHROPIC_MODEL="example/assistant"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="example/assistant"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="example/assistant"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="example/chat-fast"
+claude
+```
+
+- Use the gateway's model names, exactly as **Models** shows them. They don't need to contain `claude`. Claude Code's own model discovery lists only names containing `claude`, so set the names yourself rather than relying on it.
+- Send the key once: `ANTHROPIC_AUTH_TOKEN` sends it as `Authorization: Bearer`. Don't also send it as `x-api-key`.
+- The gateway uses the provider connection's own credential upstream; your key never reaches the provider.
+
+## What works where
+
+How much of Claude Code's request the gateway passes on depends on the provider behind the model's route.
+
+| | Anthropic routes | Other routes (OpenAI, OpenRouter, Amazon Bedrock, self-hosted) |
+|---|---|---|
+| Text, ordinary tools, `temperature`, `top_p`, stop sequences | Yes | Yes |
+| `top_k` | Yes | Refused |
+| Prompt caching (`cache_control`) | Yes, when the price includes cache prices (below) | Accepted and left out |
+| Thinking and effort settings, signed thinking history | Yes | Accepted and left out; earlier thinking blocks are removed |
+| Context management, deferred tools, task budgets | Yes | Accepted and left out |
+| Images (base64 PNG, JPEG, GIF or WebP) | Yes, up to 5 MiB each and 20 per request | Refused |
+| Tool results marked as errors (`is_error: true`) | Yes | Refused (`501`) |
+| Structured output, strict tools | Refused | Refused |
+| Server tools (web search, code execution) | Refused | Refused |
+
+Images from URLs are always refused: neither the gateway nor the provider fetches a URL from your request. The whole request body can be up to 2 MiB.
+
+### Beta headers
+
+Claude Code sends `anthropic-beta` headers. On Anthropic routes the gateway passes them on unchanged; on other routes it checks them and doesn't pass them on. It refuses only betas whose names start with `context-1m-`, `code-execution-`, `web-search-`, `web-fetch-`, `computer-use-`, `files-api-` or `mcp-client-`, because the gateway can't price or serve what they turn on. The refusal uses Anthropic's wording, `Unexpected value(s) … for the anthropic-beta header`, so Claude Code retries without them. To stop Claude Code sending experimental betas at all, set `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`.
+
+### Prompt caching and prices
+
+On an Anthropic route, a request with cache hints needs a price that states the cache read price and the cache write price for each time-to-live it asks for (5 minutes, the default, or 1 hour). Without them it is refused with `400`, naming `cache_control`, before anything is held or sent. If that happens, ask a Platform Admin to publish a price with cache prices; see [Pricing](/docs/administration/pricing).
+
+## Budgets and limits
+
+- `max_tokens` is required, as in Anthropic's API, and includes any thinking budget. The gateway holds the most the request could cost against every budget that applies.
+- A long conversation that no longer fits the model answers `400 invalid_request_error` with `prompt is too long`, so Claude Code can compact it. A provider that is overloaded answers `529`; rate limits answer `429`.
+- Budget refusals carry `x-should-retry: false`, so Claude Code doesn't keep retrying them. See [Retries and errors](/docs/using/calling-the-api#retries-and-errors).
+
+## Not available yet
+
+- `/v1/messages/count_tokens`.
+- Thinking and structured output on routes that aren't Anthropic's.
+- Anthropic SDK and Claude Code releases that send an API version other than `anthropic-version: 2023-06-01`.
+
+The gateway's support is checked against the Messages protocol and Claude Code's request format in automated tests; it hasn't been certified against every Claude Code release.

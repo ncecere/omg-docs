@@ -19,7 +19,8 @@ Anyone signed in can download what the gateway holds about them from **Your prof
 - their live dashboard sessions;
 - the request records of their keys, with estimated cost and the app and session labels their tools sent;
 - their own audit entries;
-- the list of files they uploaded.
+- the list of files they uploaded;
+- from v0.9.0, their [access requests](/docs/administration/teams-and-projects#access-requests), with the reasons they gave.
 
 Requests and audit entries cover a date range they choose, up to 93 days (the last 30 by default). They include activity in workspaces the person has since left. Each list is capped (50,000 requests, 10,000 of anything else) and marked `truncated` when the cap is reached; a shorter range then gets the rest.
 
@@ -38,9 +39,10 @@ The gateway cleans up a person's account 30 days after they lose access (see [Pe
 - their email and display name, and the verified email on their sessions;
 - the attributes SCIM sent (user name, external id, given and family names) and their SCIM group memberships;
 - their address on old invitations and in alert rule recipients;
-- the names of files they uploaded.
+- the names of files they uploaded;
+- the reasons they gave in access requests.
 
-Their keys, platform role and workspace grants, sessions and pending invitations are revoked, and their personal workspace is disabled.
+Their keys, platform role and workspace grants, sessions and pending invitations are revoked, and their personal workspace is disabled. If they were a Platform Admin, their admin API tokens are revoked too.
 
 Only copies under the person's current address are found: an address an admin or SCIM changed earlier isn't. Inside a Team or Project on legal hold, invitations, alert recipients and file names stay.
 

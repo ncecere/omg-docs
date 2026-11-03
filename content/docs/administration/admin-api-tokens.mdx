@@ -1,0 +1,76 @@
+---
+title: Admin API tokens
+description: Long-lived, scoped and expiring credentials that let scripts call the management API, how to create and revoke them, and what they can't do.
+---
+
+From v0.8.0, Platform Admins can create **admin API tokens**: credentials for scripts and automation that call the [management API](/docs/api/management-api), separate from both people's API keys and dashboard sessions. **Admin › Settings › Admin API tokens** lists and manages them.
+
+Treat them like privileged keys: give each the fewest scopes, the shortest expiry and an IP allowlist.
+
+## What a token can and can't do
+
+- It calls **platform management routes** under `/api/v1`, within its scopes, with `Authorization: Bearer omg_admin_…`.
+- It can **never** call inference, create or manage inference keys, manage workspace members, reach SCIM, or create, list or revoke admin API tokens. Some newer areas are dashboard-only too: scheduled reports, provider cost reconciliation, route history and change previews, SSO group-mapping previews and access requests.
+- It acts as its owner, and only while the owner is an active Platform Admin. Workspace membership, file visibility and personal-workspace privacy still apply exactly as for that person.
+- Everything it changes is in the [audit log](/docs/administration/audit-log) like any other change, with the token's id (`admin_token_id`), and in the [audit export](/docs/self-hosting/audit-export).
+
+| Scope | Label | Allows |
+|---|---|---|
+| `platform:read` | **Read** | Reading platform metadata: users, models, connections, usage and audit history. |
+| `catalog:write` | **Catalog** | Managing connections, models, routes, catalogs, assignments and pricing. |
+| `access:write` | **Access** | Managing users, roles, group mappings, platform workspaces and signing people out. Highly privileged. |
+| `governance:write` | **Governance** | Managing workspace and workspace-type limits, cost centers, alerts and legal holds. |
+| `settings:write` | **Settings** | Managing the general, privacy, email and storage settings and their tests. Highly privileged. |
+
+A write scope doesn't include reading: a script that reads and then changes something needs **Read** too. Each route needs one particular scope; there is no wildcard.
+
+## Create a token
+
+**Create token** opens **Create admin API token**:
+
+| Field | Notes |
+|---|---|
+| **Name** | What the token is for. |
+| **Scopes** | At least one. **Read** is ticked to start with. |
+| **Expires in (days)** | 1 to 90, 30 by default. A token can't be renewed: create a new one before it expires. |
+| **IP allowlist** | Optional. 1 to 32 networks in CIDR form (such as `10.20.30.0/24`), one per line or comma-separated; never `0.0.0.0/0` or `::/0`. Blank means any address. |
+
+**Save your admin API token** then shows the token once. Copy it with **Copy token** and store it in your secret manager; closing the dialog, choosing **I have saved it** or leaving the page clears it, and it can't be shown again. The gateway keeps only a hash.
+
+<Screenshot slot="admin-api-token-created" />
+
+- You can create tokens only for yourself.
+- A token's name, scopes, expiry and allowlist never change. To change them, create another token and revoke the old one.
+- The allowlist is checked against the client address the gateway resolves for sign-in limits: behind a reverse proxy, the operator must set `GATEWAY_TRUSTED_PROXIES` ([Identity setup](/docs/self-hosting/identity#behind-a-reverse-proxy)). If no address can be resolved, a restricted token is refused.
+- Creating a token needs the database's default transaction isolation (`read committed`); if an operator changed it, creation fails.
+
+<Callout type="warn" title="The token is the credential">
+  Anyone holding the token string can act with its scopes until it expires or is revoked. Never put it in a ticket, a chat message or a repository.
+</Callout>
+
+## The list
+
+Each row shows the token's **Name** (with a copyable id), **Owner**, **Status**, **Scopes**, **Expires** and **Last used** (time and address). **IP allowlist** and **Created** can be added from the table's columns menu. Every Platform Admin sees every token, metadata only; the token itself and its hash are never shown.
+
+<Screenshot slot="admin-api-tokens" />
+
+## Revoke a token
+
+**Revoke token…** in the row's menu revokes it at once and for good. Any Platform Admin can revoke any token, not only their own.
+
+Tokens are also revoked automatically, in the same transaction, when their owner loses their last Platform Admin grant (manual or from a group), is suspended, is deactivated by SCIM or is cleaned up. Getting Admin back doesn't restore them. Signing a person out of their sessions doesn't revoke their tokens.
+
+## Using a token
+
+```sh
+curl https://ai.example.edu/api/v1/platform/models \
+  -H "Authorization: Bearer $OMG_ADMIN_TOKEN"
+```
+
+- Send the token and nothing else: a request that carries both a token and the dashboard's session cookie, or two `Authorization` headers, is refused with `401`.
+- Token requests don't need the dashboard's `Origin` and CSRF headers.
+- A route outside the token's scopes, or one tokens can never use, answers `403`.
+- Each replica allows about 1,000 token requests a minute per token and per client address, and 10,000 in total; beyond that, `429`.
+- If a change was made but its audit record couldn't be completed, the response is `503`: check the resource before you retry.
+
+Auditors can't open this page, and people without access to Admin are sent to Home.

@@ -19,7 +19,7 @@ Admission and settlement take a fixed, deadlock-free sequence of locks: a worksp
 
 Each replica caches what it reads before admission: key metadata (never the secret), candidate routes, routing configuration and immutable prices. It learns about changes within about a second through PostgreSQL `LISTEN`/`NOTIFY` (configured by `GATEWAY_LISTEN_DATABASE_URL`), or a one-second poll if the listener connection isn't available. Admission itself never trusts the cache: it always re-checks authorization, entitlement and the latest price live under its locks, so a revoked key or a tightened budget is refused on every replica immediately, with exactly the same error as before. `GATEWAY_CONFIG_CACHE=off` turns caching off entirely if you'd rather every read be live.
 
-Singleton background jobs (account cleanup, compaction, counter pruning, storage usage, alert evaluation, the file sweeper) now run on one replica at a time under a lease, instead of on every replica.
+Singleton background jobs (account cleanup, compaction, counter pruning, storage usage, alert evaluation and email, the file sweeper, and from v0.9.0 scheduled report generation) run on one replica at a time under a lease, instead of on every replica.
 
 ## History partitions and archival
 
@@ -76,11 +76,11 @@ From v0.5.0 the project tests on its homelab Kubernetes cluster: CloudNativePG 1
 ## Known limits
 
 - **No certified capacity number.** About half the steady-load runs still hit stalls of 17–40 seconds, sometimes without recovering (#132). Clean runs held 100–150 requests a second with p99 under 650 ms.
-- **A second write outage after a two-instance failover** is still open (#149). Run three database instances if writes must stay available through a failover.
+- **A second write outage after a two-instance failover** is still open (#149), and a primary failover with the legacy two-instance replication setting lost 16 acknowledged requests' accounting rows. Run three database instances with the [durability policy](/docs/self-hosting/kubernetes#production-durability-policy) added in v0.9.3: in the project's drill it lost nothing, at the cost of a write outage of about 34 seconds.
 - **The chart's default database sizing is too small for load.** Size it for yours.
 - One workspace or one key still tops out at a few hundred admissions a second, by design ([above](#per-workspace-and-key-ceiling)).
 
-The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md) has the details and what hasn't been measured yet.
+The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/postgresql-ha.md) has the details and what hasn't been measured yet.
 
 ## An optional reporting replica
 

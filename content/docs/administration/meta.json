@@ -25,6 +25,7 @@
     "audit-log",
     "data-controls",
     "---Installation---",
-    "settings"
+    "settings",
+    "admin-api-tokens"
   ]
 }

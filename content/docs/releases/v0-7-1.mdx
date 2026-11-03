@@ -1,0 +1,47 @@
+---
+title: v0.7.1
+description: Compatibility fixes for SDK clients. Optional output maximums on priced requests, base64 embeddings, replaying Responses output as input, no retries of permanent refusals, and Anthropic refusal and context-window stop reasons.
+---
+
+Released 2026-10-22. No migrations.
+
+A patch that makes ordinary OpenAI and Anthropic SDK clients work in more cases. It doesn't make every SDK or provider a drop-in fit, and it isn't full protocol conformance.
+
+## Output maximums are optional on priced requests
+
+Chat Completions and Responses requests on a priced model may now leave out the output maximum, streaming or not. The gateway then sizes the budget hold and the upstream output cap from the same price ceiling it pinned at admission. An explicit maximum is used as given, never clamped. Messages still requires `max_tokens`.
+
+Batch lines may leave it out too: a stale planning price is refused before anything is reserved, and admitted work keeps its pinned price and cap while it waits. This isn't an unlimited allowance or an implicit retry policy. See [Chat Completions](/docs/api/chat-completions) and [Responses](/docs/api/responses).
+
+## Embeddings in base64
+
+`/v1/embeddings` honours `encoding_format: "base64"` (little-endian float32), which is the OpenAI SDK's default, as well as `float`. Leaving it out, or `null`, still means `float`. Vectors and the response size are checked before the request is settled; a failed response keeps its usage evidence and its hold. Batch embedding lines stay float-only and refuse base64. See [Embeddings](/docs/api/embeddings).
+
+## Replay Responses output as input
+
+A client can send supported text and function-call `output` items from an earlier response (JSON or the final streamed response) back as `input` in a follow-up request. Read-only item ids and statuses, and empty output-text annotations, are accepted and ignored; tool calls still pair by `call_id`. This is replaying what the client already has, not server-side conversation storage: `store`, references to stored state, and non-empty annotations or citations are still refused. See [Responses](/docs/api/responses).
+
+## No retries of permanent refusals
+
+`unsupported_capability` errors now carry `x-should-retry: false`, so the OpenAI and Anthropic SDKs no longer retry them, including the `501` ones. Status codes and bodies are unchanged, and transient errors can still be retried. Each client retry is a new request with its own admission. See [Errors and limits](/docs/api/errors-and-limits).
+
+## Anthropic refusals and context-window stops
+
+A Messages response that stops with `refusal` or `model_context_window_exceeded` no longer fails as an invalid upstream response. Messages keeps both stop reasons, in JSON and streaming, including an empty refusal. Through the other APIs they map coarsely: Chat Completions reports `content_filter` or `length`, and Responses reports an incomplete response with `content_filter` or `max_output_tokens`. See [Messages](/docs/api/messages).
+
+## Upgrade guide
+
+No migrations, runtime grants or settings: the schema still ends at `0048`. Back up, deploy the new image by digest, wait for `/health/ready`, then check sign-in and your integrations.
+
+Coming from v0.6.1, first read the [v0.7.0 precautions](/docs/releases/v0-7-0#before-you-upgrade): reserved credential names, management denial codes and local endpoint approvals.
+
+## Known limitations
+
+- Optional fields in successful tool results and consistent handling of `null` OpenAI defaults aren't in this release (they follow in [v0.7.2](/docs/releases/v0-7-2)).
+- A request an Anthropic or Bedrock route would always reject is still admitted first and leaves an unknown-cost hold (fixed in v0.7.2).
+- Mock and SDK contract tests don't certify every SDK version or provider.
+- The [v0.7.0 limitations](/docs/releases/v0-7-0#known-limitations) still apply.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.7.1@sha256:8e3fba7871fcb6f6e25dcb7bcb209a18731eb2b3cd7f65c27be7668d9ff831a3`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.7.1) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

@@ -1,6 +1,6 @@
 ---
 title: Teams and Projects
-description: Creating shared workspaces, their owners and members, who sees their files, batches and videos, per-workspace overrides for catalogs and limits, cost centers and legal holds.
+description: Creating shared workspaces, their owners and members, access requests, who sees their files, batches and videos, per-workspace overrides for catalogs and limits, cost centers and legal holds.
 ---
 
 Teams and Projects are the installation's shared workspaces. They work the same way; the two kinds exist so you can organise by both, for example a Team per department and a Project per grant. A Project never belongs to a Team, and membership of one gives nothing in the other.
@@ -20,13 +20,29 @@ Give it a **name** and an **initial owner**, found by searching for their email,
 | **Overview** | Members, available catalogs, models available and cost center at a glance. |
 | **Members** | Members and their roles and sources. Platform Admins can add, change and remove manual memberships here too, including owners; the last owner can't be removed. |
 | **Models** | The models it can use, the catalogs it gets, and direct assignments. |
-| **Limits** | The type default, and an optional override for this workspace. |
+| **Limits** | The type default, and an optional override for this workspace, including [key issuance limits](/docs/administration/limits-and-budgets#key-issuance-limits). |
 | **Access** | Why each model is or isn't usable, layer by layer. |
-| **General** | Name, cost center, and disabling the workspace. |
+| **General** | Name, cost center, **Discovery** (below), and disabling the workspace. |
 
 A Platform Admin who isn't a member sees configuration here, not the workspace's keys or requests.
 
 The page's menu also has **Place legal hold…**, which stops the gateway removing any of the workspace's data until the hold is released; see [Legal holds](/docs/administration/data-controls#legal-holds).
+
+## Access requests
+
+From v0.9.0, people can ask to join a Team or Project instead of waiting to be added:
+
+1. A Platform Admin makes it findable: **Make discoverable** under **Discovery** on its **General** tab. Workspaces aren't discoverable by default, and only Platform Admins can change it.
+2. Any active person with a platform role who isn't a member yet finds it in **Request access** in the Workspace portal and sends a request, with an optional reason. A request is always for the **Member** role.
+3. The workspace's owners and admins approve or deny it on the **Access requests** tab of **Workspace › Settings**, and Platform Admins from **Admin › Records › Access requests**, which lists requests across every Team and Project. Auditors can read that list. Nobody can approve their own request.
+
+<Screenshot slot="admin-team-discovery" />
+
+Approving adds a manual **Member** membership at once. A request goes stale, and can't be approved, if the person's membership changed after they sent it: they withdraw it and ask again. Pending requests expire after 7 days. Each person can have at most 20 pending requests, and send 5 a minute and 50 a day. Hiding a workspace again (**Hide from discovery**) leaves pending requests as they are.
+
+<Screenshot slot="admin-access-requests" />
+
+Access requests are dashboard-only: admin API tokens can't use them. Requests, approvals and denials are in the [audit log](/docs/administration/audit-log), without the reason text.
 
 ## Who sees files, batches and videos
 

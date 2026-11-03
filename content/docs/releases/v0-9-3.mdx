@@ -1,0 +1,59 @@
+---
+title: v0.9.3
+description: An opt-in durability policy for the Helm chart's CloudNativePG cluster, with a recommended three-instance setting that kept every acknowledged write through a failover in testing.
+---
+
+Released 2026-10-28. No migrations.
+
+A maintenance patch after [v0.9.2](/docs/releases/v0-9-2). It adds an opt-in synchronous replication policy to the Helm chart.
+
+## A database durability policy for Kubernetes
+
+The chart has new `cnpg.cluster.synchronous` values, which render CloudNativePG's own `spec.postgresql.synchronous` (including `failoverQuorum`), with schema checks that refuse incompatible combinations. **Nothing changes unless you set them:** the default is still two instances with the legacy one-standby setting.
+
+For production, the recommended values are three instances with:
+
+```yaml
+cnpg:
+  cluster:
+    instances: 3
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
+    postgresql:
+      parameters:
+        synchronous_commit: "on"
+```
+
+Merge this into your complete values file, keeping your role Secrets, storage, resources and backup settings.
+
+This trades write availability for durability: a commit waits for a standby's copy rather than succeeding without one. With three instances one standby can be away; with **two instances and `required`, writes can't resume after a failover until a standby returns**. Three instances need three nodes with enough storage.
+
+On the test cluster, a primary failover with the legacy two-instance setting lost 16 acknowledged accounting writes out of 10,674 successful requests. With the recommended three-instance setting it lost none out of 11,416, with a write outage of about 34 seconds and a later blip of about 5 seconds as the old primary rejoined. These are single measurements, not a guarantee.
+
+See [Kubernetes](/docs/self-hosting/kubernetes) and [Scaling](/docs/self-hosting/scaling).
+
+## Upgrade guide
+
+No migrations or runtime grant changes: the schema still ends at `0067`. From v0.9.2, replace the image and chart, and restart with the normal drain.
+
+Adopting the durability policy is a separate values change you make on purpose:
+
+- Remove `minSyncReplicas` and `maxSyncReplicas` from your values before setting `synchronous`; even an explicit legacy value is refused alongside it. Don't carry old values over with `--reuse-values`: use a reviewed complete values file with `--reset-values`.
+- Remove any old `alpha.cnpg.io/failoverQuorum` annotation.
+- CloudNativePG applies the change by reloading its configuration; automatic failover is unavailable until the new setting is in place. Check the applied cluster afterwards.
+- No database reset or migration is needed.
+
+Coming from an earlier release, first follow the [v0.9.2 upgrade guide](/docs/releases/v0-9-2#upgrade-guide) and the guides it links.
+
+## Known limitations
+
+- Cluster failover acceptance with the new policy, and rolling it out, are up to you.
+- The steady-load stall and the cause of an intermittent `accounting_unavailable` in tests are still unexplained.
+- The [v0.9.0 limitations](/docs/releases/v0-9-0#known-limitations) still apply.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.9.3@sha256:b345e16645b0dd145bb3c9562d13d1c09b9e782fbf7874fad4af088482256d45`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.9.3) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

@@ -6,7 +6,7 @@ description: Create a key, choose its expiry, models and limits, and rotate, dis
 An API key lets your code call models through Open Model Gateway. Each key belongs to one workspace, and everything it does is counted against that workspace. Keys start with `omg_`.
 
 <Callout title="Keys are not dashboard logins">
-  An API key can only call the inference API (`/v1/...`). It can't sign in to the dashboard or change any setting.
+  An API key can only call the inference API (`/v1/...`). It can't sign in to the dashboard or change any setting. Admin API tokens (`omg_admin_…`), which Platform Admins create for management scripts, are the opposite: they can't call models.
 </Callout>
 
 ## Create a key
@@ -26,9 +26,17 @@ Open **API keys** in the workspace and choose **Create key**.
 
 A key's limits can only be **tighter** than the workspace's: a key budget can't be higher than an inherited budget for the same period. The dialog shows the inherited budgets.
 
+### How many keys you can create
+
+Every key you create or rotate counts, for a rolling 24 hours, against two limits of the workspace: one per person (or per service account) and one for the whole workspace. Unless a Platform Admin or the workspace's admins changed them, they are 50 per person and 500 per workspace. Under the heading, **API keys** shows how many you have used, such as "3 of 50 issued in the last 24 h"; workspace admins also see the workspace's count.
+
+When a limit is reached, **Key issuance limit reached** says which one and when you can issue another, and **Create key** is unavailable. If only your own limit is reached, an admin can still create service-account keys, which count separately. Creating or rotating over the limit answers `429` with `key_issuance_limit_exceeded` and a `Retry-After` header.
+
 ## Save it
 
 When the key is created, **Save your API key** shows it once. Copy it into your password manager or secret store, then choose **I have saved it**. The gateway keeps only a hash: nobody can show you the key again, not even an administrator. If you lose it, rotate the key or create a new one.
+
+The dialog also shows the two addresses to use the key with: the **OpenAI-compatible base URL** and the **Anthropic SDK base URL**. See [Calling the API](/docs/using/calling-the-api#the-base-url).
 
 <Screenshot slot="key-created" />
 
@@ -38,13 +46,17 @@ When the key is created, **Save your API key** shows it once. Copy it into your 
 
 Open a key for its own page:
 
-- **Overview**: spending over the last 30 days and the key's details. A **Safety** card lists findings, when there are any.
+- **Overview**: spending over the last 30 days and the key's details, and **Calling the API** with the key's base URLs. A **Safety** card lists findings, when there are any.
 - **Access**: the models the key can use, and why each is or isn't available (see [workspace access](/docs/using/workspace-settings#access)).
-- **Limits**: the key's own rate limits and budgets, and every budget window that applies to it.
+- **Limits**: the key's own rate limits and budgets, and **Budgets**: every budget that applies to the key in its current window (the key's, the workspace's and the platform's).
 
 <Screenshot slot="key-detail" />
 
 A key's limits can be tightened later on its **Limits** tab. A stored limit can't be raised or removed: create a new key for that.
+
+For each budget you can see, **Budgets** splits what is used into **Settled** (final cost estimates), **Pending holds** (requests still running), **Retained unknown-cost floors** (holds whose cost is still unknown) and the number of **Unknown-cost requests**, then shows **Remaining**. Remaining is an amount only when every cost in the window is known; otherwise it reads **Unknown**, because the amount used is a lower bound. A budget whose use you aren't allowed to see (a workspace budget, for members) shows **Remaining: Restricted**. **Effective headroom** is, for each period, the lowest remaining amount across the layers that apply. It isn't an allocation, and it doesn't promise that a request will fit.
+
+<Screenshot slot="key-limits-headroom" />
 
 ## Rotate, disable and revoke
 
@@ -66,6 +78,8 @@ Keys are also revoked automatically when their holder loses access: a person who
 ## Expiry
 
 Every key you create expires, between 1 and 365 days after it is created or rotated. The maximum for people's own keys is set by the installation (**Admin › Settings › General**, 365 days unless changed). Service-account keys can always last up to 365 days. To extend a key, rotate it with a new expiry.
+
+The gateway reminds you before a key expires: once when it expires within 7 days and again within 1 day, in [Notifications](/docs/using/alerts-and-notifications#key-expiry-reminders) and by email when email is set up. Reminders for your own key go to you, plus the workspace's owners and admins for a Team or Project key; reminders for a service-account key go to the workspace's owners and admins. Reminders never name the key: **Open keys** takes you to the workspace's key list.
 
 ## Key safety
 

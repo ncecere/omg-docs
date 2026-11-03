@@ -20,10 +20,18 @@ export const gitConfig = {
 export const productRepo = 'https://github.com/ncecere/open-model-gateway';
 
 /** The Open Model Gateway release these docs describe. */
-export const productVersion = 'v0.6.0';
+export const productVersion = 'v0.10.0';
 
 /** The date that release was tagged (YYYY-MM-DD). */
-export const productReleaseDate = '2026-10-15';
+export const productReleaseDate = '2026-11-02';
+
+/**
+ * That release's container image digest (the multi-arch index), verified against the
+ * GitHub release's digest asset and the registry. Deploy as
+ * `ghcr.io/ncecere/open-model-gateway:<productVersion>@<productImageDigest>`.
+ */
+export const productImageDigest =
+  'sha256:77a37910d5af8ef26cdacec1f7dac026ba2aee32d9de8fd8ab30c039adbcdbe6';
 
 /** Whether that release is still unreleased (the docs then describe current `main`). */
 export const productUnreleased = false;

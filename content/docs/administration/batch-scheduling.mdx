@@ -62,7 +62,7 @@ vLLM started with `--scheduling-policy priority` serves requests with a lower `p
 
 When several batches wait for one route, the next free slot goes to the workspace with the fewest batch lines running on it, then the workspace served least recently; within a workspace, to the batch with the fewest lines running, then the one served least recently. One huge batch can't starve the others.
 
-A line's route is chosen with the model's routing policy, then fixed: a line never fails over after it starts, and a busy route never spills its lines onto another, possibly paid, route. A batch that uses several models progresses on each route independently.
+A line's route is chosen with the model's routing policy, then fixed: a line never fails over after it starts, and a busy route never spills its lines onto another, possibly paid, route. A batch that uses several models progresses on each route independently. From v0.8.0 the gateway doesn't pick a route that would always reject a line when another route of the model would accept it, and a line whose route can't be planned because of a database or timeout problem waits, up to its completion window, instead of failing at once.
 
 ## What people see
 

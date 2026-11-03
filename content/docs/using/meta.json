@@ -7,10 +7,12 @@
     "---Calling models---",
     "api-keys",
     "calling-the-api",
+    "claude-code",
     "models",
     "---Seeing what happened---",
     "logs",
     "usage-and-costs",
+    "scheduled-reports",
     "alerts-and-notifications",
     "---Long-running work---",
     "files",
@@ -18,6 +20,7 @@
     "realtime",
     "---Your workspace---",
     "workspace-settings",
+    "joining-a-workspace",
     "your-profile"
   ]
 }

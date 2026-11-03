@@ -22,7 +22,9 @@ Each line is one request, in JSON Lines:
 ```
 
 - The endpoint can be `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings` or `/v1/messages`, the same for every line.
-- Each body follows the same rules as an interactive request to that endpoint, without streaming. Every line needs an output maximum, within the model's ceiling, and a model with a price.
+- Each body follows the same rules as an interactive request to that endpoint, without streaming. Every line needs a model with a price.
+- The output maximum works as in interactive requests: Chat Completions and Responses lines may leave it out and get the model's output ceiling, Messages lines need `max_tokens`, and a maximum you give must be within the model's ceiling.
+- Embeddings lines return float vectors only: `encoding_format: "base64"` is refused.
 - `custom_id` must be unique. Up to 50,000 lines, each up to 4 MiB.
 
 ## Create and follow a batch
@@ -40,7 +42,9 @@ print(batch.status, batch.request_counts)
 
 The input file must be one your key can see. In a Team or Project set to **Per user** (the default), that means a file uploaded with your own keys: another member's file answers `404`, as if it didn't exist. See [Who sees which batches](#who-sees-which-batches).
 
-The gateway checks the whole file before accepting the batch. If anything is wrong, nothing is created and the error lists up to 20 problems with their line numbers, such as `duplicate_custom_id`, `model_not_found` or `missing_max_tokens`.
+The gateway checks the whole file before accepting the batch. If anything is wrong, nothing is created and the error lists up to 20 problems with their line numbers, such as `duplicate_custom_id`, `model_not_found` or `model_not_priced`.
+
+If a model's price changes while the gateway is checking the file, creating the batch fails with `503 provider_configuration_error` and nothing is created. Send the same file again: the gateway checks it against the new price.
 
 Statuses are `validating`, `in_progress`, `finalizing` and `cancelling`, then `completed`, `failed`, `cancelled` or `expired`.
 
@@ -76,7 +80,7 @@ What happens next depends on how the batch runs:
 ## When a batch stops early
 
 - **Budget**: if a line would go over a budget, the batch stops and ends `failed` with `budget_exceeded`. Finished lines keep their results; lines that never ran are listed with `budget_exceeded`.
-- **Time**: when the completion window ends, no new line starts. Running lines finish, and the batch ends `expired` with its partial results. Lines that never ran are listed as `batch_expired` and cost nothing.
+- **Time**: when the completion window ends, no new line starts. Running lines finish, and the batch ends `expired` with its partial results. Lines that never ran are listed as `batch_expired` and cost nothing. A line the gateway can't plan because of a lasting storage problem or timeout waits, at most until the window ends, rather than failing at once.
 
 ## Waiting for capacity
 
@@ -86,7 +90,7 @@ For a route that only runs batches at night, ask for a longer window: `completio
 
 ## Costs
 
-When it is created, a batch holds the sum of what every line could cost, and checks it against every budget at once. Gateway-run lines are each charged at standard prices from their own usage; the rest of the hold is released when the batch ends. A native batch is charged once from the provider's reported usage, at the route's batch prices when it has them (the batch shows **Batch prices**), or at standard prices (**No batch price**).
+When it is created, a batch holds the sum of what every line could cost, and checks it against every budget at once. Lines that no route of their model could ever serve (for example, a tool feature the provider doesn't support) are left out of the hold, and are refused when their turn comes, without being sent; a batch with such lines always runs through the gateway. Gateway-run lines are each charged at standard prices from their own usage; the rest of the hold is released when the batch ends. A native batch is charged once from the provider's reported usage, at the route's batch prices when it has them (the batch shows **Batch prices**), or at standard prices (**No batch price**).
 
 ## In the dashboard
 
@@ -110,4 +114,4 @@ Owners', admins' and service-account keys see every batch either way. In both mo
 - `metadata` isn't echoed back.
 - Results follow completion order.
 - Native batches never fail over to another route, and native OpenAI batches always use Chat Completions upstream for chat-like lines.
-- A mixed-model batch always runs through the gateway, even if every model has a native batch API.
+- A mixed-model batch always runs through the gateway, even if every model has a native batch API. So does a Messages batch with prompt-caching hints.

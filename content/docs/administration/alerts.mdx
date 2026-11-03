@@ -1,13 +1,13 @@
 ---
 title: Alerts
-description: Installation-wide alert rules for budgets, installation spend, an admission ceiling, spend spikes, error rates, failing connections and batches, their history and email delivery.
+description: Installation-wide alert rules, the built-in alerts for key expiry, aged holds and installation incidents, their history, email delivery with retries and limits, and signed webhooks.
 ---
 
-**Admin › Settings › Alerts** holds installation-wide rules (**Rules**) and every incident they raised (**History**). Platform Admins edit; Auditors read. Each rule opens on its own page with **Cancel** and **Save** in the header.
+**Admin › Settings › Alerts** has three tabs: installation-wide rules (**Rules**), every incident they raised (**History**), and from v0.9.0, signed receivers for installation incidents (**Webhooks**). Platform Admins edit; Auditors read. Each rule opens on its own page with **Cancel** and **Save** in the header.
 
 <Screenshot slot="admin-alerts" />
 
-Alerts notify; they never block a request. Budgets are enforced on their own.
+Open Model Gateway's alerts notify; they never block a request. Budgets are enforced on their own.
 
 ## Rule kinds
 
@@ -28,7 +28,7 @@ Workspace admins can make the same kinds of rule (except failing connections, in
 
 ## Recipients
 
-Each rule notifies any of: the workspace's admins (workspace rules), the **Platform Admins**, and up to 10 email addresses. In the dashboard, installation incidents appear in the Notifications of every Platform Admin and Auditor.
+Each rule notifies any of: the workspace's admins (workspace rules), the **Platform Admins**, and up to 10 email addresses. In the dashboard, installation incidents appear in the Notifications of every Platform Admin and Auditor. Who sees an incident follows people's current roles, not a stored list: someone who loses a role stops seeing it.
 
 ## Installation spend
 
@@ -44,12 +44,21 @@ Because a workspace (and a key lineage) still serializes its own admissions on i
 
 ## Built-in alerts
 
+None of these is a rule you can change or turn off.
+
 - **Personal budgets**: every personal workspace alerts its owner at 80% and 100%. Nobody else sees these.
 - **SCIM tried to remove the last Platform Admin**: opened when SCIM is refused for that reason, for Platform Admins and Auditors, and emailed to Platform Admins. It clears when a second active Platform Admin exists.
+- **History tables are running out of monthly partitions** and **Request history references missing or mismatched parents**: installation incidents for operators, emailed to Platform Admins ([Scaling](/docs/self-hosting/scaling#history-partitions-and-archival)).
+- **An API key expires within 7 days** and **…within 1 day** (from v0.8.0): for every active key with an expiry. A personal workspace's key reminds only its owner. A member's key in a Team or Project reminds its holder and the workspace's owners and admins; a service-account key reminds the owners and admins. Each key, expiry and threshold is reminded once; rotating a key or changing its expiry starts again. A workspace gets at most 100 new reminders in any 24 hours; the rest wait. Reminders never name the key, and **Open keys** goes to the workspace's key list. They never appear in Admin's history.
+- **Aged unknown holds** (from v0.9.0): a request whose cost has been unknown for **24 hours** (warning) or **168 hours** (critical). There is one incident per Team or Project, for its owners and admins and for Platform Admins and Auditors, and one for all personal workspaces together, without identities. Email goes to Platform Admins only. **Open holds** opens the **Holds** tab of Usage & costs, where you can reconcile them ([Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers#holds)).
+
+## History
+
+**History** lists every incident of the installation's rules and built-in alerts: when it fired and cleared, its severity and summary, and its email outcome. From v0.8.0 each email shows **Waiting**, **Retrying**, **Sent**, **Exhausted** or **Failed**, how many recipients are still waiting and when the next try is due. An email held back by the workspace limit (below) reads **Not emailed — workspace notification limit**.
 
 ## How evaluation works
 
-- The gateway evaluates rules every 60 seconds unless the operator changed the interval. Only one replica evaluates at a time.
+- The gateway evaluates rules every 60 seconds unless the operator changed `GATEWAY_ALERT_INTERVAL_SECONDS`. Only one replica evaluates at a time. Setting it to `0` stops evaluation and every automatic email and webhook send.
 - Each rule has at most one open incident per subject. A budget alert that reaches a higher threshold supersedes the open one; a new window, a raised budget or a revoked key clears it.
 - Spend is settled cost plus holds, as budgets count it. Requests with unknown costs are left out and flagged, so the alert says spend may be higher. Spend spikes use settled cost only.
 - Turning a rule off, deleting it, or disabling its workspace closes its incidents without email. Deleted rules keep their history.
@@ -57,6 +66,58 @@ Because a workspace (and a key lineage) still serializes its own admissions on i
 
 ## Email
 
-When an SMTP relay is set up in [Settings › Email](/docs/administration/settings#email), incidents are emailed when they fire and when they clear. Each delivery's outcome is kept with the incident: sent, partly sent, failed (with a reason such as authentication or connection), not configured, or no recipients. Email is sent once, with no retries; a failed email never stops evaluation.
+When an SMTP relay is set up in [Settings › Email](/docs/administration/settings#email), incidents are emailed when they fire and when they clear (key-expiry reminders and aged-hold alerts only when they fire).
 
-Incidents and emails contain a generated summary, the scope, the rule and the time, with a link to Notifications when the public URL is configured. They never contain prompts, responses, key names or who made a request.
+- **Retries** (from v0.8.0). Each recipient is retried after a connection failure, a timeout or a temporary refusal, after 1 minute, 5 minutes, 30 minutes and 2 hours: at most five attempts within 24 hours. Authentication, address, TLS and permanent refusals aren't retried. A crash just after the relay accepted a message can send it twice.
+- **Recipients are checked again before each send.** Someone who lost the role, membership or account that made them a recipient gets nothing more; people added after the incident fired aren't added to it.
+- **Fair between workspaces** (from v0.9.0). A busy workspace's backlog doesn't hold up another workspace's email.
+- **A limit per workspace** (from v0.9.0). Each workspace, and the installation as a whole, can generate at most **100 alert emails in any 24 hours**, counting firing and clearing separately, with no exemption for critical alerts or 1-day key reminders. Beyond that the incident still appears in the dashboard and history (and is still sent to eligible webhooks), but isn't emailed.
+- Outcomes: sent, partly sent, failed (with a reason such as authentication or connection), not configured, no recipients, or not emailed because of the limit. A failed email never stops evaluation.
+
+Incidents and emails contain a generated summary, the scope, the rule and the time, with a link to Notifications when the public URL is configured. They never contain prompts, responses, key names or who made a request. The operator can watch delivery with the [alert email metrics](/docs/self-hosting/metrics-and-monitoring#metrics).
+
+## Webhooks
+
+From v0.9.0, **Webhooks** sends installation incidents to up to **10** receivers of yours, such as an incident tool, as signed HTTPS requests.
+
+<Steps>
+<Step>
+
+### Ask the operator to approve the receiver
+
+The operator lists the receiver's exact URL in `GATEWAY_ALERT_WEBHOOK_URL_ALLOWLIST` and the name of a variable holding its signing secret in `GATEWAY_ALERT_WEBHOOK_SECRET_ENV_ALLOWLIST`, then sets that variable (32 to 4,096 bytes) on every replica. See [Configuration](/docs/self-hosting/configuration#alert-webhooks).
+
+</Step>
+<Step>
+
+### Create it
+
+**Create webhook** asks for a name, the approved **URL** and the **Signing reference**, such as `env:ALERT_WEBHOOK_SECRET`: the variable's name, never the secret. Saving doesn't contact the receiver or read the secret. A new webhook starts **disabled**, and its URL can't be changed later: create a new one instead.
+
+</Step>
+<Step>
+
+### Enable and test it
+
+**Enable…** starts sending future incidents; nothing that happened before is sent. **Send test** queues one fixed test delivery: "Test queued" isn't a success, so open **Deliveries** and **Refresh deliveries** to see the result. Tests are limited to 2 a minute per person and per webhook, and 20 an hour for the installation.
+
+</Step>
+</Steps>
+
+**What is sent.** Only installation rules that notify Platform Admins, the SCIM last-admin, partition and history incidents, and the combined aged-hold incident for personal workspaces. Never workspace rules, personal incidents, key-expiry reminders or admission-ceiling incidents. Each delivery is an `omg.alert.v1` JSON envelope with the incident's id, transition (fired or cleared), kind, severity, time and a fixed summary: never workspace names, key or request details, identities or content. A receiver can get a "fired" without a matching "cleared" if the rule changes in between.
+
+**Retries.** Any `2xx` succeeds. Connection failures, timeouts, `408`, `429` and `5xx` are retried after 1 minute, 5 minutes, 30 minutes and 2 hours, at most five attempts in 24 hours. Other answers, including redirects, and TLS or address-policy failures end the delivery. Nothing is replayed.
+
+**Checking signatures.** Each request has `X-OMG-Delivery: <id>` and `X-OMG-Signature: t=<unix seconds>,v1=<hex>`, where `v1` is HMAC-SHA256 with the secret over `<t>.<raw body>`. The receiver must:
+
+1. compute the HMAC and compare it in constant time;
+2. reject a timestamp more than 300 seconds from its own clock;
+3. check that `X-OMG-Delivery` equals the body's `delivery_id`, and drop deliveries it has already seen with that id.
+
+**Rotating a secret.** Set up the new variable on every replica, then **Edit…** the webhook: enter the new **Signing reference** and the old one as **Previous signing reference**, with an end time for the overlap within the next 24 hours, written with its time zone (such as `2026-11-01T12:00:00Z`). Until then each request carries two `v1` signatures and the receiver may accept either. Clear both previous fields to end the overlap.
+
+**Disable and delete.** **Disable…** stops sending: deliveries still waiting are dropped, and enabling it again doesn't replay them. **Delete…** can't be undone; it removes the URL and signing references but keeps the delivery history. A send already under way may finish.
+
+The list shows each webhook's state, whether signing (and an overlap) is configured, the last success, the last error, and how many deliveries are waiting or exhausted. **Deliveries** shows the 50 newest, with no payloads or signatures. Auditors see the list and deliveries without URLs or signing references.
+
+<Screenshot slot="admin-alert-webhooks" />

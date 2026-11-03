@@ -29,3 +29,5 @@ A model is listed when all of these are true at the moment of the request:
 - it has at least one enabled route on an enabled connection.
 
 The list doesn't say which endpoints a model serves; see the model's page in the dashboard. A listed model can still be refused by a budget or rate limit. There is no `GET /v1/models/{id}`.
+
+Model names are matched exactly. From v0.7.0, a `model` with control characters, or longer than 2,704 bytes, answers `404 model_not_found` at once.

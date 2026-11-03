@@ -30,12 +30,14 @@ Pill tabs switch between four views:
 
 Above the table, summary tiles describe the requests that match your filters: the number of requests, the error rate, median and 95th-percentile latency, average time to first token and tokens per second.
 
+Logs doesn't update by itself. In the **Requests**, **Generations** and **Sessions** views, **Refresh**, next to **Columns**, fetches the current view's rows and the summary tiles again, with the same filters.
+
 ## Filters
 
 One filter row narrows every view:
 
 - **Period**: UTC dates, the last 30 days by default, up to 93 days at a time.
-- **Model**, **Key**, **Status** (succeeded, failed, cancelled, indeterminate, in progress) and **Finish reason** (stop, length, tool calls, content filter, error, cancelled, unknown).
+- **Model**, **Key**, **Status** (**Succeeded**, **Failed**, **Cancelled**, **Unknown result**, **In progress**) and **Finish reason** (**Stop**, **Length limit**, **Tool calls**, **Content filter**, **Error**, **Cancelled**, **Unknown**). An Anthropic model's refusal is listed as **Content filter**, and running out of context window as **Length limit**.
 - **Streamed** or **Not streamed**.
 - **Session**: an exact session id.
 - A **request ID** search: the full id or its first 4 characters or more.
@@ -45,7 +47,7 @@ The table has a column chooser and a density setting.
 
 ## A request's page
 
-Select a row to open the request. It shows the summary and every attempt in order, with:
+Select a row to open the request. Its **Details** have the **Request ID** and, for a Team or Project request, a **Trace ID**: if your operator sends traces to a tracing system, search it for that id. The id alone doesn't mean a trace was recorded: tracing is off unless the operator turns it on, and even then only a share of requests is traced. The page shows the summary and every attempt in order, with:
 
 - the route and connection that served it, and the model the provider says it actually served (when it reports one; otherwise the configured model id, marked as configured);
 - status, error code and finish reason;
@@ -69,6 +71,8 @@ Select a row to open the request. It shows the summary and every attempt in orde
 ## Sessions
 
 The **Sessions** view groups requests by session id and shows, per session: requests and attempts, failures, tokens, cost, the models used, the app name from `X-Title` and the first and last request. Open a session for its requests, newest first.
+
+Requests sent without a session id aren't in any session; they are only under **Requests**. When there are no sessions, **View Requests** switches there with the same filters.
 
 <Screenshot slot="logs-sessions" />
 

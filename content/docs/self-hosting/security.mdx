@@ -3,16 +3,17 @@ title: Security
 description: What Open Model Gateway does to protect credentials, data and money, the threat model and its residual risks, and what remains the operator's job.
 ---
 
-v0.6.0 is Open Model Gateway's security release: one outbound address policy, sign-in limits and idle sessions, security headers, final revocations, separate SMTP allowlists, an audit export to a SIEM and a published threat model.
+v0.6.0 was Open Model Gateway's security release: one outbound address policy, sign-in limits and idle sessions, security headers, final revocations, separate SMTP allowlists, an audit export to a SIEM and a published threat model. Later releases tightened it: reserved credential names and an explicit authorization policy for every route (v0.7.0), one credential per management request (v0.8.0), refused special-use local approvals and no temporary tables for the runtime role (v0.9.0), and a refreshed runtime image (v0.9.1). These are the project's own changes, not an independent security review.
 
 ## What the gateway does
 
 **Credentials**
 
 - Provider secrets are references to server-side environment variables, AWS identities or file mounts, allowed by name. They are never accepted from the browser, stored in the database or returned by any API.
-- The SMTP password has its own allowlist, separate from the providers' ([below](#smtp-allowlists)).
+- The SMTP password has its own allowlist, separate from the providers' ([below](#smtp-allowlists)), and so do alert webhook signing secrets. From v0.7.0 none of the allowlists may name the gateway's own variables: startup stops if one does ([Reserved names](/docs/self-hosting/configuration#reserved-names)).
 - API keys and session tokens are stored only as hashes. Keys are shown once.
-- Callers' API keys are never sent to providers. API keys can't use the management API; browser sessions can't call inference.
+- Callers' API keys are never sent to providers. API keys can't use the management API; browser sessions and admin API tokens can't call inference.
+- [Admin API tokens](/docs/administration/admin-api-tokens) (v0.8.0) are stored as hashes, expire within 90 days, carry fixed scopes and an optional IP allowlist, and are revoked when their owner stops being a Platform Admin. They can't reach workspace keys, members or SCIM, or manage tokens.
 - The SCIM token is read once at startup and kept as a hash.
 
 **Data**
@@ -25,7 +26,7 @@ v0.6.0 is Open Model Gateway's security release: one outbound address policy, si
 **Network**
 
 - Every outbound connection follows one address policy ([below](#the-outbound-address-policy)).
-- Cloud providers are reached over HTTPS at fixed addresses. Self-hosted servers only at approved, IP-pinned addresses.
+- Cloud providers are reached over HTTPS at fixed addresses. Self-hosted servers only at approved, IP-pinned addresses, and from v0.9.0 never in a range the outbound policy refuses elsewhere.
 - No redirects are followed, proxy environment variables are ignored, and nothing is retried implicitly. From v0.6.0 this includes the sign-in client.
 - Upstream bodies, frames and responses have size limits.
 
@@ -36,6 +37,7 @@ v0.6.0 is Open Model Gateway's security release: one outbound address policy, si
 - Sign-in is rate-limited per client address, and the number of pending sign-ins is capped ([Identity setup](/docs/self-hosting/identity#sign-in-abuse-controls)).
 - Sessions end 12 hours after sign-in or after 2 hours idle, by default. People can see and end their own sessions; Platform Admins can sign a person out everywhere ([Sessions](/docs/self-hosting/identity#sessions)).
 - Changes need an exact `Origin` and a CSRF token. No CORS.
+- From v0.7.0 every management route has an explicit authorization policy, checked before the request body is read; a route without one is refused even to Platform Admins. From v0.8.0 a management request carries exactly one credential: a session cookie or an admin API token, never both.
 - Every response carries security headers ([below](#security-headers)).
 - The last Platform Admin can't be removed.
 
@@ -44,20 +46,21 @@ v0.6.0 is Open Model Gateway's security release: one outbound address policy, si
 - Integer micro-dollar arithmetic with no floating point. Prices are immutable versions pinned to each request.
 - Every request is admitted, held and settled durably in PostgreSQL before and after it runs, across replicas.
 - Unknown cost is never treated as zero, and holds are never deleted to make numbers fit.
+- From v0.7.2, a request that every usable Anthropic or Bedrock route would always reject is refused before admission, so repeating it can't tie up a workspace's budget with holds. From v0.9.0, creating and rotating keys is limited per person and per workspace ([Key issuance limits](/docs/administration/limits-and-budgets#key-issuance-limits)).
 
 **The database**
 
-- The running gateway uses a restricted role with a reviewed allowlist of table and column privileges. Prices, the ledger and the audit log are insert-only for it.
+- The running gateway uses a restricted role with a reviewed allowlist of table and column privileges. Prices, the ledger and the audit log are insert-only for it. From v0.9.0 it can't create temporary tables, and a new chart-managed CloudNativePG cluster also denies it the maintenance databases.
 - Revocations are final ([below](#revocations-are-final)).
 
 **The image**
 
-- The image is distroless: the binary, the dashboard, C runtime libraries and CA certificates, with no shell, package manager or `curl`. It runs as a non-root user (`10001`) with a read-only root filesystem.
+- The image is distroless (Debian 13 from v0.9.1): the binary, the dashboard, C runtime libraries and CA certificates, with no shell, package manager or `curl`. It runs as a non-root user (`10001`) with a read-only root filesystem.
 - Secrets read from files are checked at startup; invalid ones stop the gateway without printing the value.
 
 ## The outbound address policy
 
-From v0.6.0 every outbound connection is checked against one policy: providers, sign-in (discovery, tokens and signing keys), S3, the OpenRouter catalog, SMTP, the OpenAI realtime WebSocket and the [audit export](/docs/self-hosting/audit-export).
+From v0.6.0 every outbound connection is checked against one policy: providers, sign-in (discovery, tokens and signing keys), S3, the OpenRouter catalog, SMTP, the OpenAI realtime WebSocket, the [audit export](/docs/self-hosting/audit-export), and from v0.8.0 and v0.9.0 the [telemetry exports](/docs/self-hosting/configuration#telemetry) and alert webhooks.
 
 | Address | Allowed |
 |---|---|
@@ -69,8 +72,9 @@ From v0.6.0 every outbound connection is checked against one policy: providers, 
 - The gateway resolves names itself, drops refused addresses, and connects only to an address that passed. A DNS answer can't change between the check and the connection.
 - NAT64 (`64:ff9b::/96`), 6to4 and Teredo addresses are judged by the IPv4 address they carry, so IPv6-only clusters with DNS64 keep working.
 - IP-literal endpoints in the configuration (`GATEWAY_S3_ENDPOINT`, `GATEWAY_BEDROCK_ENDPOINT_ALLOWLIST`, the OIDC issuer and the endpoints it publishes) are checked at startup.
-- A refused request fails like an unreachable upstream. The log names the purpose, host and reason, and `gateway_egress_denied_total{purpose}` counts it when no allowed address remains.
-- Approved self-hosted servers (`GATEWAY_LOCAL_UPSTREAMS`) keep their own pinned approval and need no entry.
+- A refused request fails like an unreachable upstream. The log names the purpose, host and reason, and `gateway_egress_denied_total{purpose}` counts it when no allowed address remains. For telemetry and the audit export's OTLP collector, from v0.9.0, the gateway logs one warning without the host when connectivity changes instead.
+- Approved self-hosted servers (`GATEWAY_LOCAL_UPSTREAMS`) keep their own pinned approval and need no entry. From v0.9.0 an approval in a range this policy refuses (benchmarking, documentation, IETF assignments, the old 6to4 relay, AWS's IPv6 metadata range) stops startup.
+- Plain HTTP for telemetry, the audit export and alert webhooks is allowed only in development, and from v0.9.0 only when every resolved address is loopback.
 - **Not covered:** the AWS SDK's own credential lookups (instance metadata, ECS and EKS Pod Identity, STS and SSO). They use the SDK's own HTTP client, because instance metadata must be reachable for credentials.
 
 List a private network when the gateway needs it: an identity provider or S3-compatible store on a private address, AWS PrivateLink endpoints for Bedrock or S3 (the VPC range), or anything over Tailscale (only those addresses, such as `100.101.102.103/32`, never all of `100.64.0.0/10`).
@@ -114,24 +118,25 @@ Either way, only the creator, an owner or admin, or a service-account key may de
 - **Dependencies.** Every change runs `cargo-deny` over the Rust dependencies (known advisories, unmaintained or yanked crates, licences, and crates.io as the only source) and an audit of the production npm dependencies, where high and critical advisories fail the build. The few advisories that are deliberately ignored are listed in the repository's `deny.toml` with the reason.
 - **Code scanning.** CodeQL analyses the TypeScript and Rust code on every change and weekly.
 - **Pinning.** From v0.6.0 every GitHub Action in CI is pinned by commit SHA and every build image in the `Dockerfile` by digest. `npm run test:supply-chain` fails CI on any that isn't.
-- **Updates.** Dependabot opens weekly grouped updates for Rust crates, npm packages, GitHub Actions and the image's base images; security updates arrive on their own. v0.6.0 moves rustls to 0.23.46 for RUSTSEC-2026-0346 (session `Debug` output exposed TLS secrets), -0347 (data sent to the outer server after an ECH rejection), -0348 (unbounded Brotli certificate decompression) and -0349 (an unauthenticated ServerHello could downgrade later connections to classical key exchange).
-- **Images.** Release images are scanned for known vulnerabilities before publishing (fixable high and critical findings block the release), carry an SBOM and build provenance, and are [signed with cosign](/docs/self-hosting/container#release-images).
+- **Updates.** Dependabot opens weekly grouped updates for Rust crates, npm packages, GitHub Actions and the image's base images; security updates arrive on their own. Recent security fixes: rustls 0.23.46 in v0.6.0 (RUSTSEC-2026-0346 to -0349); in v0.6.1, the bundled TLS roots drop the distrusted emSign intermediates (RUSTSEC-2026-0381, -0382); in v0.9.1, a Debian 13 runtime with OpenSSL fixed for CVE-2026-84782. RUSTSEC-2026-0387 (`crypto-bigint`, reached only through ID-token signature checks with public keys) is a documented exception in `deny.toml`.
+- **Toolchain.** From v0.9.0 the Rust compiler is pinned to one exact version for CI and both image builds.
+- **Images.** Release images are built and scanned in jobs without registry write access; only jobs restricted to pinned, checksum-verified tools tag and sign the exact verified digest (from v0.7.0, tightened in v0.9.1). Fixable high and critical findings block the release. Images carry an SBOM and build provenance and are [signed with cosign](/docs/self-hosting/container#release-images).
 
 These checks find known issues in what the project depends on. They are not a security review of the gateway itself.
 
 ## The threat model
 
-The repository's [threat model](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/threat-model.md) lists threats by area (tenancy, keys and sessions, sign-in, SCIM, accounting, provider credentials and egress, file store, caches, batches and realtime, the dashboard, supply chain, operator actions, audit and retention). For each it names the code and tests that address it, and what remains. It is not a certification or a penetration test.
+The repository's [threat model](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/threat-model.md) lists threats by area (tenancy, keys and sessions, sign-in, SCIM, accounting, provider credentials and egress, file store, caches, batches and realtime, the dashboard, supply chain, operator actions, audit and retention). For each it names the code and tests that address it, and what remains. It is not a certification or a penetration test.
 
 ### Residual risks
 
-Open items from its gaps table, as of v0.6.0:
+Open items from its gaps table, as of v0.10.0:
 
 - There is no secret manager integration: every replica holds every secret.
 - The SCIM token is one static secret, and it can grant roles that groups are mapped to, including admin.
 - There is no row-level security in the database. Workspace isolation depends on the gateway's queries.
 - Native batches and video jobs keep running at the provider after their key is revoked.
-- Input ceilings and provider-reported usage are trusted, and there is no reconciliation with provider invoices.
+- Input ceilings and provider-reported usage are trusted. From v0.9.0 Platform Admins can compare uploaded Anthropic cost reports with the gateway's estimates, but nothing checks provider invoices.
 - Each unknown but well-formed key costs a database query, and there is no per-client rate limit on inference.
 - The realtime browser subprotocol carries the key in a request header.
 - Branch images aren't signed, and nothing checks image signatures at deploy time.
@@ -145,7 +150,9 @@ Most of these are for the independent security review, which is still open.
 
 - **HTTPS and the edge.** Terminate TLS in front of the gateway. Set `GATEWAY_TRUSTED_PROXIES` to your proxies. Keep query strings, cookies and `Authorization` headers out of access logs.
 - **Network egress.** List only the private networks the gateway needs in `GATEWAY_EGRESS_PRIVATE_ALLOW`, and restrict where the host can connect at the network layer too.
-- **Secrets.** Keep provider keys, the SCIM token, file-store keys, the audit export secret and database passwords in a secret manager; rotate them; never put them in `VITE_*` variables or images.
+- **Secrets.** Keep provider keys, the SCIM token, file-store keys, the audit export and webhook signing secrets, collector headers and database passwords in a secret manager; rotate them; never put them in `VITE_*` variables or images. Give each its own variable.
+- **Admin API tokens.** Treat them like privileged keys: the narrowest scopes, short expiry and an IP allowlist. Keep two Platform Admins, and keep `default_transaction_isolation` at `read committed`.
+- **Alert webhook receivers.** Check the signature in constant time, reject timestamps more than 300 seconds off, and drop duplicates by delivery id ([Alerts](/docs/administration/alerts#webhooks)).
 - **The metrics listener.** Keep it private.
 - **The audit log.** Stream it off the host with the [audit export](/docs/self-hosting/audit-export), and alert on gaps and silence at the receiver.
 - **Backups.** Encrypt them (`--encrypt-to`), store them off the host, and drill restores. See [Backups and restore](/docs/self-hosting/backups-and-restore).
@@ -154,7 +161,7 @@ Most of these are for the independent security review, which is still open.
 
 ## Known limits
 
-As of v0.6.0: there is no certified capacity number; IdP-initiated (back-channel or front-channel) logout isn't implemented; syslog audit messages aren't signed, and OTLP has no client-certificate option; guardrails aren't built; the Helm chart is beta. Live SCIM acceptance and an independent security review are still open, and the software is not accepted for production. Treat a deployment as a pilot until you have covered these for your environment.
+As of v0.10.0: there is no certified capacity number; IdP-initiated (back-channel or front-channel) logout isn't implemented; syslog audit messages aren't signed, and OTLP has no client-certificate option; admin API token attempt records aren't exported to a SIEM; guardrails aren't built; the Helm chart is beta. SCIM is accepted against Authentik only (not Okta or Entra), an independent security review is still open, and the software is not accepted for production. Treat a deployment as a pilot until you have covered these for your environment.
 
 ## Reporting a vulnerability
 

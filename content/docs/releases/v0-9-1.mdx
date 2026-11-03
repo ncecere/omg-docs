@@ -1,0 +1,39 @@
+---
+title: v0.9.1
+description: A security and maintenance patch. A supported Debian 13 runtime image with a fixed OpenSSL and a new CA trust store, stricter image publication, and dashboard accessibility fixes.
+---
+
+Released 2026-10-26. No migrations.
+
+A security and maintenance patch after [v0.9.0](/docs/releases/v0-9-0). It adds no migrations and no provider capabilities.
+
+## A new runtime image
+
+The image moves from the deprecated Debian 12 distroless runtime to a supported Debian 13 one, pinned by digest. The old runtime's OpenSSL was affected by CVE-2026-84782; the new one has `libssl3t64 3.5.7-1~deb13u3`. The image still runs as UID and GID `10001`, with no shell and a read-only filesystem.
+
+**The CA trust store changes with it.** Before you roll out, check your outbound TLS connections (providers, sign-in, S3, SMTP, audit export and collectors) against the new image, especially private or older certificate chains.
+
+## Stricter image publication
+
+Image builds and scans run in read-only jobs; the jobs that push to the registry accept only checked, immutable images and checksum-verified tools. Each architecture keeps its full SBOM and provenance, and the exact built digest is what gets signed. Signing uses cosign 3.1.4; verify with cosign v3.0 or newer, as before. See [Container and Compose](/docs/self-hosting/container#release-images).
+
+## Dashboard fixes
+
+- A workspace you can't open shows a neutral notice, without rendering the page or showing its identifiers. The notice clears when you navigate and isn't shown again after a reload.
+- Technical setup guidance for scheduled reports is shown only to Platform Admins. Narrow report tabs can be scrolled to, and route change previews are readable and keyboard-scrollable.
+- Holds and log links have accessible names that match their visible text, and tab, filter and command-palette controls are refreshed.
+
+## Upgrade guide
+
+No migrations or runtime grant changes: the schema still ends at `0067`. From v0.9.0, check your outbound TLS against the new image, then replace the image by digest and restart with the normal drain.
+
+Coming from an earlier release, first follow the [v0.9.0 upgrade guide](/docs/releases/v0-9-0#upgrade-guide).
+
+## Known limitations
+
+- The steady-load stall and an intermittent `503` in one accounting test are still unexplained. New measurements don't establish their cause or certify capacity.
+- The [v0.9.0 limitations](/docs/releases/v0-9-0#known-limitations) still apply.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.9.1@sha256:da03b565093fded73b6ddbc636d56b60811b4c5dcbfc4956ce62bf4efe0cb819`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.9.1) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

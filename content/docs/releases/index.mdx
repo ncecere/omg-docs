@@ -5,6 +5,16 @@ description: Open Model Gateway's releases, what to expect before 1.0, and how r
 
 | Release | Date | In short |
 |---|---|---|
+| [v0.10.0](/docs/releases/v0-10-0) | 2026-11-02 | OpenAPI 3.1 documents for the whole management API and the supported inference API, checked against the running gateway; clearer `400` errors for bad input; the provider-reported cost reconciliation dashboard. Migration `0068`. |
+| [v0.9.3](/docs/releases/v0-9-3) | 2026-10-28 | An opt-in synchronous replication policy for the Helm chart's CloudNativePG cluster, with a recommended three-instance setting. No migrations. |
+| [v0.9.2](/docs/releases/v0-9-2) | 2026-10-27 | `grants verify` no longer collides with real open incidents. No migrations. |
+| [v0.9.1](/docs/releases/v0-9-1) | 2026-10-26 | A supported Debian 13 runtime image with a fixed OpenSSL and a new CA trust store, stricter image publication, and dashboard accessibility fixes. No migrations. |
+| [v0.9.0](/docs/releases/v0-9-0) | 2026-10-25 | Scheduled cost reports, signed alert webhooks, key issuance limits and fair alert email, aged unknown-hold alerts, OTLP metrics and logs, Claude Code on native Anthropic routes, route history and previews, and requests to join a Team or Project. Special-use local approvals now stop startup. Migrations `0053` to `0067`. |
+| [v0.8.0](/docs/releases/v0-8-0) | 2026-10-24 | Alert email retries, key-expiry reminders, admin API tokens, opt-in OpenTelemetry traces, CloudNativePG backups through the Barman Cloud plugin, budget headroom and Logs Refresh. Management requests with an `Authorization` header are refused. Migrations `0049` to `0052`. |
+| [v0.7.2](/docs/releases/v0-7-2) | 2026-10-22 | Tools without parameters, empty tool results, `null` OpenAI defaults, and requests a route would always refuse no longer take a budget hold. No migrations. |
+| [v0.7.1](/docs/releases/v0-7-1) | 2026-10-22 | Optional output maximums on priced requests, base64 embeddings, replaying Responses output, no retries of permanent refusals, and Anthropic refusal stop reasons. No migrations. |
+| [v0.7.0](/docs/releases/v0-7-0) | 2026-10-21 | Gateway-owned names refused on the credential allowlists, management denials checked before the body, an explicit policy for every route, and a separate inference host for key and model pages. No migrations. |
+| [v0.6.1](/docs/releases/v0-6-1) | 2026-10-21 | A TLS patch: the distrusted emSign intermediates are refused on every outbound connection. No migrations. |
 | [v0.6.0](/docs/releases/v0-6-0) | 2026-10-15 | The security release: one outbound address policy, sign-in limits and session management, audit export to a SIEM (signed webhook, syslog over TLS or OTLP) with gap detection, data controls (subject export, remove personal data, legal holds, retention), file-store key rotation, per-user visibility of files, batches and videos, and security headers. Migrations `0038` to `0048`. |
 | [v0.5.0](/docs/releases/v0-5-0) | 2026-10-14 | Responses and Messages stream text as it's generated, a dashboard that stays fast at scale, encrypted off-host backups, a one-step Helm install with CloudNativePG, faster database failover, and `grants apply`. Migration `0037`. |
 | [v0.4.1](/docs/releases/v0-4-1) | 2026-10-11 | The Add model form marks required price ceilings and takes you to the first field to fix. No migrations. |
@@ -21,15 +31,16 @@ The full history is in the repository's [commits](https://github.com/ncecere/ope
 
 - **It is development software.** Each release is tested locally and in CI with mock providers and real PostgreSQL, plus a few small, capped checks against real providers. Production readiness, live identity-provider certification and load testing in your environment are your pilot's job.
 - **Upgrades only go forward.** Migrations can't be undone by changing images; going back past a migration means restoring a backup. Read every release's notes between your version and the target. See [Upgrades](/docs/self-hosting/upgrades).
-- **The management API may change** in any release. The inference API follows the vendor APIs it copies.
+- **The management API may change** in any release. The inference API follows the vendor APIs it copies. From v0.10.0, both have OpenAPI 3.1 documents in the repository, in `docs/openapi/`, which change with them.
 
 ## How releases are published
 
 - Each release is a Git tag, `vX.Y.Z`, on the main branch.
 - From v0.3.0, each release publishes a signed container image to `ghcr.io/ncecere/open-model-gateway`, tagged `vX.Y.Z`, `vX.Y` (the newest patch of that minor version) and `latest-release` (the newest release). Images are signed with cosign keyless signing; check the signature (from v0.4.0 use **cosign v3.0 or newer**, since the signature is stored in its bundle format) and deploy by digest. From v0.3.1 the image is distroless, with no shell. See [Container and Compose](/docs/self-hosting/container#release-images).
+- Each [GitHub release](https://github.com/ncecere/open-model-gateway/releases) carries the image digest (`open-model-gateway-vX.Y.Z.digest.txt`), an SBOM per platform and `checksums.txt`.
 - Each release's notes are also in the repository, in `docs/releases/` (for example `docs/releases/v0.3.2.md`), and the binary reports its release as the `version` of `gateway_build_info`.
 - You can still build the image from the tag with the repository's `Dockerfile`. The manual publishing workflow pushes tested images of `main`, tagged with their full commit SHA, for staging.
 
 ## What's next
 
-From the [roadmap](https://github.com/ncecere/open-model-gateway/blob/main/docs/roadmap.md), planned and not yet built: an OpenRouter video adapter, using uploaded files in chat requests, image edits and image input, content guardrails (designed, not yet built), native batches for more providers, more of the realtime interface, active health checks, key-expiry notifications and webhooks, and provider-invoice reconciliation. A plan, not a promise.
+From the [roadmap](https://github.com/ncecere/open-model-gateway/blob/main/docs/roadmap.md), planned and not yet built: an OpenRouter video adapter, using uploaded files in chat requests, image edits and image input, content guardrails (designed, not yet built), native batches for Bedrock and Vertex, more of the realtime interface, active health checks, Azure and Google Vertex AI adapters, rolling back configuration changes, requests for model access and access reviews, reconciliation of OpenAI cost exports, and a Terraform provider in its own repository. A plan, not a promise.

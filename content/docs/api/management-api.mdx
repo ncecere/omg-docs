@@ -1,45 +1,130 @@
 ---
 title: Management API
-description: The session-authenticated API behind the dashboard, its conventions, and where each area is described.
+description: The API behind the dashboard, its credentials (browser sessions and admin API tokens), conventions, denial responses, the OpenAPI document, and where each area is described.
 ---
 
-Everything the Open Model Gateway dashboard does goes through the management API under `/api/v1`. It exists for the dashboard: it authenticates with **browser sessions only**, and API keys can't use it.
+Everything the Open Model Gateway dashboard does goes through the management API under `/api/v1`. It authenticates with **browser sessions** and, from v0.8.0, with **[admin API tokens](/docs/administration/admin-api-tokens)** for scripts. Inference API keys can never use it.
 
-<Callout title="Not for scripts yet">
-  There are no machine credentials for the management API, and its routes may change between releases before 1.0. Automating administration (an operator CLI, declarative configuration) is a possible future feature, not something available now.
+<Callout title="Pre-1.0">
+  Routes may still change between releases before 1.0. From v0.10.0 the repository's OpenAPI document ([below](#openapi-documents)) describes every route and is checked against the running gateway, so check it against the release you run.
 </Callout>
+
+## Credentials
+
+A management request carries exactly one credential:
+
+| Credential | How it's sent | For |
+|---|---|---|
+| Browser session | The `omg_session` cookie set at sign-in | The dashboard |
+| Admin API token | `Authorization: Bearer omg_admin_…` | Scripts, within the token's scopes ([Admin API tokens](/docs/administration/admin-api-tokens)) |
+
+From v0.8.0, a request with two `Authorization` headers, or with an `Authorization` header and the session cookie (even a malformed one), is refused with `401` before either is examined. There is no fallback from one to the other. Make sure no proxy in front of the dashboard adds an `Authorization` header.
+
+Some routes refuse every admin API token, whatever its scopes: workspace members, keys and other workspace-administration routes, admin token management, scheduled reports, provider cost reconciliation, route history and change previews, SSO group-mapping previews, access requests and the hold review queue of a workspace.
 
 ## Conventions
 
 - **Sessions**: sign-in creates a session in an `HttpOnly` cookie. It ends 12 hours after sign-in or after 2 hours without activity, whichever comes first, unless the operator changed them. Every request rechecks the person's live role and memberships. Sign-in itself is rate-limited (see [Errors and limits](/docs/api/errors-and-limits#sign-in-limits)).
-- **Changes** (anything but `GET` and `HEAD`) must send an `Origin` header that exactly matches the gateway's public URL and an `X-CSRF-Token` header equal to the `omg_csrf` cookie. No CORS is enabled.
-- **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`. `code` is always the HTTP status as a string; `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment`, `exceeds_parent_budget`, `route_unsupported_capability` or `price_meters_incomplete` (which adds `missing_meters`). Match on `reason`, not `code`. See [Errors and limits](/docs/api/errors-and-limits#management-api-errors).
-- **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset`. Financial lists add `has_more`. Large lists are searched on the server with `q` rather than loaded whole (below).
+- **Changes** made with a session (anything but `GET` and `HEAD`) must send an `Origin` header that exactly matches the gateway's public URL and an `X-CSRF-Token` header equal to the `omg_csrf` cookie. Requests authenticated with an admin API token don't need either. No CORS is enabled.
+- **Authorization first.** From v0.7.0 every route has an explicit access policy, checked against your live role before the request body is read. A route without one is refused even to Platform Admins.
+- **Errors**: `{"error": {"code": "<HTTP status>", "message": "…", "reason": "…"}}`. `code` is always the HTTP status as a string; `reason` is a stable machine code for selected cases, such as `key_lifetime_exceeds_maximum`, `setting_locked_by_environment`, `exceeds_parent_budget`, `route_unsupported_capability`, `price_meters_incomplete` (which adds `missing_meters`) or `key_issuance_limit_exceeded`. Match on `reason`, not `code`. See [Errors and limits](/docs/api/errors-and-limits#management-api-errors).
+- **Unknown fields** in a JSON body are refused.
+- **Lists**: `{data: [...]}`, `limit` 1 to 200 (default 100) and `offset` (0 to 100,000). Financial lists add `has_more`. Logs, sessions, holds and route history use an opaque `cursor` instead; from v0.10.0 a cursor outside PostgreSQL's date range is `400`. Large lists are searched on the server with `q` rather than loaded whole (below).
+- **Search text**: `q` (and the file list's `search`) is up to 200 characters. From v0.10.0 a control character in it is refused with `400`; whitespace only means no filter.
+- **Integers** must be JSON integers, without a fraction, exponent or `-0` (an `offset` of `-0` is read as 0).
 - **Slow reads**: lists of platform users, a user's detail, workspaces, and a workspace's members, keys and service accounts read from the same snapshots as reports. A statement that runs over 10 seconds is cancelled with `503` "The request took too long; narrow it and try again" (from v0.5.0).
 - **Money**: integer micro-dollar amounts as **strings**, such as `"1250000"` for $1.25. Unknown values are `null`, never 0.
 - **Dates**: UTC. Reports take `start_date` and `end_date` as `YYYY-MM-DD`, end excluded, 1 to 93 days.
 - **Privacy**: no response ever contains a credential, a secret reference, a plaintext key, a prompt or a response.
+
+## Denial responses
+
+Releases v0.7.0 and v0.9.0 changed some refusals. They grant no new access, but automation that matches on status codes needs to know:
+
+| Case | Answer | Before |
+|---|---|---|
+| Another person's personal workspace, on any `/workspaces/{ws}` route, for anyone including Platform Admins and Auditors | `404`, exactly as for an unknown id (v0.9.0) | `403` |
+| A non-admin member rotating another person's key, in any state | `404` (v0.7.0) | `403` for an active key |
+| A workspace admin rotating another person's disabled key | `403` (v0.7.0) | `409 key_disabled` |
+| A Platform Auditor who isn't a member, on a workspace's key-limit routes | `403` before the key is looked up (v0.7.0) | `404` |
+| A non-admin on a Platform-Admin-only workspace action | `403` before the workspace is looked up, even for an unknown id (v0.7.0) | |
+| A malformed workspace or key id in the path | `404` (v0.7.0) | |
+| A plain member managing a service account's key | `403` | |
+
+Platform Admins and Auditors still see personal workspaces' totals in platform reports; the `404` only applies to the workspace's own routes.
+
+## OpenAPI documents
+
+From v0.10.0 the repository carries drift-checked OpenAPI 3.1 documents:
+
+- [`docs/openapi/management.openapi.json`](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/openapi/management.openapi.json): every management route (251 operations), including each route's access policy and admin API token scope, generated from the gateway's route policy and checked against the real handlers.
+- [`docs/openapi/inference.openapi.json`](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/openapi/inference.openapi.json): the supported inference API (27 operations).
+
+Rules JSON Schema can't express are described in each operation and in `x-omg-*` extensions, which code generators ignore; the extensions are listed in the documents' READMEs beside them. For example, `x-omg-integer-encoding: "json-integer-literal"` records that integers must be JSON integer literals, which ordinary schema validators don't check.
 
 ## Areas
 
 | Area | Routes (under `/api/v1`) | Described in |
 |---|---|---|
 | Sign-in | `/auth/config`, `/auth/login`, `/auth/callback`, `/auth/logout` | [Identity setup](/docs/self-hosting/identity) |
-| You | `/me`, `/me/summary`, `/me/models`, `/me/keys`, `/me/notifications`, `/me/sessions`, `/me/export` | [Quick tour](/docs/getting-started/quick-tour), [Your profile](/docs/using/your-profile) |
-| People | `/platform/users`, `…/sessions/revoke`, `…/export`, `…/remove-personal-data`, `/platform/oidc/group-mappings` | [People and roles](/docs/administration/people-and-roles), [SSO groups](/docs/administration/sso-groups) |
+| You | `/me`, `/me/summary`, `/me/models`, `/me/keys`, `/me/notifications`, `/me/sessions`, `/me/export`, `/me/access-requests` | [Quick tour](/docs/getting-started/quick-tour), [Your profile](/docs/using/your-profile) |
+| People | `/platform/users`, `…/sessions/revoke`, `…/export`, `…/remove-personal-data`, `/platform/oidc/group-mappings`, `…/preview` | [People and roles](/docs/administration/people-and-roles), [SSO groups](/docs/administration/sso-groups) |
+| Admin API tokens | `/platform/admin-tokens` (browser sessions only) | [Admin API tokens](/docs/administration/admin-api-tokens) |
 | Legal holds | `/platform/legal-holds`, `…/{id}/release` | [Data controls](/docs/administration/data-controls#legal-holds) |
-| Workspaces | `/platform/workspaces`, `/workspaces/{ws}`, `…/members`, `…/member-candidates`, `…/invitations`, `…/service-accounts`, `/invitations/accept` | [Teams and Projects](/docs/administration/teams-and-projects), [Workspace settings](/docs/using/workspace-settings) |
-| Keys | `/workspaces/{ws}/keys`, `…/keys/{key}/rotate`, `…/stats`, `…/access`, `…/key-safety`, `/platform/key-safety` | [API keys](/docs/using/api-keys), [Key safety](/docs/administration/key-safety) |
-| Models | `/platform/providers`, `/platform/models`, `/platform/deployments`, `/platform/model-setup`, `…/routing`, `…/prices`, `…/price-suggestion` | [Connections](/docs/administration/connections), [Models and routes](/docs/administration/models-and-routes), [Pricing](/docs/administration/pricing) |
+| Workspaces | `/platform/workspaces`, `…/discoverable`, `/workspaces/{ws}`, `…/members`, `…/member-candidates`, `…/invitations`, `…/service-accounts`, `/invitations/accept` | [Teams and Projects](/docs/administration/teams-and-projects), [Workspace settings](/docs/using/workspace-settings) |
+| Access requests | `/access-request-targets`, `/me/access-requests`, `/workspaces/{ws}/access-requests`, `/platform/access-requests` | [Teams and Projects](/docs/administration/teams-and-projects#access-requests) |
+| Keys | `/workspaces/{ws}/keys`, `…/keys/{key}/rotate`, `…/stats`, `…/access`, `…/key-safety`, `…/key-issuance`, `/platform/key-safety` | [API keys](/docs/using/api-keys), [Key safety](/docs/administration/key-safety) |
+| Models | `/platform/providers`, `/platform/models`, `/platform/deployments`, `…/configuration/history`, `…/configuration/preview`, `/platform/model-setup`, `…/routing`, `…/prices`, `…/price-suggestion` | [Connections](/docs/administration/connections), [Models and routes](/docs/administration/models-and-routes), [Pricing](/docs/administration/pricing) |
 | Catalogs | `/platform/catalogs`, `/platform/catalog-defaults`, `/platform/workspaces/{ws}/catalogs`, `/workspaces/{ws}/models`, `…/catalog` | [Catalogs](/docs/administration/catalogs) |
 | Limits | `/platform/workspace-types/{kind}/policy`, `/platform/workspaces/{ws}/policy`, `/workspaces/{ws}/policy`, `…/keys/{key}/policy` (`/platform/installation/policy` returns `410 reason:"installation_limits_removed"` from v0.4.0) | [Limits and budgets](/docs/administration/limits-and-budgets) |
 | Activity | `/workspaces/{ws}/requests`, `…/generations`, `…/sessions`, `…/logs/metrics`, `/platform/logs/…` | [Logs](/docs/using/logs) |
-| Costs | `…/cost-report`, `…/costs`, `…/usage-export`, `…/usage/overview`, `…/usage/explore`, `…/usage/storage`, `/platform/cost-centers` | [Usage and costs](/docs/using/usage-and-costs) |
-| Reconciliation | `POST /workspaces/{ws}/costs/{execution}/reconcile` | [Pricing](/docs/administration/pricing#cost-evidence-and-reconciliation) |
+| Costs | `…/cost-report`, `…/costs`, `…/usage-export`, `…/usage/overview`, `…/usage/explore`, `…/usage/storage`, `…/holds`, `/platform/cost-centers` | [Usage and costs](/docs/using/usage-and-costs), [Usage, logs and cost centers](/docs/administration/usage-logs-and-cost-centers) |
+| Scheduled reports | `/platform/report-schedules`, `/workspaces/{ws}/report-schedules`, `…/runs`, `…/runs/{run}/csv` (browser sessions only) | [Scheduled reports](/docs/administration/usage-logs-and-cost-centers#scheduled-reports) |
+| Reconciliation | `POST /workspaces/{ws}/costs/{execution}/reconcile`; `/platform/provider-cost-imports`, `/platform/provider-cost-mappings`, `/platform/provider-reconciliations` (browser sessions only) | [Pricing](/docs/administration/pricing#cost-evidence-and-reconciliation), [Provider reconciliation](/docs/administration/usage-logs-and-cost-centers#provider-reconciliation) |
 | Files and batches | `/workspaces/{ws}/files`, `/workspaces/{ws}/batches`, `/platform/batches` | [Files](/docs/using/files), [Batches](/docs/using/batches) |
-| Alerts | `/platform/alerts/…`, `/workspaces/{ws}/alerts/…` | [Alerts](/docs/administration/alerts) |
-| Settings | `/platform/settings/general`, `…/privacy`, `…/email`, `…/storage`, `…/audit-export`, `…/sign-in` | [Settings](/docs/administration/settings) |
+| Alerts | `/platform/alerts/…`, `/platform/alerts/webhooks`, `/workspaces/{ws}/alerts/…` | [Alerts](/docs/administration/alerts) |
+| Settings | `/platform/settings/general`, `…/general/logo`, `…/privacy`, `…/email`, `…/storage`, `…/audit-export`, `…/sign-in` | [Settings](/docs/administration/settings) |
 | Audit | `/platform/audit`, `/workspaces/{ws}/audit` | [Audit log](/docs/administration/audit-log) |
+
+## Added in v0.7.0 to v0.10.0
+
+All under `/api/v1`.
+
+### Admin API tokens (v0.8.0)
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /platform/admin-tokens` | Admin, browser session | Every token's metadata, never the token or its hash. |
+| `POST /platform/admin-tokens` | Admin, browser session | `{name, scopes, expires_in_days (1–90), ip_allowlist?}`. Creates a token for yourself and returns `{id, token, scopes, created_at, expires_at}` once, with `Cache-Control: no-store`. |
+| `DELETE /platform/admin-tokens/{token}` | Admin, browser session | Revokes a token. Any Platform Admin may revoke any token. |
+
+Scopes are `platform:read`, `catalog:write`, `access:write`, `governance:write` and `settings:write`; a write scope doesn't include reading.
+
+### Workspaces, access and keys (v0.9.0)
+
+- `PUT /platform/workspaces/{ws}/discoverable` (Admin): `{discoverable: true|false}` for a Team or Project.
+- `GET /access-request-targets` lists discoverable workspaces you aren't in. `POST /me/access-requests` takes `{workspace_id, idempotency_key, reason?}` (reason up to 1,000 characters); `…/{id}/withdraw` withdraws one. Owners and admins approve or deny at `/workspaces/{ws}/access-requests/{id}/approve` or `/deny`, Platform Admins at `/platform/access-requests/{id}/…`. Too many requests: `429` with `reason:"access_request_rate_limited"` and `Retry-After`.
+- `GET /workspaces/{ws}/key-issuance` reports your key issuance in the last 24 hours (and the workspace's, for its admins). Creating or rotating a key past a limit answers `429` with `reason:"key_issuance_limit_exceeded"` and `Retry-After`. Policy bodies gain `key_issuances_per_holder` and `key_issuances_per_workspace`.
+
+### Group mappings and routes (v0.9.0)
+
+- `POST /platform/oidc/group-mappings/preview` and `POST /platform/oidc/group-mappings/{id}/preview` (Admin, browser session) dry-run a new, changed or deleted mapping, with `immediate` and `diff` results and, for an existing mapping, a `digest`. Send it back as `If-Match: "<digest>"` on the `PATCH` or `DELETE`: a changed mapping is then refused with `412 reason:"precondition_failed"`.
+- `POST /platform/deployments/{id}/configuration/preview` (Admin, browser session) takes `{"enabled": true|false}` and returns the change's effect on serving routes and Teams and Projects, without writing anything.
+- `GET /platform/deployments/{id}/configuration/history` and `…/history/{change}` (Admin and Auditor, browser session) list a route's enablement changes, with `limit` (1–100) and `cursor`.
+
+### Alerts, holds, reports and costs (v0.9.0)
+
+- `/platform/alerts/webhooks`: list, create, change (`PATCH`) and delete saved webhooks; `…/{id}/test` queues a test; `…/{id}/deliveries` returns the 50 newest deliveries. Tokens need `platform:read` to read and `settings:write` to change. Only Admins (and tokens with both scopes) see URLs and signing references.
+- `GET /workspaces/{ws}/holds` and `GET /platform/holds`: requests unknown for 24 hours or more, with `limit` and `cursor`.
+- Scheduled reports at `/platform/report-schedules` and `/workspaces/{ws}/report-schedules`, with their `runs` and aggregate `csv`. Creating or resuming past the schedule limit is `409 reason:"report_schedule_limit_reached"`; a CSV over 1,000 rows is `422`, and an expired one `410`.
+- Provider cost imports, mappings and reconciliations under `/platform/provider-cost-…` and `/platform/provider-reconciliations` (Admin writes, Admin and Auditor read).
+
+### Behaviour changes (v0.10.0)
+
+- `POST /platform/settings/email/test` to a relay that isn't on the operator's host allowlist records and returns a failed test with `error: "host_not_allowed"`, instead of `409`.
+- Support and logo URLs over 2,048 characters once percent-encoded are `400`.
+- Control characters in search text, group-mapping issuers (which also refuse whitespace) and model and catalog descriptions (other than tab, line feed and carriage return) are `400`.
+- Manual reconciliation with incoherent token counts is `400`.
 
 ## Added in v0.5.0 and v0.6.0
 
@@ -78,8 +163,8 @@ All under `/api/v1`.
 - `GET /platform/models` also takes `not_in_catalog=<catalog id>` and `not_direct_in=<workspace id>`, to leave out models already in a catalog or assigned to a workspace.
 - Audit rows name their actor, workspace and target (`actor_name`, `workspace_name`, `target_name`), and key rows their holder (`issued_to_name`), so the dashboard needn't load every user or workspace.
 
-The complete route list, with bodies and responses, is in the repository's [`docs/management-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/management-api.md) and [`docs/governance-api.md`](https://github.com/ncecere/open-model-gateway/blob/main/docs/governance-api.md).
+The complete route list, with bodies and responses, is in the [OpenAPI document](#openapi-documents) and the repository's [`docs/management-api.md`](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/management-api.md) and [`docs/governance-api.md`](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/governance-api.md).
 
 ## SCIM
 
-SCIM 2.0 is a separate API at `/scim/v2`, authenticated with its own bearer token, for identity providers. See [SCIM provisioning](/docs/administration/scim).
+SCIM 2.0 is a separate API at `/scim/v2`, authenticated with its own bearer token, for identity providers. Admin API tokens can't use it. See [SCIM provisioning](/docs/administration/scim).

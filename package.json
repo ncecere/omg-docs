@@ -19,11 +19,11 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
-    "fumadocs-core": "16.15.17",
+    "fumadocs-core": "16.17.9",
     "fumadocs-mdx": "15.4.5",
-    "fumadocs-ui": "16.15.17",
+    "fumadocs-ui": "16.17.9",
     "lucide-react": "1.48.0",
-    "next": "16.3.7",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "shiki": "4.4.3"
@@ -39,5 +39,8 @@
     "sharp": "0.35.5",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "compression": "1.8.2"
   }
 }

@@ -12,7 +12,7 @@ The repository includes a local demo: its own PostgreSQL container, a small Open
 ## What you need
 
 - Docker with Compose v2
-- The current stable Rust toolchain
+- Rust through `rustup`: the repository pins the compiler (Rust 1.99.1) in `rust-toolchain.toml`, and `rustup` installs it the first time you build
 - Node.js 22.12 or later, and npm
 - A clone of [the repository](https://github.com/ncecere/open-model-gateway)
 
@@ -51,7 +51,7 @@ python3 scripts/demo-runtime.py
 npm run build --workspace @omg/web -- --outDir ../../.local/enterprise-rebuild/web-dist
 ```
 
-`bootstrap-demo` seeds the personas and sample configuration once; running it again changes nothing. `demo-runtime.py` creates a restricted database role for the running gateway and writes its private environment file.
+`bootstrap-demo` seeds the personas and sample configuration once; running it again changes nothing. `demo-runtime.py` creates a restricted database role for the running gateway and writes its private environment file (readable by you only; never print or commit it).
 
 </Step>
 <Step>
@@ -71,7 +71,7 @@ It listens on `127.0.0.1:18084`.
 
 ### Start the gateway
 
-In another terminal, load the runtime environment (not the bootstrap one) and serve:
+In another terminal, load the runtime environment (not the bootstrap one) and serve. The demo's sign-in client is public: make sure `GATEWAY_OIDC_CLIENT_SECRET` isn't set in your shell.
 
 ```sh
 set -a
@@ -96,8 +96,8 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000), choose **Sign in with singl
 |---|---|---|
 | Platform Admin | `operator@demo.invalid` | Configure the installation and administer Teams and Projects; see cost totals, but not others' personal keys or requests. |
 | Platform Auditor | `auditor@demo.invalid` | Read Admin, the audit log and cost totals; has their own personal workspace. |
-| Alex, Team Admin | `alex@demo.invalid` | Owner or admin of the demo's Team and Project, plus a personal workspace. |
-| Blair, Platform User | `blair@demo.invalid` | Member of the same Team and Project: their own keys and activity only. |
+| Alex, Team Admin | `alex@demo.invalid` | Owner or admin of the Team Product and the Project Research, plus a personal workspace. |
+| Blair, Platform User | `blair@demo.invalid` | Member of Product and Research: their own keys and activity only. |
 | Unentitled user | `unentitled@demo.invalid` | Signs in successfully but has no platform role, so access is denied and no personal workspace is made. |
 
 To switch persona, sign out from the account menu and sign in again.
@@ -106,7 +106,7 @@ To switch persona, sign out from the account menu and sign in again.
 
 - Switch between the Workspace and Admin portals as the Platform Admin; notice that Alex and Blair only have Workspace.
 - Create a key, see it once, rotate it and revoke it. Check that Blair can't manage the Team or see Alex's activity.
-- Compare the Team's default catalogs with the Project, which replaces them.
+- Compare the Team Product, which uses the default catalogs, with the Project Research, which replaces them.
 - Look at the empty cost reports: the demo seeds no fake requests or costs.
 
 ## Make a request

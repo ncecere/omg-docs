@@ -28,6 +28,20 @@ open-model-gateway grants verify   # as a role that can SET ROLE gateway_runtime
   Run `grants apply` as the migrator after **every** `migrate`. New tables and columns are closed to the runtime role until it runs, so a release whose grants weren't applied fails safely, but it fails. Then run `grants verify`. Like `migrate`, `grants apply` takes a session-level lock, so connect directly to PostgreSQL, never through a transaction-mode pooler.
 </Callout>
 
+From v0.9.0, `grants apply` also revokes `TEMPORARY` on the connected database from `PUBLIC` and `gateway_runtime`, and `grants verify` tries to create a temporary table as the runtime role and requires it to fail. Give the gateway a database of its own: other roles there that relied on `PUBLIC`'s right lose it too.
+
+What v0.9.0 grants the runtime role, on top of v0.8.0:
+
+- column grants for key issuance limits, the per-workspace alert email buckets and generation limit, alert webhooks and their outbox, scheduled reports and their runs, and access requests;
+- `SELECT` and `INSERT` on route configuration history.
+
+What v0.8.0 grants, on top of v0.7.x:
+
+- the alert email outbox (`SELECT`, `INSERT`, and `UPDATE` of its state, attempt, lease and error columns only) and the delivery progress columns;
+- admin API tokens (`SELECT`, `INSERT`, and `UPDATE` of `revoked_at` and last use only), their helper functions, and the insert-only token attempt records.
+
+Nothing allows deleting or rewriting history. v0.6.1, v0.7.x, v0.9.1 to v0.9.3 and v0.10.0 change no grants.
+
 What v0.6.0 grants the runtime role, on top of v0.5.0:
 
 - `UPDATE` of `object_visibility` on workspaces (per-user files, batches and videos);
@@ -52,9 +66,9 @@ Before changing anything, `migrate` runs read-only checks. It accepts only an em
 
 `open-model-gateway schema-version` prints the migrations compiled into a binary, as JSON, without touching a database. Backup tooling uses it to check that a backup matches a release.
 
-## Migrations through v0.6.0
+## Migrations through v0.10.0
 
-v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds `0024` to `0036`, the largest range since v0.1.0, for scale-out (see [Scaling](/docs/self-hosting/scaling)) and the removal of installation-wide limits. v0.4.1 adds none, v0.5.0 adds `0037`, and v0.6.0 adds `0038` to `0048`.
+v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds `0024` to `0036`, the largest range since v0.1.0, for scale-out (see [Scaling](/docs/self-hosting/scaling)) and the removal of installation-wide limits. v0.4.1 adds none, v0.5.0 adds `0037`, and v0.6.0 adds `0038` to `0048`. v0.6.1 and v0.7.x add none, v0.8.0 adds `0049` to `0052`, v0.9.0 adds `0053` to `0067`, v0.9.1 to v0.9.3 add none, and v0.10.0 adds `0068`. Before you run them, read [Upgrades](/docs/self-hosting/upgrades): v0.8.0 and v0.9.0 need old workers stopped first.
 
 | Migration | Adds |
 |---|---|
@@ -65,6 +79,7 @@ v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds 
 | `0020_files_api` | The Files API, the storage quota and hourly storage usage |
 | `0021_batch_engine` | Batch lines and result segments, batch price lists |
 | `0022_batch_scheduling` | Per-route batch scheduling, completion windows, and each batch line's route |
+| `0023_branding_logo` | The uploaded installation logo |
 | `0024`, `0025` | Maintained per-minute rate counters and an unknown-cost split in budget totals |
 | `0026_remove_installation_limits` | **Breaking.** Removes the installation-wide budget and rate limits; converts installation budget alert rules to the non-blocking Installation spend kind. See [Limits and budgets](/docs/administration/limits-and-budgets) and [Upgrades](/docs/self-hosting/upgrades#to-v040). |
 | `0027_scoped_admission` | Admission and settlement lock a workspace's and key's own rows instead of one installation row |
@@ -83,8 +98,25 @@ v0.3.1 and v0.3.2 added none: their schema is the same as v0.3.0's. v0.4.0 adds 
 | `0045_legal_holds` | Legal holds |
 | `0046`, `0047` | Indexes for finding a person's files and audit entries |
 | `0048_audit_export_sequence` | The audit export's gap-free `seq` counter, and the triggers that write the on and off events |
+| `0049_key_expiry_reminders` | Built-in key-expiry reminders (v0.8.0) |
+| `0050_alert_recipient_outbox` | The per-recipient alert email outbox, with retries. Stop old alert workers first |
+| `0051`, `0052` | Admin API tokens, their audit field and token attempt records |
+| `0053`, `0054` | Key issuance limits, and their index (v0.9.0) |
+| `0055`, `0056` | Per-workspace buckets for fair alert email dispatch, and their index |
+| `0057_alert_webhooks` | Saved alert webhooks and their outbox |
+| `0058_aged_unknown_hold_alerts` | Built-in aged unknown-hold alerts |
+| `0059`, `0060` | The per-workspace alert email generation limit, and its index. Stop old evaluators first |
+| `0061`, `0063` | Scheduled report schedules and their generation |
+| `0062` | An index for the alert webhook metrics |
+| `0064_provider_cost_reconciliation` | Provider-reported cost imports, mappings and reconciliations |
+| `0065_report_delivery` | Scheduled report email, through the alert email outbox |
+| `0066_access_requests` | Discoverable Teams and Projects, and access requests |
+| `0067_configuration_history` | Route configuration history and revisions. Stop older replicas first |
+| `0068_smtp_test_error_categories` | The email test result uses the delivery error categories (v0.10.0) |
 
-There is no `0012` or `0023`.
+There is no `0012`; `0023` stores the uploaded installation logo. v0.10.0's schema has 67 migrations, the latest `0068`.
+
+`0054`, `0056`, `0060` and `0062` build their indexes `CONCURRENTLY`, outside a transaction: they wait for older transactions to finish, and if interrupted, the next `migrate` drops and rebuilds the invalid index. `0055` and `0065` lock the alert delivery table while they work, for longer with a large email backlog.
 
 Some of v0.6.0's migrations take locks worth planning for: `0041` rewrites the sessions table under a full lock (dashboard requests and sign-in wait; inference doesn't), and `0047` builds indexes on every audit log partition. Check the size of `browser_sessions` first. `0042` and `0048` give up after a 10-second lock timeout; if either does, run `migrate` again. See [Upgrades](/docs/self-hosting/upgrades).
 
@@ -98,10 +130,10 @@ Some of v0.6.0's migrations take locks worth planning for: `0041` rewrites the s
 
 ## Highly available PostgreSQL
 
-The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.6.0/docs/postgresql-ha.md), new in v0.5.0, is for running two or more replicas on a primary with at least one standby. In short:
+The repository's [HA PostgreSQL guide](https://github.com/ncecere/open-model-gateway/blob/v0.10.0/docs/postgresql-ha.md), new in v0.5.0, is for running two or more replicas on a primary with at least one standby. In short:
 
 - **The gateway has no failover logic of its own.** It reaches the primary through a host name that moves on failover. While no primary is reachable it refuses new work (`503 accounting_unavailable`, or `504` if a commit hangs) rather than serving it unaccounted. Requests already running keep their holds and are reconciled as unknown.
-- **Use a synchronous standby** as the failover target. With asynchronous replication a failover can lose recent admissions, settlements and management changes, such as a key revocation.
+- **Use a synchronous standby that can't silently become asynchronous.** With asynchronous replication a failover can lose recent admissions, settlements and management changes, such as a key revocation. A primary failover with the chart's legacy two-instance setting lost 16 acknowledged requests' accounting rows. The guide recommends three instances with a required, quorum-based policy; for the chart, see [Production durability policy](/docs/self-hosting/kubernetes#production-durability-policy).
 - **Point `GATEWAY_LISTEN_DATABASE_URL` at the primary directly**, never at a transaction-mode pooler.
 - **Size connections for every consumer:** each replica's pool, one `LISTEN` session per replica, an optional reporting pool on the standby, and the migrator, backups and CLI commands.
 - **Take both kinds of backup:** base backups with WAL archiving for point-in-time recovery, and encrypted logical backups. See [Backups and restore](/docs/self-hosting/backups-and-restore).

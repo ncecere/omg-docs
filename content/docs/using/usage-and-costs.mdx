@@ -3,7 +3,7 @@ title: Usage and costs
 description: Spend, requests, tokens and storage over time, broken down by model, key and member, with what is still on hold.
 ---
 
-**Usage & costs** answers "what did we use, and what did it cost?" for the selected workspace, over a period you choose.
+**Usage & costs** answers "what did we use, and what did it cost?" for the selected workspace, over a period you choose. Its views are **Overview**, **Explore**, **Cost records**, **Holds** and, for workspace owners and admins and the owner of a personal workspace, **Scheduled reports**.
 
 <Screenshot slot="usage-overview" />
 
@@ -21,6 +21,7 @@ Periods are UTC calendar days, from 1 to 93 days, and the default is the current
 - **Requests** (with the number of upstream attempts) and **Tokens** (input and output).
 - **Cache hit rate**: cached input as a share of all input, for requests whose provider reports both.
 - **Cost per 1M tokens**: settled cost divided by the tokens of settled requests.
+- **Budgets**, when budgets apply and you may see their use: each budget's current UTC window, spent plus on hold, and when it resets.
 - A chart of each day, and the top models, API keys and members (members only for workspace admins) by spend.
 - For admins, an **Accounting** section: how much of the period is settled, pending or unknown, and which requests need attention.
 
@@ -35,6 +36,22 @@ Filter by model, API key, member, status or cost, and every figure follows.
 ## Cost records
 
 **Cost records** lists individual attempts with their tokens, cost or hold, price version and accounting state, and exports them as CSV, one page of up to 1,000 rows at a time. Unknown values are empty cells, never zeros.
+
+## Holds
+
+**Holds** lists aged unknown holds: money still set aside for an attempt whose cost has been unknown for 24 hours or more, for example because the provider never reported usage or the route had no price. It isn't tied to the period and has no filters; the oldest come first, and **Load more** shows the rest.
+
+- Members see the holds from their own keys, workspace owners and admins see the whole workspace, and a personal workspace's owner sees their own.
+- Tiles show how many there are, the **Known floor (at least)**, how many are **Unbounded** (no upper limit is known) and the **Oldest**. Each row has how long the cost has been unknown, the floor, the reason, the model and the request.
+- A hold's amount is a floor, never an upper bound, and is never added to spend. Nothing on this tab refunds or releases a hold: a Platform Admin settles it with evidence (**Reconcile**, shown to Platform Admins only).
+
+<Screenshot slot="usage-holds" />
+
+Workspace owners and admins of a Team or Project also get an alert when a hold has been unknown for 24 hours, and a critical one at 7 days; see [Alerts and notifications](/docs/using/alerts-and-notifications#aged-unknown-holds).
+
+## Scheduled reports
+
+Workspace owners and admins, and the owner of a personal workspace, can have a cost report made every week or month, with an email link when it is ready. See [Scheduled reports](/docs/using/scheduled-reports).
 
 ## Storage
 
@@ -51,4 +68,4 @@ Workspace admins and personal owners also see how much the workspace kept in the
 
 ## When a budget runs out
 
-When a request would push any applicable budget past its limit, the gateway refuses it before sending it, with `429 budget_exceeded`. The message says whether the key's or the workspace's budget is the reason (there is no installation-wide budget), but never how much is left of a budget you can't see. Budgets reset at the start of their next UTC day, ISO week or month; lifetime budgets don't reset. Raising a budget doesn't reset what was already spent. See [Errors and limits](/docs/api/errors-and-limits).
+When a request would push any applicable budget past its limit, the gateway refuses it before sending it, with `429 budget_exceeded`. The message says whether the key's or the workspace's budget is the reason (there is no installation-wide budget), but never how much is left of a budget you can't see. Budgets reset at the start of their next UTC day, ISO week or month; lifetime budgets don't reset. Raising a budget doesn't reset what was already spent. The answer carries `x-should-retry: false`, so the official SDKs don't retry it. To see how much is left, open the key's **Limits** tab ([budget headroom](/docs/using/api-keys#the-key-list-and-key-page)). See [Errors and limits](/docs/api/errors-and-limits).

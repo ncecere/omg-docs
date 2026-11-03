@@ -1,6 +1,6 @@
 ---
 title: Workspace settings
-description: Members and invitations, who sees files, batches and videos, service accounts, limits, access, alerts and the audit log of a Team, Project or personal workspace.
+description: Members, invitations and access requests, who sees files, batches and videos, service accounts, limits, access, alerts and the audit log of a Team, Project or personal workspace.
 ---
 
 **Settings** in a workspace holds its members, limits and access. Which tabs you see depends on your role and the kind of workspace.
@@ -10,6 +10,7 @@ description: Members and invitations, who sees files, batches and videos, servic
 | **General** | Type, your role, cost center; owners and admins can rename it and choose [who sees files, batches and videos](#who-sees-files-batches-and-videos) | — (always called "Personal") |
 | **Members** | Members and invitations | — |
 | **Service accounts** | Owners and admins | — |
+| **Access requests** | Owners and admins | — |
 | **Limits** | Owners and admins tighten; members read | Read only: set by Platform Admins |
 | **Access** | Everyone | Owner |
 | **Alerts** | Owners and admins | Built-in budget alerts |
@@ -31,6 +32,27 @@ To add someone, search by email under **Add member** and pick a role. Only peopl
 
 Members of one Team get nothing in another Team or in any Project.
 
+### Invitations
+
+For someone who can't be found by search yet, choose **Invite by email** with their address and a role (admin or member). The invite code is shown once, and is also emailed to them if email is set up; otherwise send it yourself. The person signs in, opens **Accept invitation** (`/invitations/accept`) and enters the code.
+
+- A code works only for the address it was made for: the person's signed-in, verified email must match.
+- It expires after 3 days and can be used once. **Revoke invitation…** stops it working.
+- Accepting an invitation doesn't give anyone a platform role; they need one first.
+
+### Access requests
+
+If a Platform Admin has made the Team or Project discoverable, people with a platform role can ask to join it as members from **Request access** (see [Joining a Team or Project](/docs/using/joining-a-workspace)). Owners and admins review the pending requests in **Settings › Access requests**: each shows the requester's name and email, their reason and when they sent it.
+
+<Screenshot slot="workspace-access-requests" />
+
+- **Approve…** makes the requester a member, with a manual membership. **Deny…** turns the request down; they can send a new one later.
+- Nobody can approve or deny their own request.
+- Requests expire after 7 days. A request that was overtaken (for example, the person was added by hand meanwhile) can't be decided: you get a conflict message instead.
+- Requests always ask for the member role. To make someone an admin, change their role afterwards.
+
+Platform Admins see every workspace's requests in **Admin › Access requests** and can decide them too.
+
 ## Who sees files, batches and videos
 
 In a Team or Project, **General** has a setting for who sees the [files](/docs/using/files), [batches](/docs/using/batches) and video jobs created in the workspace. Owners and admins change it under **Files, batches and videos** › **Who sees them**; members see the current value.
@@ -47,14 +69,6 @@ In a Team or Project, **General** has a setting for who sees the [files](/docs/u
 - **What you can't see doesn't exist for you**: its id answers `404`, it is left out of lists, and it can't be used as a batch's input file.
 
 For an application that works on everyone's files and batches, use a [service account](#service-accounts) key rather than switching the workspace to **Workspace-wide**, unless members really should see each other's objects. Changes are recorded in the workspace's audit log.
-
-### Invitations
-
-For someone who can't be found by search yet, choose **Invite by email** with their address and a role (admin or member). The invite code is shown once, and is also emailed to them if email is set up; otherwise send it yourself. The person signs in, opens **Accept invitation** (`/invitations/accept`) and enters the code.
-
-- A code works only for the address it was made for: the person's signed-in, verified email must match.
-- It expires after 3 days and can be used once. **Revoke invitation…** stops it working.
-- Accepting an invitation doesn't give anyone a platform role; they need one first.
 
 ## Service accounts
 
@@ -73,8 +87,9 @@ Owners and admins of a Team or Project can add their own limits on top:
 - **Rate limits**: requests per minute, tokens per minute, requests at once, jobs at once.
 - **Budgets**: up to one each for the day, week, month and lifetime (UTC).
 - **Storage**: the most the workspace keeps in the file store.
+- **Keys per person per 24 h** and **Keys per workspace per 24 h**: how many keys one member (or one service account), and everyone together, can create or rotate in a rolling 24 hours. Rotations count. Unless changed, 50 and 500; the most allowed is 10,000. See [How many keys you can create](/docs/using/api-keys#how-many-keys-you-can-create).
 
-Local limits only tighten. You can't set one above the platform's limit for the same thing, and once saved you can lower a local limit but not raise or remove it. Each budget shows how much of its current window is used. See [Limits and budgets](/docs/administration/limits-and-budgets) for how layers combine.
+Local limits only tighten. You can't set one above the platform's limit for the same thing, and once saved you can lower a local limit but not raise or remove it. Each budget shows how much of its current window is used, split into settled estimates, pending holds and retained unknown-cost floors, with what remains (**Unknown** while some costs aren't known). **Effective headroom** gives, per period, the lowest remaining amount across the layers. See [Limits and budgets](/docs/administration/limits-and-budgets) for how layers combine.
 
 A personal workspace's limits come from Platform Admins; its owner can still put limits on each key.
 
@@ -101,4 +116,4 @@ See [Alerts and notifications](/docs/using/alerts-and-notifications#workspace-al
 
 ## Audit log
 
-The workspace's own history: membership and invitation changes, key creation, rotation, disabling and revocation, model choices, limit changes, file uploads and deletions, cancelled batches. Entries record who did what and when, never request content. A personal workspace's log is visible to its owner only.
+The workspace's own history: membership and invitation changes, access requests and their outcomes, key creation, rotation, disabling and revocation, model choices, limit changes, file uploads and deletions, cancelled batches. Entries record who did what and when, never request content or the reason given with an access request. A personal workspace's log is visible to its owner only.

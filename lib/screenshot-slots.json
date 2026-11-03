@@ -3,313 +3,415 @@
     "files": [
       "sign-in"
     ],
-    "alt": "The Open Model Gateway sign-in page: the product name, a Sign in card with the button \"Sign in with single sign-on\", and a note that signing in alone doesn't give access."
+    "alt": "The Open Model Gateway sign-in page: the product name and tagline, a Sign in card with the button \"Sign in with single sign-on\", and a note that signing in alone doesn't give access."
   },
   "home": {
     "files": [
       "home"
     ],
-    "alt": "Home for Priya Shah: the models she can use, her usage this month (spent, requests, tokens) and her API keys across her workspaces."
+    "alt": "Home for Priya Shah with Personal selected: her five workspaces, the six models she can use, her usage this month ($4.23 spent plus $1.17 on hold, 438 requests, at least 1,681,499 tokens) and her three API keys, one of them \"Near limit\" at $1.72 of $2.00."
   },
   "workspace-switcher": {
     "files": [
       "workspace-switcher"
     ],
-    "alt": "The workspace selector open, listing the Personal workspace, the Team \"Chemistry Teaching\" and the Project \"Climate Data Study\"."
+    "alt": "The workspace selector open over Chemistry Teaching's overview, listing Priya Shah's Personal workspace, the Teams \"Chemistry Teaching\" and \"Teaching & Learning\" and the Projects \"Climate Data Study\" and \"Course Assistant Pilot\", each with her role."
   },
   "admin-overview": {
     "files": [
       "admin-overview"
     ],
-    "alt": "Admin Overview: the setup checklist with most steps done and one route still unpriced, and \"Platform at a glance\" with users, Teams, Projects, ready models, requests and spend this month."
+    "alt": "Admin Overview: the \"Set up this install\" checklist at 5 of 6 done, with \"Price every enabled route\" still open because one enabled route is unpriced, and the first tiles of \"Platform at a glance\": users with access, Teams and Projects."
   },
   "key-create": {
     "files": [
       "key-create"
     ],
-    "alt": "The Create API key dialog: a name, a service account chosen as the holder, a 90-day expiry, a $50 monthly spending limit, collapsed rate limits, and one selected model."
+    "alt": "The Create API key dialog in Chemistry Teaching: the name \"Lab assistant bot\", \"A service account\" (Course tools) as the holder, a 90-day expiry, a $50 monthly spending limit, collapsed rate limits, and only Chat model selected, with the inherited budgets noted below."
   },
   "key-created": {
     "files": [
       "key-created"
     ],
-    "alt": "The \"Save your API key\" dialog showing a new key once, with Copy key and I have saved it."
+    "alt": "The \"Save your API key\" dialog, shown once: the key (a zeroed placeholder here) with Copy key, its $50.00 monthly limit, and the OpenAI-compatible and Anthropic SDK base URLs with Copy buttons, then Open key page and I have saved it."
   },
   "key-detail": {
     "files": [
       "key-detail"
     ],
-    "alt": "An API key's page: its details, spending today, this week and this month, spending over the last 30 days, and a Safety card listing the findings \"Expiry too long\" and \"No budget\"."
+    "alt": "Sam Ortiz's personal key \"Sam's scripts\", Overview tab: a Safety card with \"Expiry too long\" and \"No budget\" and their fixes, the key's settings, a \"Calling the API\" card with both base URLs, $0.00 today, this week and this month, and spending over the last 30 days."
   },
   "workspace-models": {
     "files": [
       "workspace-models"
     ],
-    "alt": "A workspace's Models page: models with their type, input and output prices and serving state, two of them ticked for comparison."
+    "alt": "Chemistry Teaching's Models page: seven models with their type, serving state and prices, five added and two available to add (one \"Not serving\"), with Chat model and Fast chat model ticked for Compare."
   },
   "model-compare": {
     "files": [
       "model-compare"
     ],
-    "alt": "Two models compared side by side: prices, context and output ceilings, serving state, and 30 days of requests, error rate, latency, time to first token and speed."
+    "alt": "Chat model and Fast chat model compared side by side: type, protocols, serving state, input, output and other prices, context and output ceilings, and 30 days of requests, error rate, median latency, median time to first token and tokens per second, the better value marked."
   },
   "logs-requests": {
     "files": [
       "logs-requests"
     ],
-    "alt": "Logs, Requests view: summary tiles for requests, error rate, latency, time to first token and speed above a table of requests with model, key, input and output tokens, cost, latency, finish reason and status."
+    "alt": "Logs, Requests view for Chemistry Teaching over the last 30 days: tiles for requests, error rate, latency, time to first token and speed, then filters and a refresh button above the latest requests with model, key and app, tokens, cost, latency, finish reason and status."
   },
   "request-detail": {
     "files": [
       "request-detail"
     ],
-    "alt": "A request's page: the summary and two attempts in order, the first failed on one route and the second succeeded on another, with tokens, timings and cost."
+    "alt": "A Climate Data Study request's page: cost and tokens \"Unknown\" with $0.09 on hold, its details including a Trace ID, and two attempts in order: the University GPU cluster failed with upstream_unavailable, then the Research compute (backup) fallback succeeded for $0.02."
   },
   "logs-sessions": {
     "files": [
       "logs-sessions"
     ],
-    "alt": "Logs, Sessions view: requests grouped by session id with request counts, tokens, cost, models and the app name \"Course assistant\"."
+    "alt": "Logs, Sessions view for 5 to 31 October (UTC): summary tiles above sessions listed by session ID, each with its last activity, the app \"Course assistant\", primary model, requests, failures, tokens and cost."
   },
   "usage-overview": {
     "files": [
       "usage-overview"
     ],
-    "alt": "Usage and costs overview: spend with the amount on hold, requests, tokens, cache hit rate and cost per million tokens, a daily chart, and top models, keys and members."
+    "alt": "Chemistry Teaching's Usage & costs overview for the last 30 days: $10.50 spent plus $2.88 on hold, requests and tokens, the workspace daily budget \"Near limit\" and the platform monthly budget, a daily spend chart, top API keys, models and members, storage, and the Accounting section."
   },
   "usage-explore": {
     "files": [
       "usage-explore"
     ],
-    "alt": "The Explore tab: spend grouped by model and then by key, with each group's share of the total and a daily series."
+    "alt": "The Explore tab for the last 30 days: spend grouped by model and then by API key, top 5, as a daily chart and a table with each group's spend, share of the total, amount on hold and attempts with unknown cost, with Export table (CSV)."
   },
   "files": {
     "files": [
       "files"
     ],
-    "alt": "The Files page: batch inputs, a batch result and a user file with purpose, size, created and expiry dates, and a storage bar against the workspace's quota."
+    "alt": "Climate Data Study's Files page: batch inputs, batch outputs with an error file, and a 118 MB user file, each with purpose, size, created and expiry dates and status, under a storage bar at 118 MB of 1 GB."
   },
   "batch-detail": {
     "files": [
       "batch-detail"
     ],
-    "alt": "A batch's page: status and Cancel, the reason it is waiting (At its batch limit), its files, how many lines ended in each state, and tiles for progress, completed and failed lines and the cost so far as a lower bound plus the amount on hold."
+    "alt": "A gateway-run batch's page, Running with Cancel batch and the reason \"At its batch limit\": its details, scheduling (89 waiting, 2 running), line outcomes, and tiles for progress (109 / 200), completed and failed lines and the cost so far, at least $1.01 plus $0.46 on hold."
   },
   "notifications": {
     "files": [
       "notifications"
     ],
-    "alt": "Notifications: a firing budget alert for a Team, a resolved error-rate alert and a personal budget alert, all unread."
+    "alt": "Priya Shah's Notifications: three firing \"Holds with unknown cost are over 168 hours old\" alerts for her Team and Projects, firing personal key and Chemistry Teaching daily budget alerts, and a resolved error-rate alert and an earlier resolved budget alert."
   },
   "workspace-alerts": {
     "files": [
       "workspace-alerts"
     ],
-    "alt": "A Team's alert rules: a budget threshold rule and an error rate rule, one of them firing."
+    "alt": "Chemistry Teaching's Alerts tab: the rules \"Budget 80%\" (firing) and \"Errors over 10%\" (on, never fired), and below them the history of the budget alert, one incident firing and one resolved."
   },
   "workspace-members": {
     "files": [
       "workspace-members"
     ],
-    "alt": "A Team's Members tab: people with their roles and whether each membership is manual or from an SSO group, and a pending invitation."
+    "alt": "Chemistry Teaching's Members tab: five people with their roles and whether each membership is manual or from an SSO group, and a pending invitation for jamie.patel@example.edu."
   },
   "workspace-limits": {
     "files": [
       "workspace-limits"
     ],
-    "alt": "A Team's Limits tab: each limit inherited from the platform next to the Team's own tighter values, including a 512 MB storage limit and a daily budget that can only be lowered, and the effective limit."
+    "alt": "Chemistry Teaching's Limits tab: each limit inherited from the Team default next to the workspace's own values, including a 512 MB storage limit, the keys per person and per workspace in 24 hours, and a $1.15 daily budget that can only be lowered, with the effective limit."
   },
   "workspace-settings-visibility": {
     "files": [
       "workspace-settings-visibility"
     ],
-    "alt": "A Team's General settings: its type, role and cost center, and the Files, batches and videos panel with Who sees them set to Per user."
+    "alt": "Chemistry Teaching's General settings: its type, Priya's Owner role and the cost center CHEM, Rename, and the \"Files, batches and videos\" panel with \"Who sees them\" set to Per user."
   },
   "admin-users": {
     "files": [
       "admin-users"
     ],
-    "alt": "Admin Users: people with their platform role, status, last sign-in and number of shared workspaces; someone who signed in without a role shows No access."
+    "alt": "Admin Users: people with their platform role, grants, status, number of Teams and Projects and last sign-in; Drew Bennett is Suspended, and Jordan Kim, who has no role, shows No access."
   },
   "admin-user-detail": {
     "files": [
       "admin-user-detail"
     ],
-    "alt": "A user's page in Admin: profile and access, sign-in dates, and a Platform user role granted through an SSO group."
+    "alt": "Sam Ortiz's page in Admin: Active, with a Platform user role granted through an SSO group, his first and last sign-in, and 3 active sessions."
   },
   "admin-user-detail-actions": {
     "files": [
       "admin-user-detail-actions"
     ],
-    "alt": "A user's page in Admin with its menu open: Grant platform role, Change email, Sign out all sessions, Export user record, Place legal hold, Copy ID and Suspend, beside an Overview showing 3 active sessions."
+    "alt": "Sam Ortiz's page in Admin with its menu open: Grant platform role, Change email, Sign out all sessions, Export user record, Place legal hold, Copy ID and Suspend, beside his profile showing 3 active sessions."
   },
   "admin-sso-groups": {
     "files": [
       "admin-sso-groups"
     ],
-    "alt": "SSO group mappings: four groups mapped to the Platform user, auditor and admin roles and to membership of the Team \"Chemistry Teaching\"."
+    "alt": "Admin SSO groups: four mappings, ai-gateway-admins, ai-gateway-audit and ai-gateway-users to the Platform admin, auditor and user roles and chem-teaching-staff to membership of \"Chemistry Teaching\", under the notice that group changes apply at the next sign-in."
   },
   "admin-team-detail": {
     "files": [
       "admin-team-detail"
     ],
-    "alt": "A Team's page in Admin: its members, available catalogs, models available and cost center."
+    "alt": "Chemistry Teaching's page in Admin, Overview tab: 5 members, 2 available catalogs, 5 models available and the cost center CHEM, with the admin's own membership None."
   },
   "admin-connections": {
     "files": [
       "admin-connections"
     ],
-    "alt": "Admin Connections: a self-hosted vLLM cluster, OpenAI, Anthropic, Amazon Bedrock and OpenRouter, with endpoint or region, status and model counts."
+    "alt": "Admin Connections: Amazon Bedrock (Ireland), Anthropic, OpenAI, OpenRouter (disabled), an OpenAI-compatible backup endpoint and the self-hosted vLLM University GPU cluster, each with its profile, endpoint or region, model count and status."
   },
   "admin-connection-bedrock": {
     "files": [
       "admin-connection-bedrock"
     ],
-    "alt": "The Add connection form for Amazon Bedrock: a region, the Assume role access mode with a role ARN, and an empty VPC endpoint."
+    "alt": "The Add connection form for Amazon Bedrock: a name, the Europe (Ireland) region, the \"Assume IAM role\" identity with a role ARN, an empty external ID and a session name."
   },
   "admin-models": {
     "files": [
       "admin-models"
     ],
-    "alt": "Admin Models: models of several types with their price, readiness and connection, one needing attention, one not serving and an image model marked Unpriced."
+    "alt": "Admin Models: nine models of several types with their price, readiness and connection; Advanced chat model \"Needs attention\", Reranker is \"Not serving\" and Image model is \"Unpriced\"."
   },
   "admin-add-model": {
     "files": [
       "admin-add-model"
     ],
-    "alt": "The Add model form on a self-hosted vLLM connection: connection, upstream model id, type and protocols, display and API model names, catalogs, and an optional first price with its token ceilings and meters."
+    "alt": "The Add model form on the self-hosted University GPU cluster: upstream model ID, type Text with Chat Completions selected and Messages offered, display and API model names, a description, the Self-hosted catalog with Enabled off, and \"Add price now\" expanded with token ceilings and an input price."
   },
   "admin-model-detail": {
     "files": [
       "admin-model-detail"
     ],
-    "alt": "A model's page: two routes with their priority, current price lines and a priority routing policy allowing two attempts."
+    "alt": "Chat model's page: two routes, on the University GPU cluster and on the backup cluster as fallback only, the price lines of each route, and a Priority routing policy with 2 maximum attempts and ambiguous failover allowed."
   },
   "admin-price-editor": {
     "files": [
       "admin-price-editor"
     ],
-    "alt": "The price editor: input, output and cache read lines, the hard input and output token ceilings, and a separate set of batch prices."
+    "alt": "The Publish price dialog for an OpenAI route: hard input and output token ceilings, Batch prices ticked, and input, output and cache read prices each with a batch price at half rate."
   },
   "admin-catalogs": {
     "files": [
       "admin-catalogs"
     ],
-    "alt": "Admin Catalogs: three catalogs with their models and who gets them: the Personal, Team and Project defaults and workspaces that chose a catalog themselves."
+    "alt": "Admin Catalogs: Advanced cloud, Approved cloud and Self-hosted with their model counts and who gets each: the Personal, Team and Project defaults and workspaces that chose a catalog themselves."
   },
   "admin-batch-scheduling": {
     "files": [
       "admin-batch-scheduling"
     ],
-    "alt": "A route's Batch scheduling section: queued lines, running lines, status and server load, above the settings: batch lines at once, yield to live traffic, a server load signal with its limits, a priority hint and a weekday overnight time window."
+    "alt": "The Gemma 4 GPU route's Batch scheduling section: 480 queued lines, 0 / 4 running, \"Outside its time window\" and server load not read yet, above the settings: 4 batch lines at once, pause when 2+ live requests run, pause if KV cache is over 90%, priority 10 and a Mon–Fri 22:00–06:00 time window."
   },
   "admin-limits": {
     "files": [
       "admin-limits"
     ],
-    "alt": "Defaults and limits for Teams: rate limits, jobs at once, storage and a monthly budget, with tabs for the Personal, Team and Project defaults."
+    "alt": "Defaults & limits, Team default tab: requests and tokens per minute, requests running at once, jobs at once, 1 GB storage, 50 keys per person and 500 per workspace in 24 hours, and a $500.00 monthly budget, with tabs for the Personal and Project defaults."
   },
   "admin-usage": {
     "files": [
       "admin-usage"
     ],
-    "alt": "Admin Usage and costs, By workspace: each Team and Project with spend, the amount on hold, requests and attempts with unknown cost, then one totals-only row per personal workspace, named Personal and its owner."
+    "alt": "Admin Usage & costs, By workspace, last 30 days: each Team and Project with spend, the amount on hold, requests and attempts with unknown cost, then one totals-only row per personal workspace, named Personal and its owner."
   },
   "admin-logs": {
     "files": [
       "admin-logs"
     ],
-    "alt": "Admin Logs: requests from Teams and Projects with a Workspace column; personal workspaces are not listed."
+    "alt": "Admin Logs filtered to Fast chat model from 5 October to 1 November: summary tiles and requests from Teams and Projects with a Workspace column; personal workspaces never appear."
   },
   "admin-alerts": {
     "files": [
       "admin-alerts"
     ],
-    "alt": "Installation alert rules: an admission ceiling, a batch failed, a failing connection, an installation spend and a spend spike rule, two of them firing."
+    "alt": "Admin Alerts, Rules tab: the installation rules Admission ceiling, Batch failed, Failing connection, Installation spend and Spend spike 3×, with the spend spike firing, and the History and Webhooks tabs."
   },
   "admin-alert-rule": {
     "files": [
       "admin-alert-rule"
     ],
-    "alt": "An alert rule's page: a spend spike rule with its factor, minimum amount and recipients, with Cancel and Save."
+    "alt": "Editing the Spend spike 3× rule: on, the last hour against 3 times the 7-day hourly average, only above $2.00, emailed to Platform admins and finance-ai@example.edu, with Cancel and Save rule."
   },
   "admin-alert-spend": {
     "files": [
       "admin-alert-spend"
     ],
-    "alt": "The Installation spend alert rule: a monthly $25.00 reference amount, alerts at 50, 80 and 100 percent, emailed to Platform Admins and a finance address. It notifies only and never blocks."
+    "alt": "Editing the Installation spend rule: monthly (UTC), a $25.00 reference amount of spend plus holds across all workspaces, alerts at 50, 80 and 100 percent, emailed to Platform admins and a finance address. It notifies only and never blocks."
   },
   "admin-alert-ceiling": {
     "files": [
       "admin-alert-ceiling"
     ],
-    "alt": "The Admission ceiling alert rule: the sustained per-workspace or per-key admission rate and lock-wait thresholds that notify Platform Admins."
+    "alt": "Editing the Admission ceiling rule: a 5-minute window, 200 requests per second for one workspace or key, a lock wait p95 of 250 ms, emailed to Platform admins only."
   },
   "admin-key-safety": {
     "files": [
       "admin-key-safety"
     ],
-    "alt": "Key safety: tiles counting keys by severity and a personal-keys count, and rows of Team and Project keys with findings such as Expiry too long, Unused and All models."
+    "alt": "Key safety as Taylor Brooks, a read-only Platform Auditor: High 0, Medium 2 and Low 2 Team and Project keys, 6 of 7 personal keys needing attention (counts only), and four keys with findings such as \"Expiry too long\", \"Unused\" and \"All models\"."
   },
   "admin-audit": {
     "files": [
       "admin-audit"
     ],
-    "alt": "The Audit log: recent actions with time, actor, action and target, such as changed workspace limits, an uploaded file, placed and released legal holds, a removed membership, SCIM user changes, an invitation and new alert rules."
+    "alt": "The Audit log as a Platform Auditor, newest first: a created API key and changed key limits, report delivery outcomes and generated reports by System, created and resumed report schedules, route configuration changes, an access request, discoverability changes and alert webhook changes."
   },
   "admin-legal-holds": {
     "files": [
       "admin-legal-holds"
     ],
-    "alt": "Admin › Legal holds: two active holds with their reference codes, the person or workspace each applies to, when and by whom each was placed, an Active status and a Release action, with the Include released button above."
+    "alt": "Admin › Legal holds: two active holds, LEGAL-2026-021 on the Project Genomics Pipeline and LEGAL-2026-014 on Casey Walker, each placed by Morgan Lee, with an Active status and Release, and the Include released button above."
   },
   "admin-settings-general": {
     "files": [
       "admin-settings-general"
     ],
-    "alt": "General settings: the installation's display name, support URL, logo and maximum key lifetime."
+    "alt": "General settings: the display name \"Example University AI Gateway\", a support link, the default logo, a 90-day longest lifetime for a new personal key, and the Time card showing UTC."
   },
   "admin-settings-privacy": {
     "files": [
       "admin-settings-privacy"
     ],
-    "alt": "Data and privacy settings: OpenRouter data collection, request log retention, prompt storage, and the Storage card with its backend, encryption key, health and allowed kinds of file."
+    "alt": "Data & privacy settings: OpenRouter data collection set to Deny, details compacted after 365 days, prompts and responses never stored, and the Storage card: local disk, key k2026a, Healthy, a passed storage test, and each purpose's retention, whether it's allowed and what it stores."
   },
   "admin-settings-email": {
     "files": [
       "admin-settings-email"
     ],
-    "alt": "Email settings: an SMTP relay with STARTTLS, a username and password reference, the From address, and a Ready status that has not been tested yet."
+    "alt": "Email settings: Ready and not tested yet, delivering through smtp.example.edu:587 with STARTTLS, a username, the password reference env:SMTP_PASSWORD, and the From address and name."
   },
   "admin-settings-sign-in": {
     "files": [
       "admin-settings-sign-in"
     ],
-    "alt": "Sign-in settings: the identity provider configuration and callback URL, signing-key status, and SCIM provisioning status with its base URL."
+    "alt": "Sign-in settings: single sign-on configured, with its issuer, public client, groups claim, gateway address, signing keys and callback URL; SCIM provisioning on with 2 active users of 3 and its base URL; and the SSO groups summary."
   },
   "your-sessions": {
     "files": [
       "your-sessions"
     ],
-    "alt": "The Sessions card on Your profile: three sessions with their device (Firefox on macOS marked This browser, Safari on iOS, Chrome on Windows), when each signed in and was last active, Sign out on the other two, and Sign out others."
+    "alt": "The Sessions card on Priya Shah's profile: Firefox on macOS (This browser), Chrome on Windows and Safari on iOS, with when each signed in and was last active, Sign out on the other two, and Sign out others."
   },
   "your-data": {
     "files": [
       "your-data"
     ],
-    "alt": "The Your data card on Your profile: From and To dates covering the last 30 days, and the Download your data button."
+    "alt": "The Your data card at the bottom of Your profile, below Sessions: From and To dates covering the last 30 days, and the Download your data button."
   },
   "phone-home": {
     "files": [
       "phone-home"
     ],
-    "alt": "Home on a phone: the menu button and Priya Shah's workspaces and models stacked in one column.",
+    "alt": "Home on a phone: the menu button and Priya Shah's five workspaces stacked in one column, with \"Models you can use\" starting below.",
     "phone": true
   },
   "admin-settings-audit-export": {
     "files": [
       "admin-settings-audit-export"
     ],
-    "alt": "Admin › Settings › Audit export: the transport (HTTPS webhook) and destination, status Delivering, no events waiting, the last delivery and heartbeat, the next sequence number, and the Send test delivery button."
+    "alt": "Admin › Settings › Audit export: Delivering by HTTPS webhook to siem.example.edu, nothing waiting, the last delivery and heartbeat seconds ago, 213 events delivered, next sequence number 214, the omg.audit.v1 format, and the Send test delivery button."
+  },
+  "request-access": {
+    "files": [
+      "request-access"
+    ],
+    "alt": "Request access as Taylor Brooks, who belongs to no Team or Project: the discoverable Teams Chemistry Teaching and Library Services, each with a row menu, and the My requests tab."
+  },
+  "workspace-access-requests": {
+    "files": [
+      "workspace-access-requests"
+    ],
+    "alt": "Chemistry Teaching's Access requests tab: a Pending request from Taylor Brooks with her email, her reason (\"Reviewing course assistant usage for the spring AI audit.\") and when she sent it, and a row menu."
+  },
+  "usage-holds": {
+    "files": [
+      "usage-holds"
+    ],
+    "alt": "Climate Data Study's Holds tab: the \"How to read holds\" note, tiles for 4 aged unknown holds, a known floor of at least $0.360448, 0 unbounded and the oldest at 20 days 7 hours, and each hold's age, floor, reason, model and request."
+  },
+  "scheduled-reports": {
+    "files": [
+      "scheduled-reports"
+    ],
+    "alt": "Chemistry Teaching's Scheduled reports tab: an Active weekly workspace schedule delivered at 08:00 America/New_York to 2 internal users, next on Nov 9, with Edit schedule, Pause and Delete, and its recent run for Oct 26 – Nov 1 (UTC), Delivered."
+  },
+  "scheduled-report-run": {
+    "files": [
+      "scheduled-report-run"
+    ],
+    "alt": "A Chemistry Teaching scheduled report for Oct 26 – Nov 1 (UTC): an immutable snapshot with Download aggregate CSV, Delivered to 2 recipients, full totals (settled estimate, held floor, 404 upstream attempts, 30 unresolved, root requests \"Unavailable\"), coverage, and breakdowns by cost center and model."
+  },
+  "key-limits-headroom": {
+    "files": [
+      "key-limits-headroom"
+    ],
+    "alt": "A key's Limits tab (Course assistant (production), Chemistry Teaching): Key limits with what each limit inherits, this key's own caps (a $40.00 monthly budget) and the effective value, then Budgets for the platform, workspace and key (settled, pending holds, retained unknown-cost floors, remaining) and Effective headroom per period."
+  },
+  "model-how-to-call": {
+    "files": [
+      "model-how-to-call"
+    ],
+    "alt": "Chat model's page in Chemistry Teaching, scrolled to \"How to call it\": the OpenAI-compatible and Anthropic SDK base URLs, the POST Chat Completions endpoint, headers, body, key parameters and what isn't supported."
+  },
+  "admin-api-tokens": {
+    "files": [
+      "admin-api-tokens"
+    ],
+    "alt": "Admin › Settings › Admin API tokens: \"Nightly catalog sync\" (Active, Read and Catalog, expires Dec 2, 2026) and \"Old reporting script\" (Revoked, Read), both owned by Morgan Lee and never used."
+  },
+  "admin-api-token-created": {
+    "files": [
+      "admin-api-token-created"
+    ],
+    "alt": "The \"Save your admin API token\" dialog: \"Shown only once\", Scopes: Read, Catalog, the token (a zeroed placeholder here) with Copy token, and I have saved it."
+  },
+  "admin-alert-webhooks": {
+    "files": [
+      "admin-alert-webhooks"
+    ],
+    "alt": "Admin Alerts, Webhooks tab: the \"Verify signatures and prevent replay\" note and one webhook, \"SIEM alert feed\", Enabled with signing configured, its last success, no recorded error, and 0 deliveries waiting or exhausted."
+  },
+  "admin-holds": {
+    "files": [
+      "admin-holds"
+    ],
+    "alt": "Admin Usage & costs, Holds tab: 81 aged unknown holds with a known floor of at least $4.988411, 0 unbounded and the oldest at 27 days 11 hours, one combined row for personal workspaces without identities, and each Team or Project hold with its workspace, request and Reconcile."
+  },
+  "admin-scheduled-reports": {
+    "files": [
+      "admin-scheduled-reports"
+    ],
+    "alt": "Admin Usage & costs, Scheduled reports tab: an Active monthly installation schedule delivered at 08:00 America/New_York to 2 internal users, next on Dec 1, and its run for Oct 1 – Oct 31 (UTC), Delivered."
+  },
+  "admin-route-history": {
+    "files": [
+      "admin-route-history"
+    ],
+    "alt": "The Research compute (backup) route of Chat model, History tab: Disabled → Enabled (revision 3) and Enabled → Disabled (revision 2) an hour ago, and the route added (revision 1), each by Morgan Lee with Change details."
+  },
+  "admin-route-review": {
+    "files": [
+      "admin-route-review"
+    ],
+    "alt": "Review changes before disabling Fast chat model's only route: Enabled → Disabled, serving routes gained / lost 0 / 1, the warning \"Last serving route lost: example/chat-fast\", six affected Teams and Projects and the configuration estimate notes, with Continue to confirmation."
+  },
+  "admin-sso-mapping-review": {
+    "files": [
+      "admin-sso-mapping-review"
+    ],
+    "alt": "Review changes before deleting the chem-teaching-staff mapping: \"Applied immediately, not at next sign-in\", workspace membership revoked now for Casey Walker, Priya Shah and Sam Ortiz, one membership lost at next sign-in, and the configuration estimate notes."
+  },
+  "admin-access-requests": {
+    "files": [
+      "admin-access-requests"
+    ],
+    "alt": "Admin › Records › Access requests: Taylor Brooks's Pending request with her reason, the workspace shown as its ID, and when she sent it."
+  },
+  "admin-team-discovery": {
+    "files": [
+      "admin-team-discovery"
+    ],
+    "alt": "Chemistry Teaching's General tab in Admin: name and cost center under Administrative settings, Discovery with Discoverable \"Yes\" and Hide from discovery, and the Danger zone with Disable workspace."
   }
 }

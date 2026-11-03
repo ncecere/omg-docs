@@ -50,7 +50,7 @@ The page's menu holds the actions below. Platform Admins get all of them that ap
 
 ### Suspend and reactivate
 
-**Suspend…** stops a user at once: their sessions end and their own keys are revoked. Their grants are kept. **Reactivate** restores access from the grants they still have. **Revoked keys and sessions never come back**: the user signs in again and makes new keys.
+**Suspend…** stops a user at once: their sessions end and their own keys, and any [admin API tokens](/docs/administration/admin-api-tokens) they own, are revoked. Their grants are kept. **Reactivate** restores access from the grants they still have. **Revoked keys and sessions never come back**: the user signs in again and makes new keys.
 
 Both are recorded in the [audit log](/docs/administration/audit-log) as their own actions: `user.suspended`, with the reason, and `user.reactivated`. Other profile changes are recorded as `user.updated`, which says whether the email or the sign-in link changed, never the values.
 
@@ -76,7 +76,7 @@ It removes the same as the cleanup below; see [Data controls](/docs/administrati
 
 When a person loses every platform role (for example, they leave the group that gave them access), at their next sign-in or SCIM update:
 
-1. Their access stops, their sessions end and the keys they hold are revoked.
+1. Their access stops, their sessions end and the keys they hold are revoked. Their admin API tokens are revoked as soon as they stop being a Platform Admin, even if they keep another role.
 2. The account is kept for a **30-day grace period**. If a role comes back within it, they can sign in again, with fresh keys.
 3. After 30 days the gateway cleans up the account: it revokes remaining grants, disables the personal workspace and clears the email, name and other copies of their personal data, keeping a pseudonymous record so that cost and audit history still point somewhere. If the person returns later, they get a new account. A [legal hold](/docs/administration/data-controls#legal-holds) on the person makes the cleanup wait; **Remove personal data now…** runs it early.
 
@@ -90,6 +90,8 @@ Service-account keys in Teams and Projects don't depend on any person and are no
 
 The installation always keeps at least one active Platform Admin. Removing the last Admin grant, suspending the last Admin, or changing or deleting the SSO group mapping that holds it is refused, from this page, the API and SCIM alike. Grant Admin to a second person first. Keeping two Admins avoids the problem entirely.
 
+Removing someone's Admin role, by hand or through a group, also revokes their admin API tokens; giving it back doesn't restore them.
+
 ## Workspace memberships
 
-Team and Project memberships are managed by each workspace's owners and admins on its **Members** tab, and by Platform Admins on the workspace's page in Admin. See [Teams and Projects](/docs/administration/teams-and-projects).
+Team and Project memberships are managed by each workspace's owners and admins on its **Members** tab, and by Platform Admins on the workspace's page in Admin. From v0.9.0 people can also ask to join a discoverable Team or Project, and Platform Admins can approve those requests in **Admin › Records › Access requests**. See [Teams and Projects](/docs/administration/teams-and-projects#access-requests).

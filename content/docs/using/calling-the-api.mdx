@@ -7,13 +7,20 @@ Open Model Gateway speaks the OpenAI API and the Anthropic Messages API, so the 
 
 ## The base URL
 
-Use your gateway's address, the same one you open the dashboard on. In these examples it is `https://ai.example.edu`.
+Your key's page, the **Save your API key** dialog and each model's page show the addresses to use, with copy buttons:
+
+- **OpenAI-compatible base URL**, for the OpenAI SDKs and plain HTTP;
+- **Anthropic SDK base URL**, the same address without the final `/v1`, because the Anthropic SDK adds `/v1/messages` itself.
+
+Unless your administrator publishes the inference API on its own address, it is the address you open the dashboard on, plus `/v1`. In these examples it is `https://ai.example.edu`:
 
 | Client | Base URL |
 |---|---|
 | OpenAI SDKs (Python, Node) | `https://ai.example.edu/v1` |
 | Anthropic SDKs (Python, Node) | `https://ai.example.edu` (the SDK adds `/v1/messages`) |
 | Plain HTTP | `https://ai.example.edu/v1/...` |
+
+If your installation publishes inference separately, for example at `https://api.example.edu/v1`, the dashboard shows that address instead: use `https://api.example.edu/v1` for the OpenAI SDKs and `https://api.example.edu` for the Anthropic SDKs. A model's page also shows each endpoint's full address, with `wss://` for [realtime](/docs/using/realtime).
 
 ## Authentication
 
@@ -23,7 +30,7 @@ Send your [API key](/docs/using/api-keys) as a bearer token:
 Authorization: Bearer omg_...
 ```
 
-`/v1/messages` also accepts Anthropic's `x-api-key` header instead, but not both at once. The workspace comes from the key; there is no header or body field to choose another one.
+`/v1/messages` also accepts Anthropic's `x-api-key` header instead, but not both at once. The workspace comes from the key; there is no header or body field to choose another one. The key never reaches the provider: the gateway calls it with the connection's own credential.
 
 ## Model names
 
@@ -40,7 +47,7 @@ curl https://ai.example.edu/v1/models -H "Authorization: Bearer $OMG_API_KEY"
 {"object":"list","data":[{"id":"example/chat","object":"model","created":1760000000,"owned_by":"platform"}]}
 ```
 
-The list contains models that are enabled, have an enabled route, are available to the key's workspace, and are allowed by the key's own model restriction.
+The list contains models that are enabled, have an enabled route, are available to the key's workspace, and are allowed by the key's own model restriction. Names are matched exactly. A name the key can't use, or one with control characters, answers `404 model_not_found`.
 
 ## Examples
 
@@ -94,7 +101,7 @@ message = client.messages.create(
 print(message.content[0].text)
 ```
 
-`/v1/messages` serves models whose routes are on Anthropic or Amazon Bedrock connections.
+`/v1/messages` works with any text model whose administrator enabled Messages for it, whatever the provider: Anthropic and Amazon Bedrock routes, and OpenAI, OpenRouter and self-hosted routes, where the gateway translates the request. The gateway accepts `anthropic-version: 2023-06-01` only; Anthropic SDK releases that send a newer API version (2026-10-21) are refused until the gateway supports it.
 
 </Tab>
 <Tab value="curl">
@@ -108,6 +115,8 @@ curl https://ai.example.edu/v1/chat/completions \
 
 </Tab>
 </Tabs>
+
+To use Claude Code with the gateway, see [Claude Code](/docs/using/claude-code).
 
 ### Streaming
 
@@ -126,7 +135,7 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-Responses and Messages streams work with the SDKs' stream helpers and also send text as it is generated. Tool calls arrive whole, after the text. See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
+Responses and Messages streams work with the SDKs' stream helpers and also send text as it is generated. Tool calls arrive whole, after the text, except on Messages with an Anthropic route, where the stream keeps the provider's order of text, tool and thinking blocks. See [Responses](/docs/api/responses) and [Messages](/docs/api/messages).
 
 ### Embeddings
 
@@ -134,20 +143,20 @@ Responses and Messages streams work with the SDKs' stream helpers and also send 
 result = client.embeddings.create(
     model="example/embed",
     input=["First document", "Second document"],
-    encoding_format="float",
 )
 ```
 
-Pass `encoding_format="float"`: the gateway returns float vectors only and refuses `base64`, which the OpenAI SDKs ask for when you leave it out.
+The gateway returns float vectors, or base64 when you ask for `encoding_format="base64"` (little-endian 32-bit floats). The OpenAI SDKs ask for base64 by default and decode it for you, so you don't need to set anything. Batch embedding lines are the exception: they accept `float` only.
 
-## Always set an output maximum
+## The output maximum
 
-Send `max_completion_tokens` (Chat Completions), `max_output_tokens` (Responses) or `max_tokens` (Messages, where it is required anyway). Before a request goes out, the gateway holds the most it could cost, and it needs your output maximum to work that out:
+Chat Completions and Responses accept an output maximum, `max_completion_tokens` and `max_output_tokens`, and don't require one. Messages requires `max_tokens`, as Anthropic's API does.
 
-- On a model with a price, a request without an output maximum, or with one above the model's configured output ceiling, is refused with `503 provider_configuration_error`.
-- Chat Completions also accepts the older `max_tokens` field as the same thing. If you send both, they must be equal.
+- **Without a maximum**, the gateway uses the model's configured output ceiling: it holds the cost of that many output tokens and sends that maximum to the provider.
+- **With a maximum**, the gateway sends yours unchanged. A maximum above the model's output ceiling is refused with `503 provider_configuration_error`.
+- Chat Completions also accepts the older `max_tokens` field as the same thing. If you send both, they must be equal, or the request is refused with `400`.
 
-A smaller maximum also means a smaller hold, so requests are less likely to hit a budget.
+Before a request goes out, the gateway holds the most it could cost against your budgets. A smaller maximum means a smaller hold, so requests are less likely to hit a budget.
 
 ## Label sessions and apps for Logs
 
@@ -176,10 +185,19 @@ Without the header, Chat Completions and Responses take a session id from `metad
 
 ## Retries and errors
 
-When a budget would be exceeded, the gateway answers `429` with `x-should-retry: false`, and the official SDKs then don't retry. Rate limits and "jobs at once" limits are ordinary `429`s that are worth retrying later. The full list is in [Errors and limits](/docs/api/errors-and-limits).
+The gateway tells the official SDKs which errors are worth retrying:
 
-The gateway never retries on its own. If a model has several routes and its administrator allowed failover, a failed attempt can move to another route before any output is returned; never after a stream has started.
+- **Not worth retrying** carry `x-should-retry: false`, so the OpenAI and Anthropic SDKs don't repeat them: a budget that would be exceeded (`429 budget_exceeded`), unresolved costs blocking a budget (`unresolved_usage`), a model whose token ceilings are above your tokens-per-minute limit (`token_reservation_exceeds_limit`), a price that can't bound the cost (`price_unbounded`), and refusals of something the model or its routes can't do (`unsupported_capability`, `400` or `501`). Retrying these gets the same answer until someone changes the configuration.
+- **Worth retrying later**: rate limits and "jobs at once" limits (`429`), and a model whose routes are all cooling down after provider failures (`503`, with a `Retry-After` header).
+
+Each retry your SDK makes is a new request, checked and counted on its own. A request that no route of the model could ever serve, such as a tool feature the provider doesn't support, is refused before anything is held against your budget.
+
+The gateway never retries on its own. If a model has several routes and its administrator allowed failover, a failed attempt can move to another route before any output is returned; never after a stream has started. `/v1/messages` returns errors in Anthropic's shape, without the gateway's error codes; the message says what happened. The full list is in [Errors and limits](/docs/api/errors-and-limits).
 
 ## What isn't supported
 
-Each endpoint accepts a documented subset of the vendor's API. Fields outside it are refused with an error instead of being silently dropped. For example: images or audio inside chat messages, structured output, reasoning settings, `n` above 1, stored Responses (`store: true`, `previous_response_id`) and hosted tools. The [API reference](/docs/api) lists what each endpoint accepts.
+Each endpoint accepts a documented subset of the vendor's API. Fields outside it are refused with an error instead of being silently dropped. For example: images or audio inside Chat Completions and Responses requests, structured output, reasoning settings on OpenAI-style endpoints, `n` above 1, stored Responses (`store: true`, `previous_response_id`) and hosted or server tools. Responses works without stored state: you can send a response's `output` items back as the next request's `input`. On Messages, base64 images work only on Anthropic routes, and thinking settings take effect only there: other routes accept them and leave them out.
+
+Numbers that must be whole, such as token maximums, must be sent as JSON integers: `200`, not `200.0` or `2e2`.
+
+The [API reference](/docs/api) lists what each endpoint accepts. The same contract is in the repository as an OpenAPI 3.1 document, `docs/openapi/inference.openapi.json`.

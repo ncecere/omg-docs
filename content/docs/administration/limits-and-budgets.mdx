@@ -1,6 +1,6 @@
 ---
 title: Limits and budgets
-description: The stacked layers of rate limits, jobs at once, storage and budgets, how they combine, and what callers see when one is reached.
+description: The stacked layers of rate limits, jobs at once, storage, key issuance and budgets, how they combine, budget headroom, and what callers see when one is reached.
 ---
 
 Open Model Gateway enforces limits in layers. Every layer that applies is checked before a request is sent, and the strictest one decides. Platform Admins set the platform layers in **Admin › Settings › Defaults & limits** and on each Team's or Project's page.
@@ -33,12 +33,15 @@ An override **replaces** the type default completely, including any field you le
 | Requests at once | ✓ | ✓ | ✓ |
 | Jobs at once | ✓ (2 by default) | ✓ | ✓ |
 | Storage | ✓ (1 GiB by default) | ✓ | |
+| Keys per person per 24 h | ✓ (50 by default) | ✓ | |
+| Keys per workspace per 24 h | ✓ (500 by default) | ✓ | |
 | Budgets: day, week, month, lifetime | ✓ | ✓ | ✓ |
 
 - **Per-minute limits** use fixed UTC minutes.
 - **Requests at once** counts requests in flight.
 - **Jobs at once** counts active batch and video jobs. Jobs don't count toward per-minute limits, and a job holds a "requests at once" slot only while it is being created.
 - **Storage** is the most a workspace may keep in the file store, checked while files upload.
+- **Keys per person** and **per workspace per 24 h** count keys created or rotated in a rolling 24 hours ([below](#key-issuance-limits)).
 - **Budgets**: each layer can have up to one budget per period. Days and months are UTC calendar days and months, weeks are ISO weeks from Monday 00:00 UTC, and lifetime is everything since the scope was created. Every budget at every layer applies, so a $10 daily budget under a $200 monthly one stops at whichever runs out first.
 
 ## How layers combine
@@ -50,6 +53,15 @@ An override **replaces** the type default completely, including any field you le
 - **Raising a limit never resets spend.** Past requests stay in the window they were admitted in.
 - **Personal workspaces** take their limits from the Personal default and an override. Their owners can still limit each key.
 
+## Key issuance limits
+
+From v0.9.0, creating or rotating an API key counts against two rolling 24-hour limits in its workspace: **Keys per person per 24 h** (one member, or one service account; 50 by default) and **Keys per workspace per 24 h** (everyone together; 500 by default). Rotations count. They are set from 1 to 10,000 on the type defaults, a platform override and, tighten only, the workspace; keys themselves have none.
+
+- On a platform override, a field you leave blank **inherits the type default** for these two limits, unlike the other limits, where an override replaces the default completely. With no value anywhere, the limit is 10,000, never unlimited.
+- A spent limit refuses the creation or rotation with `429` (`key_issuance_limit_exceeded`), saying when the next key can be made. A refused rotation leaves the old key working.
+- The **API keys** page shows people how many keys they've issued in the last 24 hours, and workspace admins the workspace's count too.
+- The limits are separate from [key safety](/docs/administration/key-safety) and add no finding there.
+
 ## How budgets are checked
 
 A budget's "used" amount is the settled cost of requests admitted in its window, plus holds for requests still in progress or whose cost is unknown. Before each request the gateway adds the request's own hold, the most it could cost, and refuses it if any budget would go over.
@@ -57,6 +69,10 @@ A budget's "used" amount is the settled cost of requests admitted in its window,
 - Requests that **can't be bounded** can't run under a budget at all. A route with no price is refused with `503 provider_configuration_error`; a price with a meter that has no line, is unknown or has no maximum, with `503 price_unbounded` (from v0.3.2; before, `429 budget_exceeded`). Neither is a budget denial: publish a complete [price](/docs/administration/pricing#prices-that-cant-bound-a-request).
 - **Unknown, unbounded costs block budgets.** If requests in a budget's current window have unknown costs with no upper bound, new budgeted requests are refused with `unresolved_usage` until those are resolved.
 - Budget checks read maintained totals, so their cost doesn't grow with history.
+
+### Headroom
+
+From v0.8.0, workspace and key budget views show settled spend, holds for requests in progress and the floor of unknown costs separately, and an **Effective headroom**: the smallest amount left across the layers that apply, per period. Budgets of overlapping layers aren't added together. Headroom is shown only when the accounting is complete: with unknown or unbounded costs it reads as unavailable rather than inventing money that may not be there. It is reporting only and changes nothing about admission.
 
 ## What callers see
 

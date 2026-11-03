@@ -80,9 +80,13 @@ Every price also has two **ceilings**:
 Before sending a request, the gateway holds the input ceiling's worth of input plus the request's own output maximum, at the highest applicable rates. That hold counts against budgets and against tokens-per-minute limits. So:
 
 - Keep both ceilings within your tokens-per-minute limits, or requests are refused with `token_reservation_exceeds_limit`. The model shows **Needs attention** when that would happen.
-- Requests must send an output maximum no higher than the output ceiling; see [Calling the API](/docs/using/calling-the-api#always-set-an-output-maximum).
+- A request's output maximum can't be higher than the output ceiling. From v0.7.1, Chat Completions and Responses requests (and their batch lines) may leave it out: the gateway then holds, and sends the provider, the output ceiling of the price pinned when the request is admitted. Messages still requires `max_tokens`. See [Calling the API](/docs/using/calling-the-api#the-output-maximum).
 - Embeddings and rerank hold no output. Text-to-speech and per-second speech-to-text prices can set the input ceiling to 0 when every input-token meter is not applicable.
 - For meters that aren't tokens, the hold needs a bound too. Some come from the request itself: one request, the number of images asked for, the characters to speak, the measured length of an uploaded audio file. Others, such as search units, need a maximum set in the price, or the cost is unbounded and budgeted requests are refused with `price_unbounded` (see [above](#prices-that-cant-bound-a-request)).
+
+### Prompt caching on Anthropic routes
+
+From v0.9.0, a Messages request with `cache_control` hints on an Anthropic route (as Claude Code sends) needs a price that explicitly prices **cache read tokens** and the cache write for each time-to-live it asks for: **5-minute** cache writes for the default or `5m`, **1-hour** cache writes for `1h`, both when it mixes them. Otherwise it's refused with `400` before anything is held or sent, even without a budget. Anthropic's usual write rates are 1.25× (5 minutes) and 2× (1 hour) the base input rate; publish the rates for your model. On other providers the hints are accepted and dropped. See [Messages](/docs/api/messages#prompt-caching).
 
 ## Batch prices
 
@@ -103,4 +107,6 @@ On an OpenRouter route, **Import current OpenRouter price** fills the form with 
 
 Some providers report their own cost (OpenRouter's `usage.cost`). The gateway records it as evidence beside its estimate, never as the charge.
 
-When a request's usage is unknown (the provider didn't report it, or the connection dropped), its hold stays in place and counts against budgets. A Platform Admin who has the actual usage from the provider can resolve it with an evidence reference, through the management API's reconciliation endpoint. Resolving keeps every earlier observation; it never deletes history. See [Management API](/docs/api/management-api).
+When a request's usage is unknown (the provider didn't report it, or the connection dropped), its hold stays in place and counts against budgets. A Platform Admin who has the actual usage from the provider can resolve it with an evidence reference: from **Reconcile** on the **Holds** tab of Usage & costs ([Holds](/docs/administration/usage-logs-and-cost-centers#holds)), or through the management API's reconciliation endpoint. Resolving keeps every earlier observation; it never deletes history. From v0.10.0, incoherent token counts, or output tokens on an embeddings or rerank hold, are refused with `400`. See [Management API](/docs/api/management-api).
+
+To compare whole periods with a provider's own cost report, see [Provider reconciliation](/docs/administration/usage-logs-and-cost-centers#provider-reconciliation).

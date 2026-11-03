@@ -1,0 +1,49 @@
+---
+title: v0.7.2
+description: More compatibility fixes. Tools without parameters, empty successful tool results, null OpenAI defaults, and requests a route would always refuse no longer take a budget hold.
+---
+
+Released 2026-10-22. No migrations.
+
+A second compatibility patch. It doesn't make every SDK or provider a drop-in fit, and it isn't full protocol conformance.
+
+## Tools without parameters, and empty tool results
+
+- **Chat Completions** function definitions may leave out `parameters`, meaning the tool takes no arguments (a closed empty object). Explicit schemas are unchanged, and `null` or non-object parameters are still invalid.
+- **Messages** accepts a `tool_result` without `content` as empty text, and `is_error: false` as the default. A result with `is_error: true` is refused as unsupported rather than quietly treated as a success. Messages still requires `max_tokens`.
+
+See [Chat Completions](/docs/api/chat-completions) and [Messages](/docs/api/messages).
+
+## Null OpenAI defaults
+
+- Chat Completions and Responses treat `stream` left out or `null` as non-streaming.
+- Responses treats `store` left out, `null` or `false` as stateless. `store: true` is still refused before admission.
+- An assistant message with `refusal: null` is accepted as "no refusal". Non-null refusal content and unknown fields such as `parsed: null` are still refused.
+
+This isn't blanket acceptance of `null`: `tools` may be left out but not set to `null`, and malformed or unsupported values are still refused. See [Responses](/docs/api/responses).
+
+## Requests a route would always refuse take no hold
+
+A Chat Completions or Messages request that an Anthropic or Bedrock route would always reject (for example a `strict` function tool, an out-of-range temperature, or a tool result with no matching call) is now refused **before** admission: no budget hold, no upstream call, nothing recorded against routing health. Before, it was admitted first and left an unknown-cost hold, so a key holder in a shared workspace could tie up its budget by repeating such a request.
+
+Every route you're allowed to use is checked, so another route that can serve the request still does. When none can, the error (`400` invalid request or `501` unsupported) comes from the routes the routing policy would actually use. Gateway-run batch lines get the same check before each line is admitted. See [Errors and limits](/docs/api/errors-and-limits).
+
+## Fixes
+
+- The Chat Completions guide on model pages now lists `max_tokens` as an accepted alias of `max_completion_tokens`. If you send both, they must be equal (otherwise `400`).
+
+## Upgrade guide
+
+No migrations, runtime grants or settings: the schema still ends at `0048`. From v0.7.1, back up, deploy the new image by digest, wait for `/health/ready`, then check sign-in and your integrations.
+
+Coming from v0.6.1, first read the [v0.7.0 precautions](/docs/releases/v0-7-0#before-you-upgrade).
+
+## Known limitations
+
+- **Batch planning still reserves for lines that will be refused.** A batch whose lines an Anthropic or Bedrock route will always reject has those lines refused one by one, but its budget envelope stays reserved until the batch closes. Fixed in [v0.8.0](/docs/releases/v0-8-0).
+- Mock and SDK contract tests don't certify every SDK version or provider.
+- The [v0.7.0 limitations](/docs/releases/v0-7-0#known-limitations) still apply.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.7.2@sha256:1acdb4bedda74baf5c196913f0823c72ff44a1abfdb04666d94843731e3e0376`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.7.2) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

@@ -1,0 +1,28 @@
+---
+title: v0.6.1
+description: A TLS security patch. The bundled certificate roots drop the distrusted emSign intermediates for every outbound connection.
+---
+
+Released 2026-10-21. No migrations.
+
+A security patch for every outbound TLS connection. Upgrade from [v0.6.0](/docs/releases/v0-6-0) by replacing the image: there are no migrations, no configuration changes and no API changes.
+
+## Distrusted emSign intermediates
+
+The bundled certificate roots no longer include `emSign ECC Root CA - G3`, and certificate paths through the distrusted emSign intermediates, whose private keys are public, are refused (RUSTSEC-2026-0381 and RUSTSEC-2026-0382). Before this fix, someone able to intercept the gateway's network traffic could have impersonated an upstream with such a certificate.
+
+This affects every outbound TLS connection: providers, sign-in, S3, SMTP, the realtime WebSocket and audit export. The fix updates `webpki-roots` to 1.0.10 and `rustls-webpki` to 0.103.16.
+
+## Upgrade guide
+
+The schema is unchanged since v0.6.0 (it ends at `0048`). Roll the image by digest. With Helm, set `image.tag: v0.6.1` and pin `image.digest`; the chart (version 0.6.1) defaults `image.tag` to `v0.6.1`. Running `grants apply` isn't needed, but does no harm.
+
+Coming from a release before v0.6.0, first follow the [v0.6.0 upgrade guide](/docs/releases/v0-6-0#upgrade-guide).
+
+## Known limitations
+
+Unchanged from [v0.6.0](/docs/releases/v0-6-0#known-limitations).
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.6.1@sha256:4125f40b679fdb0ca846a863c131d53459c665b2ab1c41b270af1bcdfa9a9dbe`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.6.1) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.

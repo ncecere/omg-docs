@@ -22,6 +22,7 @@ Open Model Gateway keeps its own files: you upload them to the gateway, not to a
 ## With the OpenAI SDK
 
 ```python
+import os
 from openai import OpenAI
 client = OpenAI(base_url="https://ai.example.edu/v1", api_key=os.environ["OMG_API_KEY"])
 

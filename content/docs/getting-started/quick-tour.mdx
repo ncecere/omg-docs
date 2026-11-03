@@ -23,8 +23,10 @@ Everyone sees the **Workspace** portal. Platform Admins and Auditors also see a 
 
 The sidebar has two groups:
 
-- **Workspace**: **Home**, your own summary across every workspace you belong to: the models you can use, your usage this month (spent, requests, tokens) and your API keys.
+- **Workspace**: **Home**, your own summary across every workspace you belong to: the models you can use, your usage this month (spent, requests, tokens) and your API keys. **Request access** lists the Teams and Projects you can ask to join, and your requests; see [Joining a Team or Project](/docs/using/joining-a-workspace).
 - A group named after the **selected workspace**, with the pages for that workspace: **Overview**, **Models**, **API keys**, **Logs**, **Files**, **Usage & costs** and **Settings**. Pages you can't use there are not shown.
+
+If a link points at a workspace that doesn't exist or that you can't use (for example, after you left it), you land on **Home** with the notice **Workspace not found or not available**.
 
 The workspace selector at the top lists your workspaces under **Personal**, **Teams** and **Projects**. You only see workspaces you are a member of; a platform role never adds entries to it.
 
@@ -40,8 +42,10 @@ The Admin portal is for the whole installation. Auditors see the same pages read
 | People | **Users**, **Teams**, **Projects**, **SSO groups** |
 | Models | **Connections**, **Models**, **Catalogs** |
 | Usage & spend | **Usage & costs**, **Logs**, **Cost centers** |
-| Records | **Audit log**, **Legal holds**, **Key safety** |
-| Settings | **General**, **Defaults & limits**, **Data & privacy**, **Email**, **Alerts**, **Audit export**, **Sign-in** |
+| Records | **Audit log**, **Legal holds**, **Key safety**, **Access requests** |
+| Settings | **General**, **Defaults & limits**, **Data & privacy**, **Email**, **Alerts**, **Audit export**, **Sign-in**, **Admin API tokens** |
+
+**Admin API tokens** is for Platform Admins only: Auditors don't see it.
 
 <Screenshot slot="admin-overview" />
 
@@ -51,6 +55,7 @@ The Admin portal is for the whole installation. Auditors see the same pages read
 - **Notifications**: the bell in the top bar shows how many alerts are unread. See [Alerts and notifications](/docs/using/alerts-and-notifications).
 - **Your account menu** (bottom of the sidebar): **Your profile** (your workspaces, where you're signed in, and a download of your data; see [Your profile](/docs/using/your-profile)), **Reload my access** (after someone changes your roles), the theme (**System**, **Light**, **Dark**) and **Sign out**.
 - **Links are shareable.** Every page has its own address. If someone sends you a link to something you can't see, the page says so instead of showing it.
+- **When access changes.** If the gateway refuses a page you had open (for example, because an admin just removed a role), the dashboard reloads your access once and, if it is still refused, shows a permission notice instead of retrying.
 
 ## Who sees what
 

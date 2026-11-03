@@ -1,0 +1,145 @@
+---
+title: v0.8.0
+description: Alert email retries, key-expiry reminders, admin API tokens for scripts, opt-in OpenTelemetry traces, CloudNativePG backups through the Barman Cloud plugin, budget headroom and a Refresh action on Logs.
+---
+
+Released 2026-10-24. Migrations `0049` to `0052`.
+
+The first feature release since v0.7.0. Alert email is retried per recipient, and key holders are reminded before a key expires. Platform Admins can create scoped, expiring **admin API tokens** for scripts. Interactive generation can send OpenTelemetry traces. The Helm chart can back up its database through the Barman Cloud plugin.
+
+Unlike the v0.7 patches, this release has migrations and a required order of operations. Read [Before you upgrade](#before-you-upgrade) and the [Upgrade guide](#upgrade-guide) first.
+
+## Alert email is retried
+
+Before, each alert email was sent once and a failure was only recorded. Now each recipient is retried on temporary SMTP failures: up to five attempts within 24 hours, after 1 minute, 5 minutes, 30 minutes and 2 hours. A refusal from the relay is final. Replicas share the work without sending twice, and a single send gives up after 40 seconds.
+
+- An incident's **History** shows each delivery's email status, such as **Waiting**, **Retrying**, **Sent** or **Failed**, and how many recipients are still waiting.
+- New metrics `gateway_alert_email_attempts_total{outcome}` and `gateway_alert_email_deliveries{state}`, and an example Prometheus rule `GatewayAlertEmailPersistentFailure` in `deploy/monitoring/prometheus-rules.yml`.
+- Recipient addresses aren't stored in the queue, and never appear in the API, metrics or logs.
+- If the gateway stops after the relay accepted a message but before it recorded that, the message can be sent again.
+
+See [Alerts](/docs/administration/alerts) and [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring).
+
+## Key-expiry reminders
+
+Two built-in reminders, with fixed thresholds and nothing to configure: **An API key expires within 7 days** and **within 1 day**, in the dashboard and by email, for every active key that has an expiry date.
+
+- **Who's reminded follows the key.** A personal workspace's key reminds its owner only. A person's key in a Team or Project reminds its holder and the workspace's owners and admins. A service-account key reminds the workspace's owners and admins. Each recipient must still have access at the time.
+- **One reminder per key, expiry and threshold.** A key first seen less than a day from expiry gets only the urgent one. Rotating a key or changing its expiry starts a new cycle.
+- **Bounded.** A workspace gets at most 100 new reminders in any 24 hours; the rest stay eligible later.
+- The reminder and email don't name the key. **Open keys** takes you to the workspace's keys.
+
+The reminders run in the existing alert loop: `GATEWAY_ALERT_INTERVAL_SECONDS` (default 60; `0` turns it off). See [Alerts and notifications](/docs/using/alerts-and-notifications).
+
+## Admin API tokens
+
+Long-lived credentials for scripts and tools that call the management API, separate from inference keys and dashboard sessions. Platform Admins manage their own in **Admin › Settings › Admin API tokens**.
+
+- **Format.** `omg_admin_<id>.<secret>`, sent as `Authorization: Bearer …`. Only a hash is stored, and the token is shown once.
+- **Expiry is required:** 1 to 90 days (30 by default), with no renewal. An optional list of up to 32 allowed address ranges (CIDR) is checked against the client address, resolved like sign-in limits (`GATEWAY_TRUSTED_PROXIES`).
+- **Five scopes,** each granting exact routes: `platform:read`, `catalog:write`, `access:write`, `governance:write` and `settings:write`. Write scopes don't include read. Workspace-member, key, admin-token and SCIM routes refuse tokens, and workspace, object and personal-privacy checks still apply.
+- **Only from the dashboard.** Creating, listing and revoking tokens needs a Platform Admin's browser session; a token can't manage tokens. You can create tokens only for yourself; any Platform Admin can revoke any token. Auditors can't open the page.
+- **Live authority.** Every request rechecks that the token is unrevoked and unexpired and that its owner is still an active Platform Admin. Losing Platform Admin, suspension, SCIM deactivation or cleanup revokes the owner's tokens, and regaining the role doesn't restore them. Signing out sessions doesn't revoke tokens.
+- **Audited.** Actions taken with a token carry `admin_token_id` in the audit log and in [audit export](/docs/self-hosting/audit-export). Excess attempts get `429`.
+- `scripts/backup.py reapply-revocations` also covers admin tokens, so restoring an older backup can't bring back a revoked token.
+
+Treat tokens like privileged keys: short expiry, the narrowest scope and an address allowlist. See [Management API](/docs/api/management-api) and [Settings](/docs/administration/settings).
+
+## Traces for interactive generation
+
+Opt-in OpenTelemetry traces (OTLP/HTTP) for Chat Completions, Responses and Messages. They're off unless you set `GATEWAY_TRACES_OTLP_URL`; `OTEL_*` variables are ignored.
+
+| Setting | Meaning |
+|---|---|
+| `GATEWAY_TRACES_OTLP_URL` | The collector's full `/v1/traces` URL. HTTPS, or HTTP to loopback in development. It follows the [outbound address policy](/docs/self-hosting/security#the-outbound-address-policy): a refused address stops startup. |
+| `GATEWAY_TRACES_SAMPLE_RATIO` | 0 to 1, default `0.01`. |
+| `GATEWAY_TRACES_OTLP_HEADERS_ENV` | Names a dedicated variable holding the collector's headers. |
+
+- Spans cover the request, routing, admission, each upstream attempt (at most 3) and settlement. Async jobs, batches, embeddings, images, audio and realtime aren't traced.
+- Only requests in Teams and Projects are exported; personal workspaces never are.
+- A traced request's details in **Logs** show its **Trace ID**, so you can find the trace in your collector.
+- Export never waits for the collector: each export is limited to 2 seconds, with no retries. Drops are counted in `gateway_trace_dropped_spans_total` and `gateway_trace_deliveries_total`.
+- On Kubernetes, pass the settings with `gateway.env`, the header secret with `gateway.extraEnvFrom`, and open the collector's port (usually TCP 4318) with `networkPolicy.egress.extraEgress`.
+
+See [Metrics and monitoring](/docs/self-hosting/metrics-and-monitoring) and [Kubernetes](/docs/self-hosting/kubernetes).
+
+## CloudNativePG backups through the Barman Cloud plugin
+
+`cnpg.cluster.backup.method` chooses `barmanObjectStore` (the default, unchanged) or `plugin`, the Barman Cloud plugin CloudNativePG now recommends. In plugin mode the chart also renders an `ObjectStore` from `cnpg.cluster.backup.plugin.objectStore`, with S3 credentials only as Secret references.
+
+**Switching an existing cluster between modes is a one-way cutover.** WAL archiving restarts and the plugin doesn't adopt the old backups. Take a fresh base backup at once, point the new mode at a different `destinationPath`, keep the old prefix until its retention passes, and don't rely on point-in-time recovery across the switch. The chart's NetworkPolicy doesn't cover the database pods: under a default-deny policy, add your own egress rule for them to reach the object store. See [Kubernetes](/docs/self-hosting/kubernetes#backups).
+
+## Budget headroom and Logs Refresh
+
+- **Budget headroom.** Workspace and key budget views separate settled estimates, pending holds and unknown costs. **Effective headroom** is the lowest remaining amount across the budgets that apply in each period. It's shown only when the accounting is complete; it never counts unknown cost as available. Reporting only: admission and limits are unchanged. See [Limits and budgets](/docs/administration/limits-and-budgets).
+- **Logs Refresh.** Workspace and Admin Logs have a **Refresh** action that reloads the current tab and summary for the current filters; Logs still doesn't poll. An empty **Sessions** tab explains that requests without session details are under **Requests**. See [Logs](/docs/using/logs).
+
+## Before you upgrade
+
+- **Management requests with an `Authorization` header are refused with `401`.** Management routes accept exactly one credential: a dashboard session or an admin API token. A request with both, or with a duplicate `Authorization` header, is refused. Before, the header was ignored. If a reverse proxy or SSO layer in front of the dashboard adds an `Authorization` header, remove it for `/api/v1/…` first. Inference (`/v1/*`) is unaffected; inference keys never authorize management, and admin tokens never authorize inference.
+- **Stop the old alert workers before migrating.** Every v0.7 replica, and any scheduled `alerts evaluate --once`, sends alert email. Old binaries don't understand the new per-recipient queue: one left running keeps **re-sending** a delivery's email to every recipient. Scale the old replicas to zero, or set `GATEWAY_ALERT_INTERVAL_SECONDS=0` on any you must keep and restart it. Unsetting the variable doesn't stop the worker: unset means the default, 60 seconds.
+- **Older replicas don't show key-expiry reminders,** and during an overlap their email worker can consume a reminder's delivery without sending it.
+- **Additive fields.** Logs requests add `trace_id`. Audit events, including those exported to a SIEM, add `admin_token_id` (`null` for dashboard actions). Consumers that reject unknown fields need updating.
+- **Keep the database at READ COMMITTED.** Creating an admin token refuses a transaction at a higher isolation level. Don't set `default_transaction_isolation` on the gateway's database or roles.
+- **Plan for v0.9.0's local approval check.** `GATEWAY_LOCAL_UPSTREAMS` approvals in special-use ranges (benchmarking `198.18.0.0/15` and `2001:2::/48`, IETF `192.0.0.0/24`, the 6to4 relay `192.88.99.0/24`, documentation `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `2001:db8::/32` and `3fff::/20`, and `fd00:ec2::/32`) still work in v0.8.0, but will stop startup in [v0.9.0](/docs/releases/v0-9-0). v0.8.0 logs a warning for each at startup, and `/health/ready` reports `checks.local_upstream_approvals: "warning"`. Replace such an address with an ordinary public or private one.
+- **Helm:** leaving `cnpg.cluster.backup.method` alone changes nothing.
+
+## Upgrade guide
+
+Four migrations, `0049` to `0052`, and new runtime grants. `0049` changes constraints and builds indexes on `alert_events` and `api_keys`, and `0052` builds an index on every `audit_events` partition, so allow time in proportion to your audit history. Neither was timed for this release. From v0.7.1 or v0.7.2 the procedure is the same; from v0.7.1 you also get [v0.7.2's fixes](/docs/releases/v0-7-2).
+
+<Steps>
+<Step>
+
+### Back up
+
+Record the running image digest and configuration. Back up with `scripts/backup.py` and run `verify`.
+
+</Step>
+<Step>
+
+### Stop every old replica
+
+Scale the old gateway to zero and pause any `alerts evaluate --once` job, so no old alert worker runs against the new schema. Mixed-schema replicas aren't supported. On Helm, scale down first: the migration Job starts while old pods still exist.
+
+</Step>
+<Step>
+
+### Migrate and grant
+
+As the migrator, run `open-model-gateway migrate`, then `open-model-gateway grants apply`, then `grants verify` with a role that can `SET ROLE gateway_runtime`. Without the grants, the new features fail at runtime.
+
+</Step>
+<Step>
+
+### Start and check
+
+Start the new release by digest and wait for `/health/ready` to report `schema: ok`. Check sign-in, one inference request, `checks.local_upstream_approvals` (`"ok"`), and that `gateway_alert_email_deliveries` appears in the metrics. Run `open-model-gateway budget verify`.
+
+</Step>
+</Steps>
+
+With Helm, upgrade with `--set migrations.run=true --wait`: the Job runs `migrate` and `grants apply`, but not `grants verify`. There are no down migrations; going back means restoring the backup. See [Upgrades](/docs/self-hosting/upgrades).
+
+Coming from v0.6.1 or earlier, first read the [v0.7.0 precautions](/docs/releases/v0-7-0#before-you-upgrade); from before v0.6.0, the [v0.6.0 upgrade guide](/docs/releases/v0-6-0#upgrade-guide).
+
+## Also in this release
+
+- **Batch planning reserves only for lines that can run.** Lines every route would always refuse are left out of a gateway-run batch's budget envelope, and the batch is never sent to a provider's batch API while a line is excluded. A line whose route can't be planned because of a storage problem now waits, up to the completion window (24 hours by default), before it's reported `expired`. See [Batches](/docs/using/batches).
+- **No duplicate keys.** Create key and rotate key dialogs refuse a second submit, so one form can't create two keys while showing one secret.
+- **IPv6 egress fix.** Addresses in `3ff0::/12` outside the documentation range `3fff::/20` were wrongly refused; they're allowed again.
+- **SCIM with Authentik** has been tested (matching users, a pushed group, deactivate and reactivate), with the settings Authentik needs. See [SCIM](/docs/administration/scim).
+- **Dependencies.** `aes-gcm` 0.11 for the file store (the file format is unchanged; nothing is rewritten), `sha2` 0.11, `tokio` 1.53.3 and Rust 1.99.1. RUSTSEC-2026-0387 (`crypto-bigint`, reached only through ID-token signature checks with public keys) is a documented exception until the sign-in library updates.
+
+## Known limitations
+
+- Alert email isn't yet dispatched fairly between workspaces, and only key-expiry reminders have a per-workspace cap (both come in v0.9.0). Hold-age alerts, signed webhooks and scheduled cost reports aren't built yet.
+- Traces cover only interactive Chat Completions, Responses and Messages; there are no OTLP metrics or logs yet.
+- Admin token attempts aren't exported to a SIEM, and there's no published OpenAPI document for the management API yet.
+- Another user's personal workspace id returns `403` where an unknown id returns `404` on some routes.
+- SCIM is tested with Authentik only, not Okta or Entra.
+- Carried over: independent security review, steady-load stalls and the second write outage after a two-instance failover are open; there's no certified capacity number. Guardrails are designed but not built, sign-out started by the identity provider isn't implemented, and the Helm chart is still **beta**.
+
+## Upgrading
+
+The image is `ghcr.io/ncecere/open-model-gateway:v0.8.0@sha256:cd42d60638552c6f39a566732f74775d0a3df032ba9c14a058011ecf5296ebda`. The [GitHub release](https://github.com/ncecere/open-model-gateway/releases/tag/v0.8.0) has the digest, SBOMs and checksums, and how to verify the signature. See [Upgrades](/docs/self-hosting/upgrades) for the general procedure.
