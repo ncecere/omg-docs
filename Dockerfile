@@ -1,6 +1,6 @@
 # Build the static export once, on the build machine's own platform (the output
 # is the same for every platform), then serve it with nginx.
-FROM --platform=$BUILDPLATFORM docker.io/library/node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:22.23.4-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS build
 WORKDIR /src
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -8,7 +8,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM docker.io/library/nginx:1.31.6-alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+FROM docker.io/library/nginx:1.31.8-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
 
 LABEL org.opencontainers.image.source="https://github.com/ncecere/omg-docs" \
       org.opencontainers.image.description="Open Model Gateway documentation (static site)" \
